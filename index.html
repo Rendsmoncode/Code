@@ -13,15 +13,22 @@
   <header class="top">
     <h1>OPTCG <span>Maison</span></h1>
     <nav role="tablist" aria-label="Sections">
-      <button role="tab" data-tab="cards">Cartes</button>
+      <button role="tab" data-tab="boosters">Boosters</button>
+      <button role="tab" data-tab="collection">Collection</button>
       <button role="tab" data-tab="decks">Decks</button>
       <button role="tab" data-tab="play">Jouer</button>
+      <button role="tab" data-tab="cards" class="admin-only" hidden>Cartes</button>
+      <button role="tab" data-tab="admin" class="admin-only" hidden>Admin</button>
     </nav>
+    <div class="who"></div>
   </header>
   <main>
-    <section class="tab" id="tab-cards" role="tabpanel"></section>
+    <section class="tab" id="tab-boosters" role="tabpanel"></section>
+    <section class="tab" id="tab-collection" role="tabpanel" hidden></section>
     <section class="tab" id="tab-decks" role="tabpanel" hidden></section>
     <section class="tab" id="tab-play" role="tabpanel" hidden></section>
+    <section class="tab" id="tab-cards" role="tabpanel" hidden></section>
+    <section class="tab" id="tab-admin" role="tabpanel" hidden></section>
   </main>
 </body>
 </html>

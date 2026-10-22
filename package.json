@@ -3,5 +3,8 @@
   "private": true,
   "scripts": {
     "build": "npx -y esbuild@0.24.0 js/app.js --bundle --format=iife --target=es2020 --outfile=app.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.117.2"
   }
 }

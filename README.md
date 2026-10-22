@@ -2,10 +2,25 @@
 
 Simulateur de jeu de cartes **dans le navigateur**, avec les règles du One Piece Card Game, mais avec **vos propres cartes**.
 
-## Les 3 onglets
+## Comptes et boosters
 
-- **Cartes** : créez vos cartes (Leader, Personnage, Événement, Lieu) : nom, couleurs, coût, vie, puissance, contre, attribut, types, effet, déclencheur et image. L'aperçu se met à jour en direct. Le bouton *Exporter* sauvegarde toute la collection dans un fichier, et *Importer* la recharge (sur un autre ordinateur, par exemple).
-- **Decks** : 1 Leader et exactement **50 cartes**, 4 exemplaires maximum par numéro, aux couleurs du Leader. Un deck exporté contient aussi ses cartes : votre ami n'a qu'à l'importer.
+Chaque joueur se crée un compte (pseudo + mot de passe). À sa première connexion, il choisit un **deck préconstruit**, puis il agrandit sa collection en ouvrant des **boosters** :
+
+- 1 booster gratuit toutes les 10 minutes (6 en réserve au maximum), plus les boosters offerts par les admins ;
+- 5 cartes par booster : 3 Communes, 1 Peu commune, puis 1 Rare (70 %), Ultra rare (20 %), Légendaire (8,5 %) ou Introuvable (1,5 %) ;
+- le tirage se fait sur le serveur : impossible de tricher.
+
+Un deck ne peut contenir que des cartes que l'on possède. Le **premier compte créé** devient propriétaire du jeu : il peut créer les cartes, nommer des admins et distribuer des boosters (onglets *Cartes* et *Admin*).
+
+Les données sont stockées sur [Supabase](https://supabase.com). Le script `supabase/setup.sql` crée les tables et les règles de sécurité ; il faut le lancer une fois dans *SQL Editor*.
+
+## Les onglets
+
+- **Boosters** : ouverture des boosters, carte par carte.
+- **Collection** : toutes les cartes du jeu, celles qu'on possède en couleur.
+- **Cartes** (admins) : créez les cartes (Leader, Personnage, Événement, Lieu) : nom, couleurs, coût, vie, puissance, contre, attribut, types, effet, déclencheur et image. L'aperçu se met à jour en direct. Le bouton *Exporter* sauvegarde toute la collection dans un fichier, et *Importer* la recharge (sur un autre ordinateur, par exemple).
+- **Decks** : 1 Leader et exactement **50 cartes** que l'on possède, 4 exemplaires maximum par numéro, aux couleurs du Leader.
+- **Admin** (admins) : distribuer des boosters (à un joueur ou à tous), nommer des admins (propriétaire uniquement), créer les decks préconstruits.
 - **Jouer** : du 1v1 en ligne. L'un clique sur *Créer une partie* et envoie le code (ou le lien) ; l'autre clique sur *Rejoindre*.
 
 ## Déroulement d'une partie
@@ -25,7 +40,7 @@ Dans *Jouer*, ouvrez « Tester seul », cochez *Mode local*, créez une partie, 
 
 ## Technique
 
-Le site est fait de fichiers statiques : HTML, CSS et JavaScript, sans installation. Les cartes et les decks sont enregistrés dans le navigateur (IndexedDB). La connexion entre joueurs est directe, de navigateur à navigateur, avec [PeerJS](https://peerjs.com/).
+Le site est fait de fichiers statiques : HTML, CSS et JavaScript, sans installation. Les cartes, collections et decks sont enregistrés sur Supabase. La connexion entre joueurs est directe, de navigateur à navigateur, avec [PeerJS](https://peerjs.com/).
 
 Pour ouvrir le site sur votre ordinateur, double-cliquez sur `index.html`.
 

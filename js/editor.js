@@ -1,12 +1,12 @@
 // Onglet « Cartes » : création et édition des cartes de la collection.
 import { S, saveCard, saveCards, deleteCard, onChange } from './store.js';
 import {
-  COLORS, TYPES, ATTRIBUTES, KEYWORDS, esc, uid, newCard, cardHTML, resizeImage, download, readJSONFile,
+  COLORS, TYPES, RARITIES, ATTRIBUTES, KEYWORDS, esc, uid, newCard, cardHTML, resizeImage, download, readJSONFile,
 } from './cards.js';
 
 const root = () => document.getElementById('tab-cards');
 let cur = newCard();
-let filter = { q: '', type: '', color: '' };
+let filter = { q: '', type: '', color: '', rarity: '' };
 
 export function initEditor() {
   root().innerHTML = `
@@ -20,6 +20,10 @@ export function initEditor() {
         <div class="field"><label for="ed-name">Nom</label><input id="ed-name" maxlength="60" placeholder="Ex. : Capitaine Rokk"></div>
         <div class="field"><label for="ed-code">Numéro</label><input id="ed-code" maxlength="20" placeholder="Ex. : MC01-001"></div>
       </div>
+      <div class="field"><label>Rareté</label>
+        <div class="seg" id="ed-rarity">${Object.entries(RARITIES).map(([k, v]) =>
+          `<button type="button" data-rarity="${k}" class="rb r-${k}">${v.label}</button>`).join('')}</div>
+        <label class="check"><input type="checkbox" id="ed-inb"> Peut sortir dans les boosters</label></div>
       <div class="field"><label>Couleur(s) <small>(2 max)</small></label>
         <div class="colors" id="ed-colors">${Object.entries(COLORS).map(([k, v]) =>
           `<button type="button" data-color="${k}" style="--c:${v.hex}">${v.label}</button>`).join('')}</div></div>
@@ -54,8 +58,9 @@ export function initEditor() {
     <div class="ed-preview"><div id="ed-card" class="big-card"></div></div>
     <section class="panel ed-list">
       <div class="list-head">
-        <h2>Ma collection <span id="ed-count" class="muted"></span></h2>
+        <h2>Toutes les cartes du jeu <span id="ed-count" class="muted"></span></h2>
         <div class="row-btns">
+          <button class="btn ghost" id="ed-legacy" title="Cartes créées avec la première version du site, dans ce navigateur">Récupérer l'ancienne version</button>
           <button class="btn ghost" id="ed-export">Exporter</button>
           <label class="btn ghost"><input type="file" id="ed-import" accept=".json,application/json" hidden>Importer</label>
         </div>
@@ -63,6 +68,7 @@ export function initEditor() {
       <div class="filters">
         <input id="ed-q" placeholder="Rechercher…" type="search">
         <select id="ed-ftype"><option value="">Tous types</option>${Object.entries(TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>
+        <select id="ed-frarity"><option value="">Toutes raretés</option>${Object.entries(RARITIES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('')}</select>
         <select id="ed-fcolor"><option value="">Toutes couleurs</option>${Object.entries(COLORS).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('')}</select>
       </div>
       <div class="card-grid" id="ed-grid"></div>
@@ -76,6 +82,10 @@ export function initEditor() {
   r.querySelector('#ed-type').addEventListener('click', (e) => {
     const t = e.target.closest('[data-type]')?.dataset.type;
     if (t) { cur.type = t; fill(); }
+  });
+  r.querySelector('#ed-rarity').addEventListener('click', (e) => {
+    const k = e.target.closest('[data-rarity]')?.dataset.rarity;
+    if (k) { cur.rarity = k; fill(); }
   });
   r.querySelector('#ed-colors').addEventListener('click', (e) => {
     const c = e.target.closest('[data-color]')?.dataset.color;
@@ -107,9 +117,14 @@ export function initEditor() {
     e.preventDefault();
     readForm();
     if (!cur.name.trim()) return msg('Donnez un nom à la carte.', true);
-    cur.updated = Date.now();
-    await saveCard({ ...cur, colors: [...cur.colors] });
-    msg(`« ${cur.name} » enregistrée.`);
+    msg('Enregistrement…');
+    try {
+      const c = { ...cur, colors: [...cur.colors] };
+      await saveCard(c);
+      cur.image = c.image;
+      fill();
+      msg(`« ${cur.name} » enregistrée.`);
+    } catch (err) { msg(err.message, true); }
   });
   val('ed-new').addEventListener('click', () => { const t = cur.type; cur = newCard(); cur.type = t; fill(); msg(''); });
   val('ed-dup').addEventListener('click', () => {
@@ -118,9 +133,20 @@ export function initEditor() {
   });
   val('ed-del').addEventListener('click', async () => {
     if (!S.byId[cur.id]) { cur = newCard(); fill(); return; }
-    if (!confirm(`Supprimer « ${cur.name} » ?`)) return;
-    await deleteCard(cur.id);
-    cur = newCard(); fill(); msg('Carte supprimée.');
+    if (!confirm(`Supprimer « ${cur.name} » ?\n\nAttention : elle disparaîtra aussi de la collection de TOUS les joueurs qui la possèdent.`)) return;
+    try {
+      await deleteCard(cur.id);
+      cur = newCard(); fill(); msg('Carte supprimée.');
+    } catch (err) { msg(err.message, true); }
+  });
+  val('ed-legacy').addEventListener('click', async () => {
+    try {
+      const cards = await readLegacyCards();
+      if (!cards.length) return msg('Aucune carte de l\'ancienne version dans ce navigateur.', true);
+      msg(`Envoi de ${cards.length} carte(s) sur le serveur…`);
+      await saveCards(cards);
+      msg(`${cards.length} carte(s) récupérée(s).`);
+    } catch (err) { msg(err.message, true); }
   });
   val('ed-export').addEventListener('click', () => {
     download('mes-cartes.json', { format: 'optcg-maison-cartes', cards: S.cards });
@@ -132,13 +158,16 @@ export function initEditor() {
     try {
       const data = await readJSONFile(f);
       const cards = data.cards || [];
-      if (!cards.length) throw new Error('vide');
+      if (!cards.length) throw new Error('Fichier vide ou invalide.');
+      msg(`Import de ${cards.length} carte(s)… (les images sont envoyées sur le serveur, patientez)`);
       await saveCards(cards);
       msg(`${cards.length} carte(s) importée(s).`);
-    } catch { msg('Fichier invalide.', true); }
+    } catch (err) { msg(err.message || 'Fichier invalide.', true); }
   });
   r.querySelector('.filters').addEventListener('input', () => {
-    filter = { q: val('ed-q').value.toLowerCase(), type: val('ed-ftype').value, color: val('ed-fcolor').value };
+    filter = {
+      q: val('ed-q').value.toLowerCase(), type: val('ed-ftype').value, color: val('ed-fcolor').value, rarity: val('ed-frarity').value,
+    };
     renderList();
   });
   val('ed-grid').addEventListener('click', (e) => {
@@ -166,6 +195,7 @@ function readForm() {
     name: v('ed-name'), code: v('ed-code'), cost: +v('ed-cost') || 0, life: +v('ed-life') || 0,
     power: +v('ed-power') || 0, counter: +v('ed-counter') || 0, attribute: v('ed-attr'),
     traits: v('ed-traits'), effect: v('ed-effect'), trigger: v('ed-trigger'),
+    inBoosters: root().querySelector('#ed-inb').checked,
   });
   preview();
 }
@@ -177,6 +207,8 @@ function fill() {
   set('ed-power', cur.power); set('ed-counter', cur.counter || 0); set('ed-attr', cur.attribute);
   set('ed-traits', cur.traits); set('ed-effect', cur.effect); set('ed-trigger', cur.trigger);
   r.querySelectorAll('#ed-type [data-type]').forEach((b) => b.classList.toggle('on', b.dataset.type === cur.type));
+  r.querySelector('#ed-inb').checked = cur.inBoosters !== false;
+  r.querySelectorAll('#ed-rarity [data-rarity]').forEach((b) => b.classList.toggle('on', b.dataset.rarity === (cur.rarity || 'C')));
   r.querySelectorAll('#ed-colors [data-color]').forEach((b) => b.classList.toggle('on', cur.colors.includes(b.dataset.color)));
   const t = cur.type;
   const show = (cls, yes) => { r.querySelector(cls).hidden = !yes; };
@@ -197,10 +229,27 @@ function preview() {
 function renderList() {
   const r = root();
   const list = S.cards.filter((c) => (!filter.type || c.type === filter.type)
+    && (!filter.rarity || c.rarity === filter.rarity)
     && (!filter.color || c.colors.includes(filter.color))
     && (!filter.q || `${c.name} ${c.code} ${c.traits} ${c.effect}`.toLowerCase().includes(filter.q)));
   r.querySelector('#ed-count').textContent = `(${S.cards.length})`;
   r.querySelector('#ed-grid').innerHTML = list.length
     ? list.map((c) => `<button class="grid-card" data-id="${c.id}" title="${esc(c.name)}">${cardHTML(c)}</button>`).join('')
     : `<p class="muted">${S.cards.length ? 'Aucune carte ne correspond.' : 'Aucune carte pour l\'instant : créez-en une avec le formulaire.'}</p>`;
+}
+
+// Lit les cartes stockées localement par la première version du site (IndexedDB « optcg-maison »).
+function readLegacyCards() {
+  return new Promise((resolve) => {
+    const r = indexedDB.open('optcg-maison');
+    r.onerror = () => resolve([]);
+    r.onupgradeneeded = () => { r.transaction.abort(); resolve([]); };
+    r.onsuccess = () => {
+      const db = r.result;
+      if (!db.objectStoreNames.contains('cards')) { db.close(); resolve([]); return; }
+      const g = db.transaction('cards').objectStore('cards').getAll();
+      g.onsuccess = () => { db.close(); resolve(g.result || []); };
+      g.onerror = () => { db.close(); resolve([]); };
+    };
+  });
 }

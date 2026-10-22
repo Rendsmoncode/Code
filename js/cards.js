@@ -16,6 +16,17 @@ export const TYPES = {
   stage: 'Lieu',
 };
 
+// Raretés, de la plus courante à la plus rare. Le code (C, UC…) est celui stocké en base.
+export const RARITIES = {
+  C: { label: 'Commune', short: 'C' },
+  UC: { label: 'Peu commune', short: 'PC' },
+  R: { label: 'Rare', short: 'R' },
+  UR: { label: 'Ultra rare', short: 'UR' },
+  L: { label: 'Légendaire', short: 'L' },
+  S: { label: 'Introuvable', short: '★' },
+};
+export const RARITY_ORDER = Object.keys(RARITIES);
+
 export const ATTRIBUTES = ['Frappe', 'Tranchant', 'Distance', 'Spécial', 'Sagesse'];
 
 // Mots-clés insérables depuis l'éditeur. Ceux marqués `kw` sont aussi détectés par le moteur.
@@ -47,7 +58,7 @@ export function newCard() {
   return {
     id: uid(), code: '', name: '', type: 'character', colors: ['rouge'],
     cost: 1, life: 5, power: 1000, counter: 1000, attribute: 'Frappe',
-    traits: '', effect: '', trigger: '', image: '', updated: Date.now(),
+    traits: '', effect: '', trigger: '', image: '', rarity: 'C', inBoosters: true,
   };
 }
 
@@ -82,11 +93,12 @@ export function cardHTML(card, o = {}) {
     ? `<div class="attr">${esc(card.attribute)}</div>` : '';
   const trig = card.trigger && t !== 'leader'
     ? `<div class="trg"><span class="kw trig">Déclenchement</span> ${fmtEffect(card.trigger)}</div>` : '';
+  const rar = RARITIES[card.rarity] ? `<div class="rar r-${card.rarity}" title="${RARITIES[card.rarity].label}">${RARITIES[card.rarity].short}</div>` : '';
   const art = card.image ? ` style="background-image:url('${card.image}')"` : '';
-  return `<div class="card t-${t} ${o.cls || ''}" style="--bg:${colorBg(card.colors)}" ${o.attrs || ''}>
+  return `<div class="card t-${t} r-${card.rarity || 'C'} ${o.cls || ''}" style="--bg:${colorBg(card.colors)}" ${o.attrs || ''}>
     <div class="frame">
       <div class="art${card.image ? '' : ' empty'}"${art}></div>
-      ${corner}${pow}${ctr}${attr}
+      ${corner}${pow}${ctr}${attr}${rar}
       <div class="info">
         <div class="nm">${esc(card.name || 'Sans nom')}</div>
         <div class="tl">${TYPES[t] || ''}${card.traits ? ' · ' + esc(card.traits) : ''}${card.code ? ' · ' + esc(card.code) : ''}</div>
