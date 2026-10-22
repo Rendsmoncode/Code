@@ -20786,7 +20786,8 @@ ${suffix}`;
     byId: {},
     collection: {},
     decks: [],
-    starters: []
+    starters: [],
+    oneOfOne: {}
   };
   var isAdmin = () => ["admin", "owner"].includes(S.status?.role);
   var isOwner = () => S.status?.role === "owner";
@@ -20830,18 +20831,20 @@ ${suffix}`;
     S.byId = Object.fromEntries(S.cards.map((c) => [c.id, c]));
   }
   async function load() {
-    const [status, cards, coll, decks, starters] = await Promise.all([
+    const [status, cards, coll, decks, starters, owners] = await Promise.all([
       sb.rpc("booster_status"),
       sb.from("cards").select("*"),
       sb.from("collection").select("card_id, qty"),
       sb.from("decks").select("*"),
-      sb.from("starter_decks").select("*")
+      sb.from("starter_decks").select("*"),
+      sb.rpc("one_of_one_owners")
     ]);
     S.status = check(status);
     S.cards = check(cards).map(fromRow);
     S.collection = Object.fromEntries(check(coll).map((r) => [r.card_id, r.qty]));
     S.decks = check(decks);
     S.starters = check(starters);
+    S.oneOfOne = Object.fromEntries((owners.error ? [] : owners.data || []).map((r) => [r.card_id, r.username]));
     reindex();
     emit();
   }
@@ -20918,6 +20921,7 @@ ${suffix}`;
     const leader = S.byId[deck.leader];
     if (!leader) errs.push("Choisissez un Leader.");
     else if (owned && !S.collection[leader.id]) errs.push(`Vous ne poss\xE9dez pas le Leader \xAB ${leader.name} \xBB.`);
+    else if (!owned && leader.rarity === "S") errs.push(`\xAB ${leader.name} \xBB est une 1 of 1 : interdite dans un deck pr\xE9construit.`);
     let total = 0;
     const perCode = {};
     for (const [id, n] of Object.entries(deck.cards || {})) {
@@ -20932,6 +20936,7 @@ ${suffix}`;
       if (perCode[key] > 4) errs.push(`\xAB ${c.name} \xBB : 4 exemplaires maximum.`);
       if (owned && n > (S.collection[id] || 0)) errs.push(`\xAB ${c.name} \xBB : vous n'en poss\xE9dez que ${S.collection[id] || 0}.`);
       if (c.type === "leader") errs.push(`\xAB ${c.name} \xBB est un Leader : il ne va pas dans le deck.`);
+      if (!owned && c.rarity === "S") errs.push(`\xAB ${c.name} \xBB est une 1 of 1 : interdite dans un deck pr\xE9construit.`);
       if (leader && !c.colors.some((x) => leader.colors.includes(x))) {
         errs.push(`\xAB ${c.name} \xBB n'a aucune couleur du Leader.`);
       }
@@ -20942,6 +20947,9 @@ ${suffix}`;
   async function openBooster() {
     const pulls = check(await sb.rpc("open_booster"));
     await refreshCollection();
+    if (pulls.some((p) => S.byId[p.id]?.rarity === "S")) {
+      S.oneOfOne = Object.fromEntries((check(await sb.rpc("one_of_one_owners")) || []).map((r) => [r.card_id, r.username]));
+    }
     await refreshStatus();
     return pulls;
   }
@@ -20978,11 +20986,12 @@ ${suffix}`;
   };
   var RARITIES = {
     C: { label: "Commune", short: "C" },
-    UC: { label: "Peu commune", short: "PC" },
+    UC: { label: "Peu commune", short: "UC" },
     R: { label: "Rare", short: "R" },
+    SR: { label: "Super rare", short: "SR" },
     UR: { label: "Ultra rare", short: "UR" },
-    L: { label: "L\xE9gendaire", short: "L" },
-    S: { label: "Introuvable", short: "\u2605" }
+    L: { label: "L\xE9gendaire", short: "LR" },
+    S: { label: "1 of 1", short: "1/1" }
   };
   var RARITY_ORDER = Object.keys(RARITIES);
   var ATTRIBUTES = ["Frappe", "Tranchant", "Distance", "Sp\xE9cial", "Sagesse"];
@@ -21018,6 +21027,7 @@ ${suffix}`;
   var hasRush = (c) => hasWord(c, ["[initiative]", "[rush]"]);
   var hasDoubleAttack = (c) => hasWord(c, ["[double attaque]", "[double attack]"]);
   var hasBanish = (c) => hasWord(c, ["[exil]", "[banish]"]);
+  var attributesOf = (card) => String(card?.attribute || "").split("/").map((a) => a.trim()).filter(Boolean).slice(0, 2);
   function newCard() {
     return {
       id: uid(),
@@ -21041,7 +21051,6 @@ ${suffix}`;
   function fmtEffect(txt) {
     return esc(txt).replace(/\[([^\]]+)\]/g, '<span class="kw">$1</span>').replace(/\n/g, "<br>");
   }
-  var RARITY_GEMS = { C: "\u25C6", UC: "\u25C6\u25C6", R: "\u25C6\u25C6\u25C6", UR: "\u25C6\u25C6\u25C6\u25C6", L: "\u2605", S: "\u265B" };
   function cardHTML(card, o = {}) {
     if (!card) return `<div class="card back ${o.cls || ""}" ${o.attrs || ""}><div class="frame"><div class="back-logo">OPTCG<small>Maison</small></div></div></div>`;
     const t = card.type;
@@ -21055,7 +21064,8 @@ ${suffix}`;
       pow = `<div class="pow${diff}" title="Puissance"><span>${shown}</span></div>`;
     }
     const ctr = t === "character" && Number(card.counter) > 0 ? `<div class="ctr" title="Contre"><span>+${esc(card.counter)}</span></div>` : "";
-    const attr = fighter && card.attribute ? `<div class="attr">${esc(card.attribute)}</div>` : "";
+    const attrs = attributesOf(card);
+    const attr = fighter && attrs.length ? `<div class="attr">${attrs.map((a) => `<span>${esc(a)}</span>`).join("")}</div>` : "";
     const trig = card.trigger && t !== "leader" ? `<div class="trg"><span class="kw trig">D\xE9clenchement</span> ${fmtEffect(card.trigger)}</div>` : "";
     const r = RARITIES[card.rarity] ? card.rarity : "C";
     const hex = (card.colors?.length ? card.colors : ["noir"]).map((c) => COLORS[c]?.hex || "#555");
@@ -21072,8 +21082,7 @@ ${suffix}`;
         ${card.effect ? `<div class="fx">${fmtEffect(card.effect)}</div>` : ""}
         ${trig}
       </div>
-      <div class="rar" title="${RARITIES[r].label}"><span class="rs">${RARITIES[r].short}</span><span class="rg">${RARITY_GEMS[r]}</span></div>
-      ${card.code ? `<div class="code">${esc(card.code)}</div>` : ""}
+      <div class="rar" title="${RARITIES[r].label}">${RARITIES[r].short}</div>
       <div class="foil"></div>
     </div>
   </div>`;
@@ -21215,6 +21224,8 @@ ${suffix}`;
           <select id="ed-counter"><option value="0">Aucun</option><option value="1000">+1000</option><option value="2000">+2000</option></select></div>
         <div class="field f-attr"><label for="ed-attr">Attribut</label>
           <input id="ed-attr" list="ed-attrs"><datalist id="ed-attrs">${ATTRIBUTES.map((a) => `<option value="${a}">`).join("")}</datalist></div>
+        <div class="field f-attr2"><label for="ed-attr2">2<sup>e</sup> attribut <small>(facultatif)</small></label>
+          <input id="ed-attr2" list="ed-attrs"></div>
       </div>
       <div class="field"><label for="ed-traits">Types / Familles</label><input id="ed-traits" maxlength="80" placeholder="Ex. : \xC9quipage du Requin / Marine"></div>
       <div class="field"><label for="ed-effect">Effet</label>
@@ -21412,7 +21423,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       life: +v("ed-life") || 0,
       power: +v("ed-power") || 0,
       counter: +v("ed-counter") || 0,
-      attribute: v("ed-attr"),
+      attribute: [v("ed-attr"), v("ed-attr2")].map((a) => a.replace(/\//g, "").trim()).filter(Boolean).join(" / "),
       traits: v("ed-traits"),
       effect: v("ed-effect"),
       trigger: v("ed-trigger"),
@@ -21429,9 +21440,11 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     set("ed-code", cur.code);
     set("ed-cost", cur.cost);
     set("ed-life", cur.life);
+    const [a1, a2] = attributesOf(cur);
     set("ed-power", cur.power);
     set("ed-counter", cur.counter || 0);
-    set("ed-attr", cur.attribute);
+    set("ed-attr", a1);
+    set("ed-attr2", a2);
     set("ed-traits", cur.traits);
     set("ed-effect", cur.effect);
     set("ed-trigger", cur.trigger);
@@ -21449,6 +21462,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     show2(".f-power", t === "leader" || t === "character");
     show2(".f-counter", t === "character");
     show2(".f-attr", t === "leader" || t === "character");
+    show2(".f-attr2", t === "leader" || t === "character");
     show2(".f-trigger", t !== "leader");
     r.querySelector("#ed-title").textContent = S.byId[cur.id] ? `Modifier \xAB ${cur.name} \xBB` : "Nouvelle carte";
     preview();
@@ -23024,7 +23038,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   var RATES = [
     ["3 cartes", "Commune"],
     ["1 carte", "Peu commune"],
-    ["1 carte", "Rare 70 % \xB7 Ultra rare 20 % \xB7 L\xE9gendaire 8,5 % \xB7 Introuvable 1,5 %"]
+    ["1 carte", "Rare ou mieux : 1 Super rare (SR) tous les 4 boosters, 1 Ultra rare (UR) tous les 15, 1 L\xE9gendaire (LR) tous les 50, 1 \xAB 1 of 1 \xBB tous les 500"]
   ];
   var opening = null;
   var busy = false;
@@ -23041,6 +23055,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     <section class="bs-stage"></section>
     <details class="panel small bs-rates"><summary>Contenu d'un booster</summary>
       <ul>${RATES.map(([n, r]) => `<li><b>${n}</b> : ${r}</li>`).join("")}</ul>
+      <p class="muted">Une carte <b>1 of 1</b> n'existe qu'en un seul exemplaire dans tout le jeu : le premier qui la tire est le seul \xE0 l'avoir.</p>
       <p class="muted">1 booster gratuit toutes les 10 minutes (6 en r\xE9serve au maximum), plus les boosters offerts par les admins.</p>
     </details>
   </div>`;
@@ -23160,7 +23175,9 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       const list = S.cards.filter((c) => (!filter2.rarity || c.rarity === filter2.rarity) && (!filter2.type || c.type === filter2.type) && (filter2.own !== "yes" || S.collection[c.id]) && (filter2.own !== "no" || !S.collection[c.id]) && (!filter2.q || `${c.name} ${c.code} ${c.traits} ${c.effect}`.toLowerCase().includes(filter2.q))).sort((a, b) => RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity));
       q(".cl-grid").innerHTML = list.map((c) => {
         const n = S.collection[c.id] || 0;
-        return `<div class="grid-card ${n ? "" : "missing"}" title="${esc(c.name)}">${cardHTML(c)}${n ? `<span class="qty">\xD7${n}</span>` : ""}</div>`;
+        const owner = c.rarity === "S" ? S.oneOfOne[c.id] : null;
+        const tag = c.rarity === "S" ? `<span class="one-owner">${owner ? `Poss\xE9d\xE9e par ${esc(owner)}` : "Encore \xE0 prendre !"}</span>` : "";
+        return `<div class="grid-card ${n ? "" : "missing"}" title="${esc(c.name)}">${cardHTML(c)}${n ? `<span class="qty">\xD7${n}</span>` : ""}${tag}</div>`;
       }).join("") || '<p class="muted">Aucune carte.</p>';
     }
   }

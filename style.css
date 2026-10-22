@@ -100,7 +100,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-2); 
 .grid-card { position: relative; background: none; border: 0; padding: 0; cursor: pointer; border-radius: 8px; text-align: left; }
 .grid-card:hover .card { outline: 3px solid var(--accent-2); }
 .qty {
-  position: absolute; right: -4px; bottom: -4px; background: var(--accent); color: #fff; border-radius: 99px; padding: 2px 9px; font-weight: 800;
+  position: absolute; z-index: 8; right: -4px; bottom: -4px; background: var(--accent); color: #fff; border-radius: 99px; padding: 2px 9px; font-weight: 800;
 }
 
 /* ---------- onglet Decks ---------- */
@@ -264,15 +264,15 @@ details { margin-top: 12px; }
 
 /* ---------- raretés ---------- */
 :root {
-  --r-C: #8d93a3; --r-UC: #3fb26b; --r-R: #3d8bfd; --r-UR: #b05cff; --r-L: #f2b33d;
+  --r-C: #8d93a3; --r-UC: #7cc8ff; --r-R: #c3a6ff; --r-SR: #ff7ac8; --r-UR: #ff9a3c; --r-L: #f2b33d;
   --r-S: linear-gradient(90deg, #ff4d6d, #ffb84d, #f7f052, #4dff9a, #4dc3ff, #b44dff);
 }
 .seg .rb.on { color: #fff; border-color: transparent; }
 .rb.r-C.on { background: var(--r-C); } .rb.r-UC.on { background: var(--r-UC); } .rb.r-R.on { background: var(--r-R); }
-.rb.r-UR.on { background: var(--r-UR); } .rb.r-L.on { background: var(--r-L); color: #111; } .rb.r-S.on { background: var(--r-S); color: #111; }
+.rb.r-SR.on { background: var(--r-SR); } .rb.r-UR.on { background: var(--r-UR); } .rb.r-L.on { background: var(--r-L); color: #111; } .rb.r-S.on { background: var(--r-S); color: #111; }
 .check { display: flex; align-items: center; gap: 6px; font-weight: 400 !important; margin-top: 6px; }
 .rar-chip { display: inline-block; padding: 3px 10px; border-radius: 99px; font-size: .8em; font-weight: 700; margin: 0 6px 6px 0; color: #fff; background: var(--r-C); }
-.rar-chip.r-UC { background: var(--r-UC); } .rar-chip.r-R { background: var(--r-R); } .rar-chip.r-UR { background: var(--r-UR); }
+.rar-chip.r-UC { background: var(--r-UC); } .rar-chip.r-R { background: var(--r-R); } .rar-chip.r-SR { background: var(--r-SR); } .rar-chip.r-UR { background: var(--r-UR); }
 .rar-chip.r-L { background: var(--r-L); color: #111; } .rar-chip.r-S { background: var(--r-S); color: #111; }
 .grid-card.missing .card { filter: grayscale(1) brightness(.45); }
 
@@ -306,7 +306,7 @@ details { margin-top: 12px; }
   position: absolute; left: 50%; bottom: -12px; transform: translateX(-50%); padding: 3px 12px; border-radius: 99px;
   font-weight: 800; font-size: .8rem; color: #fff; background: var(--r-C); white-space: nowrap;
 }
-.rar-label.r-UC { background: var(--r-UC); } .rar-label.r-R { background: var(--r-R); } .rar-label.r-UR { background: var(--r-UR); }
+.rar-label.r-UC { background: var(--r-UC); } .rar-label.r-R { background: var(--r-R); } .rar-label.r-SR { background: var(--r-SR); } .rar-label.r-UR { background: var(--r-UR); }
 .rar-label.r-L { background: var(--r-L); color: #111; } .rar-label.r-S { background: var(--r-S); color: #111; }
 .new {
   position: absolute; top: -10px; right: -8px; background: var(--ok); color: #fff; font-weight: 800; font-size: .75rem;
@@ -338,3 +338,9 @@ details { margin-top: 12px; }
   .top .who { margin-left: 0; }
 }
 .msg:empty { display: none; }
+
+/* Raretés claires : texte foncé pour rester lisible */
+.rb.r-UC.on, .rb.r-R.on, .rb.r-SR.on, .rb.r-UR.on, .rar-chip.r-UC, .rar-chip.r-R, .rar-chip.r-SR, .rar-chip.r-UR,
+.rar-label.r-UC, .rar-label.r-R, .rar-label.r-SR, .rar-label.r-UR { color: #111; }
+.pull.flipped.r-SR .pull-front .card { box-shadow: 0 0 22px var(--r-SR); }
+.one-owner { position: absolute; z-index: 8; left: 50%; top: -10px; transform: translateX(-50%); white-space: nowrap; font-size: .72rem; font-weight: 800; padding: 2px 8px; border-radius: 99px; background: #000; color: #ffe08a; border: 1px solid #e8c46a; }

@@ -1,7 +1,7 @@
 // Onglet « Cartes » : création et édition des cartes de la collection.
 import { S, saveCard, saveCards, deleteCard, onChange } from './store.js';
 import {
-  COLORS, TYPES, RARITIES, ATTRIBUTES, KEYWORDS, esc, uid, newCard, cardHTML, resizeImage, download, readJSONFile,
+  COLORS, TYPES, RARITIES, ATTRIBUTES, attributesOf, KEYWORDS, esc, uid, newCard, cardHTML, resizeImage, download, readJSONFile,
 } from './cards.js';
 
 const root = () => document.getElementById('tab-cards');
@@ -35,6 +35,8 @@ export function initEditor() {
           <select id="ed-counter"><option value="0">Aucun</option><option value="1000">+1000</option><option value="2000">+2000</option></select></div>
         <div class="field f-attr"><label for="ed-attr">Attribut</label>
           <input id="ed-attr" list="ed-attrs"><datalist id="ed-attrs">${ATTRIBUTES.map((a) => `<option value="${a}">`).join('')}</datalist></div>
+        <div class="field f-attr2"><label for="ed-attr2">2<sup>e</sup> attribut <small>(facultatif)</small></label>
+          <input id="ed-attr2" list="ed-attrs"></div>
       </div>
       <div class="field"><label for="ed-traits">Types / Familles</label><input id="ed-traits" maxlength="80" placeholder="Ex. : Équipage du Requin / Marine"></div>
       <div class="field"><label for="ed-effect">Effet</label>
@@ -196,7 +198,8 @@ function readForm() {
   const v = (id) => root().querySelector('#' + id).value;
   Object.assign(cur, {
     name: v('ed-name'), code: v('ed-code'), cost: +v('ed-cost') || 0, life: +v('ed-life') || 0,
-    power: +v('ed-power') || 0, counter: +v('ed-counter') || 0, attribute: v('ed-attr'),
+    power: +v('ed-power') || 0, counter: +v('ed-counter') || 0,
+    attribute: [v('ed-attr'), v('ed-attr2')].map((a) => a.replace(/\//g, '').trim()).filter(Boolean).join(' / '),
     traits: v('ed-traits'), effect: v('ed-effect'), trigger: v('ed-trigger'),
     inBoosters: root().querySelector('#ed-inb').checked,
   });
@@ -207,7 +210,8 @@ function fill() {
   const r = root();
   const set = (id, x) => { r.querySelector('#' + id).value = x ?? ''; };
   set('ed-name', cur.name); set('ed-code', cur.code); set('ed-cost', cur.cost); set('ed-life', cur.life);
-  set('ed-power', cur.power); set('ed-counter', cur.counter || 0); set('ed-attr', cur.attribute);
+  const [a1, a2] = attributesOf(cur);
+  set('ed-power', cur.power); set('ed-counter', cur.counter || 0); set('ed-attr', a1); set('ed-attr2', a2);
   set('ed-traits', cur.traits); set('ed-effect', cur.effect); set('ed-trigger', cur.trigger);
   r.querySelectorAll('#ed-type [data-type]').forEach((b) => b.classList.toggle('on', b.dataset.type === cur.type));
   r.querySelector('#ed-inb').checked = cur.inBoosters !== false;
@@ -221,6 +225,7 @@ function fill() {
   show('.f-power', t === 'leader' || t === 'character');
   show('.f-counter', t === 'character');
   show('.f-attr', t === 'leader' || t === 'character');
+  show('.f-attr2', t === 'leader' || t === 'character');
   show('.f-trigger', t !== 'leader');
   r.querySelector('#ed-title').textContent = S.byId[cur.id] ? `Modifier « ${cur.name} »` : 'Nouvelle carte';
   preview();

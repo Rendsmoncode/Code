@@ -8,7 +8,7 @@ const EMAIL_DOMAIN = 'joueurs.optcg-maison.fr'; // adresses internes : les joueu
 export const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 export const S = {
-  user: null, status: null, cards: [], byId: {}, collection: {}, decks: [], starters: [],
+  user: null, status: null, cards: [], byId: {}, collection: {}, decks: [], starters: [], oneOfOne: {},
 };
 export const isAdmin = () => ['admin', 'owner'].includes(S.status?.role);
 export const isOwner = () => S.status?.role === 'owner';
@@ -65,18 +65,21 @@ function reindex() {
 }
 
 export async function load() {
-  const [status, cards, coll, decks, starters] = await Promise.all([
+  const [status, cards, coll, decks, starters, owners] = await Promise.all([
     sb.rpc('booster_status'),
     sb.from('cards').select('*'),
     sb.from('collection').select('card_id, qty'),
     sb.from('decks').select('*'),
     sb.from('starter_decks').select('*'),
+    sb.rpc('one_of_one_owners'),
   ]);
   S.status = check(status);
   S.cards = check(cards).map(fromRow);
   S.collection = Object.fromEntries(check(coll).map((r) => [r.card_id, r.qty]));
   S.decks = check(decks);
   S.starters = check(starters);
+  // Tolérant : la fonction n'existe pas tant que le script SQL n'a pas été relancé.
+  S.oneOfOne = Object.fromEntries((owners.error ? [] : owners.data || []).map((r) => [r.card_id, r.username]));
   reindex();
   emit();
 }
@@ -161,6 +164,7 @@ export function validateDeck(deck, { owned = true } = {}) {
   const leader = S.byId[deck.leader];
   if (!leader) errs.push('Choisissez un Leader.');
   else if (owned && !S.collection[leader.id]) errs.push(`Vous ne possédez pas le Leader « ${leader.name} ».`);
+  else if (!owned && leader.rarity === 'S') errs.push(`« ${leader.name} » est une 1 of 1 : interdite dans un deck préconstruit.`);
   let total = 0;
   const perCode = {};
   for (const [id, n] of Object.entries(deck.cards || {})) {
@@ -172,6 +176,7 @@ export function validateDeck(deck, { owned = true } = {}) {
     if (perCode[key] > 4) errs.push(`« ${c.name} » : 4 exemplaires maximum.`);
     if (owned && n > (S.collection[id] || 0)) errs.push(`« ${c.name} » : vous n'en possédez que ${S.collection[id] || 0}.`);
     if (c.type === 'leader') errs.push(`« ${c.name} » est un Leader : il ne va pas dans le deck.`);
+    if (!owned && c.rarity === 'S') errs.push(`« ${c.name} » est une 1 of 1 : interdite dans un deck préconstruit.`);
     if (leader && !c.colors.some((x) => leader.colors.includes(x))) {
       errs.push(`« ${c.name} » n'a aucune couleur du Leader.`);
     }
@@ -184,6 +189,9 @@ export function validateDeck(deck, { owned = true } = {}) {
 export async function openBooster() {
   const pulls = check(await sb.rpc('open_booster'));
   await refreshCollection();
+  if (pulls.some((p) => S.byId[p.id]?.rarity === 'S')) {
+    S.oneOfOne = Object.fromEntries((check(await sb.rpc('one_of_one_owners')) || []).map((r) => [r.card_id, r.username]));
+  }
   await refreshStatus();
   return pulls;
 }

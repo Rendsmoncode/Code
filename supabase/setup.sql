@@ -19,10 +19,14 @@ create table if not exists public.profiles (
 create table if not exists public.cards (
   id text primary key,
   data jsonb not null,
-  rarity text not null default 'C' check (rarity in ('C', 'UC', 'R', 'UR', 'L', 'S')),
+  rarity text not null default 'C',
   in_boosters boolean not null default true,
   updated_at timestamptz not null default now()
 );
+
+-- Raretés : C Commune, UC Peu commune, R Rare, SR Super rare, UR Ultra rare, L Légendaire (LR), S 1 of 1.
+alter table public.cards drop constraint if exists cards_rarity_check;
+alter table public.cards add constraint cards_rarity_check check (rarity in ('C', 'UC', 'R', 'SR', 'UR', 'L', 'S'));
 
 create table if not exists public.starter_decks (
   id text primary key,
@@ -119,16 +123,21 @@ begin
     'starter_claimed', p.starter_claimed, 'now', now());
 end $$;
 
--- Tire une carte de la rareté voulue ; si aucune n'existe, prend la rareté la plus proche (en dessous d'abord).
+-- Tire une carte de la rareté voulue ; si aucune n'est disponible, prend la rareté la plus proche
+-- (en dessous d'abord, puis au-dessus). Une carte 1 of 1 (S) déjà obtenue par un joueur ne sort plus,
+-- et une 1 of 1 ne remplace jamais une rareté plus faible.
 create or replace function public.pick_card(want text) returns text
 language plpgsql volatile security definer set search_path = public as $$
 declare
-  ranks text[] := array['C', 'UC', 'R', 'UR', 'L', 'S'];
+  ranks text[] := array['C', 'UC', 'R', 'SR', 'UR', 'L', 'S'];
   idx int := array_position(ranks, want);
   cid text;
 begin
   for i in reverse idx..1 loop
-    select id into cid from public.cards where in_boosters and rarity = ranks[i] order by random() limit 1;
+    select id into cid from public.cards c
+      where in_boosters and rarity = ranks[i]
+        and (rarity <> 'S' or not exists (select 1 from public.collection where card_id = c.id))
+      order by random() limit 1;
     if cid is not null then return cid; end if;
   end loop;
   for i in idx + 1..6 loop
@@ -139,7 +148,7 @@ begin
 end $$;
 
 -- Ouvre un booster de 5 cartes : 3 Communes, 1 Peu commune, 1 Rare ou mieux.
--- Dernière carte : Rare 70 %, Ultra rare 20 %, Légendaire 8,5 %, rareté suprême 1,5 %.
+-- Dernière carte : 1 SR sur 4, 1 UR sur 15, 1 LR sur 50, 1 « 1 of 1 » sur 500, sinon Rare.
 create or replace function public.open_booster() returns json
 language plpgsql security definer set search_path = public as $$
 declare
@@ -162,9 +171,15 @@ begin
   else
     raise exception 'Aucun booster disponible pour le moment.';
   end if;
-  slots := array['C', 'C', 'C', 'UC',
-    case when roll < 0.015 then 'S' when roll < 0.10 then 'L' when roll < 0.30 then 'UR' else 'R' end];
+  slots := array['C', 'C', 'C', 'UC', case
+    when roll < 1.0 / 500 then 'S'
+    when roll < 1.0 / 500 + 1.0 / 50 then 'L'
+    when roll < 1.0 / 500 + 1.0 / 50 + 1.0 / 15 then 'UR'
+    when roll < 1.0 / 500 + 1.0 / 50 + 1.0 / 15 + 1.0 / 4 then 'SR'
+    else 'R' end];
   foreach r in array slots loop
+    -- Verrou : deux joueurs ne peuvent pas tirer la même 1 of 1 au même instant.
+    if r = 'S' then perform pg_advisory_xact_lock(hashtext('optcg-one-of-one')); end if;
     cid := public.pick_card(r);
     if cid is null then raise exception 'Il n''y a encore aucune carte dans les boosters.'; end if;
     is_new := not exists (select 1 from public.collection where user_id = p.id and card_id = cid);
@@ -174,6 +189,16 @@ begin
   end loop;
   return array_to_json(result);
 end $$;
+
+-- Qui possède chaque carte 1 of 1 (visible par tous).
+create or replace function public.one_of_one_owners() returns table (card_id text, username text)
+language sql stable security definer set search_path = public as $$
+  select c.card_id, p.username
+  from public.collection c
+  join public.cards k on k.id = c.card_id
+  join public.profiles p on p.id = c.user_id
+  where k.rarity = 'S';
+$$;
 
 -- ---------- Deck préconstruit ----------
 
@@ -191,6 +216,10 @@ begin
   if p.starter_claimed then raise exception 'Vous avez déjà reçu votre deck préconstruit.'; end if;
   select * into s from public.starter_decks where id = starter_id;
   if not found then raise exception 'Deck préconstruit introuvable.'; end if;
+  if exists (select 1 from public.cards where rarity = 'S'
+             and (id = s.leader or id in (select jsonb_object_keys(s.cards)))) then
+    raise exception 'Un deck préconstruit ne peut pas contenir de carte 1 of 1.';
+  end if;
   if coalesce(s.leader, '') <> '' then
     insert into public.collection (user_id, card_id, qty) values (p.id, s.leader, 1)
       on conflict (user_id, card_id) do update set qty = public.collection.qty + 1;
@@ -269,7 +298,7 @@ grant select on public.profiles, public.collection to authenticated;
 grant select, insert, update, delete on public.cards, public.starter_decks, public.decks to authenticated;
 
 revoke execute on all functions in schema public from public, anon, authenticated;
-grant execute on function public.is_admin(), public.booster_status(), public.open_booster(),
+grant execute on function public.is_admin(), public.booster_status(), public.open_booster(), public.one_of_one_owners(),
   public.claim_starter(text), public.admin_give_boosters(text, int), public.admin_set_role(text, text)
   to authenticated;
 

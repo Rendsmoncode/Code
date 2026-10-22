@@ -19,11 +19,12 @@ export const TYPES = {
 // Raretés, de la plus courante à la plus rare. Le code (C, UC…) est celui stocké en base.
 export const RARITIES = {
   C: { label: 'Commune', short: 'C' },
-  UC: { label: 'Peu commune', short: 'PC' },
+  UC: { label: 'Peu commune', short: 'UC' },
   R: { label: 'Rare', short: 'R' },
+  SR: { label: 'Super rare', short: 'SR' },
   UR: { label: 'Ultra rare', short: 'UR' },
-  L: { label: 'Légendaire', short: 'L' },
-  S: { label: 'Introuvable', short: '★' },
+  L: { label: 'Légendaire', short: 'LR' },
+  S: { label: '1 of 1', short: '1/1' },
 };
 export const RARITY_ORDER = Object.keys(RARITIES);
 
@@ -54,6 +55,9 @@ export const hasRush = (c) => hasWord(c, ['[initiative]', '[rush]']);
 export const hasDoubleAttack = (c) => hasWord(c, ['[double attaque]', '[double attack]']);
 export const hasBanish = (c) => hasWord(c, ['[exil]', '[banish]']);
 
+// Une carte a 1 ou 2 attributs, stockés dans `attribute` sous la forme « Frappe / Tranchant ».
+export const attributesOf = (card) => String(card?.attribute || '').split('/').map((a) => a.trim()).filter(Boolean).slice(0, 2);
+
 export function newCard() {
   return {
     id: uid(), code: '', name: '', type: 'character', colors: ['rouge'],
@@ -67,16 +71,6 @@ export function fmtEffect(txt) {
     .replace(/\[([^\]]+)\]/g, '<span class="kw">$1</span>')
     .replace(/\n/g, '<br>');
 }
-
-// Symboles de rareté (affichés par certains habillages).
-const RARITY_GEMS = { C: '◆', UC: '◆◆', R: '◆◆◆', UR: '◆◆◆◆', L: '★', S: '♛' };
-
-// Habillages disponibles. Le nom sert de classe CSS sur <body> (skin-xxx).
-export const SKINS = {
-  grandline: 'Grand Line',
-  impact: 'Impact',
-  horizon: 'Horizon',
-};
 
 // o.power : puissance affichée (si modifiée), o.cls : classes en plus, o.attrs : attributs HTML en plus.
 export function cardHTML(card, o = {}) {
@@ -95,7 +89,8 @@ export function cardHTML(card, o = {}) {
   }
   const ctr = t === 'character' && Number(card.counter) > 0
     ? `<div class="ctr" title="Contre"><span>+${esc(card.counter)}</span></div>` : '';
-  const attr = fighter && card.attribute ? `<div class="attr">${esc(card.attribute)}</div>` : '';
+  const attrs = attributesOf(card);
+  const attr = fighter && attrs.length ? `<div class="attr">${attrs.map((a) => `<span>${esc(a)}</span>`).join('')}</div>` : '';
   const trig = card.trigger && t !== 'leader'
     ? `<div class="trg"><span class="kw trig">Déclenchement</span> ${fmtEffect(card.trigger)}</div>` : '';
   const r = RARITIES[card.rarity] ? card.rarity : 'C';
@@ -113,8 +108,7 @@ export function cardHTML(card, o = {}) {
         ${card.effect ? `<div class="fx">${fmtEffect(card.effect)}</div>` : ''}
         ${trig}
       </div>
-      <div class="rar" title="${RARITIES[r].label}"><span class="rs">${RARITIES[r].short}</span><span class="rg">${RARITY_GEMS[r]}</span></div>
-      ${card.code ? `<div class="code">${esc(card.code)}</div>` : ''}
+      <div class="rar" title="${RARITIES[r].label}">${RARITIES[r].short}</div>
       <div class="foil"></div>
     </div>
   </div>`;
