@@ -128,7 +128,10 @@ function sectionHTML(eff, sec, continuous = false) {
 function paramHTML(p, item) {
   const v = item[p.k];
   if (p.type === 'num') return `<label>${esc(p.label)} <input type="number" data-p="${p.k}" value="${esc(v)}"></label>`;
-  if (p.type === 'text') return `<label>${esc(p.label)} <input type="text" data-p="${p.k}" value="${esc(v)}"></label>`;
+  if (p.type === 'text') {
+    const list = ['type', 'v'].includes(p.k) && /type/i.test(p.label) ? ' list="all-traits"' : '';
+    return `<label>${esc(p.label)} <input type="text" data-p="${p.k}" value="${esc(v)}"${list}></label>`;
+  }
   if (p.type === 'sel') return `<label>${esc(p.label)} ${select(p.k, p.opts, v)}</label>`;
   if (p.type === 'filter') return filterHTML(p.k, v || {});
   if (p.type === 'target') {
@@ -148,7 +151,7 @@ function paramHTML(p, item) {
 function filterHTML(path, f, attr = 'data-p') {
   const sel = (k, opts) => select(`${path}.${k}`, opts, f[k] || '').replace('data-p=', `${attr}=`);
   return `<span class="fxe-filter">
-    <label>Type <input type="text" ${attr}="${path}.type" value="${esc(f.type || '')}" placeholder="ex. Marine"></label>
+    <label>Type <input type="text" ${attr}="${path}.type" value="${esc(f.type || '')}" placeholder="ex. Marine" list="all-traits"></label>
     <label>Nom <input type="text" ${attr}="${path}.name" value="${esc(f.name || '')}" placeholder="ex. Prisonnier"></label>
     <label>Genre ${sel('cardType', { '': '—', character: 'Personnage', stage: 'Lieu', event: 'Événement' })}</label>
     <label>Couleur ${sel('color', { '': '—', ...COLORS_FR })}</label>

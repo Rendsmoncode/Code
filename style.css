@@ -384,3 +384,12 @@ details { margin-top: 12px; }
 .lay .btn { align-self: flex-start; margin-top: 4px; }
 #ed-card { touch-action: none; cursor: grab; }
 #ed-card:active { cursor: grabbing; }
+
+/* ---------- familles (types) dans l'éditeur ---------- */
+.traits-ed { display: flex; flex-direction: column; gap: 6px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; min-height: 28px; align-items: center; }
+.chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 4px 3px 10px; border-radius: 99px; background: var(--panel-2); border: 1px solid var(--line); font-size: .88em; }
+.chip button { border: 0; background: none; cursor: pointer; color: var(--muted); font-size: 1.1em; line-height: 1; padding: 0 4px; border-radius: 99px; }
+.chip button:hover { color: var(--err); }
+.traits-ed .row-btns { margin-top: 0; }
+#ed-traits-sel { min-width: 230px; }

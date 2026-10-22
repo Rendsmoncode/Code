@@ -20830,6 +20830,21 @@ ${suffix}`;
     S.cards.sort((a, b) => (a.code || "").localeCompare(b.code || "") || (a.name || "").localeCompare(b.name || ""));
     S.byId = Object.fromEntries(S.cards.map((c) => [c.id, c]));
   }
+  function allTraits() {
+    const set = /* @__PURE__ */ new Set();
+    for (const c of S.cards) String(c.traits || "").split("/").map((t) => t.trim()).filter(Boolean).forEach((t) => set.add(t));
+    return [...set].sort((a, b) => a.localeCompare(b, "fr"));
+  }
+  function refreshTraitsList() {
+    let dl = document.getElementById("all-traits");
+    if (!dl) {
+      dl = document.createElement("datalist");
+      dl.id = "all-traits";
+      document.body.append(dl);
+    }
+    dl.innerHTML = allTraits().map((t) => `<option value="${t.replace(/"/g, "&quot;")}">`).join("");
+  }
+  listeners.add(refreshTraitsList);
   async function load() {
     const [status, cards, coll, decks, starters, owners] = await Promise.all([
       sb.rpc("booster_status"),
@@ -21580,7 +21595,10 @@ ${suffix}`;
   function paramHTML(p, item) {
     const v = item[p.k];
     if (p.type === "num") return `<label>${esc(p.label)} <input type="number" data-p="${p.k}" value="${esc(v)}"></label>`;
-    if (p.type === "text") return `<label>${esc(p.label)} <input type="text" data-p="${p.k}" value="${esc(v)}"></label>`;
+    if (p.type === "text") {
+      const list = ["type", "v"].includes(p.k) && /type/i.test(p.label) ? ' list="all-traits"' : "";
+      return `<label>${esc(p.label)} <input type="text" data-p="${p.k}" value="${esc(v)}"${list}></label>`;
+    }
     if (p.type === "sel") return `<label>${esc(p.label)} ${select(p.k, p.opts, v)}</label>`;
     if (p.type === "filter") return filterHTML(p.k, v || {});
     if (p.type === "target") {
@@ -21598,7 +21616,7 @@ ${suffix}`;
   function filterHTML(path, f, attr = "data-p") {
     const sel = (k, opts) => select(`${path}.${k}`, opts, f[k] || "").replace("data-p=", `${attr}=`);
     return `<span class="fxe-filter">
-    <label>Type <input type="text" ${attr}="${path}.type" value="${esc(f.type || "")}" placeholder="ex. Marine"></label>
+    <label>Type <input type="text" ${attr}="${path}.type" value="${esc(f.type || "")}" placeholder="ex. Marine" list="all-traits"></label>
     <label>Nom <input type="text" ${attr}="${path}.name" value="${esc(f.name || "")}" placeholder="ex. Prisonnier"></label>
     <label>Genre ${sel("cardType", { "": "\u2014", character: "Personnage", stage: "Lieu", event: "\xC9v\xE9nement" })}</label>
     <label>Couleur ${sel("color", { "": "\u2014", ...COLORS_FR })}</label>
@@ -21655,7 +21673,15 @@ ${suffix}`;
         <div class="field f-attr2"><label for="ed-attr2">2<sup>e</sup> attribut <small>(facultatif)</small></label>
           <input id="ed-attr2" list="ed-attrs"></div>
       </div>
-      <div class="field"><label for="ed-traits">Types / Familles</label><input id="ed-traits" maxlength="80" placeholder="Ex. : \xC9quipage du Requin / Marine"></div>
+      <div class="field"><label for="ed-traits-sel">Types / Familles</label>
+        <div class="traits-ed">
+          <div id="ed-traits-chips" class="chips"></div>
+          <div class="row-btns">
+            <select id="ed-traits-sel"></select>
+            <span id="ed-traits-new" hidden><input id="ed-traits-in" maxlength="40" placeholder="Nom de la nouvelle famille">
+              <button type="button" class="btn small" id="ed-traits-add">Ajouter</button></span>
+          </div>
+        </div></div>
       <div class="field"><label>Effets automatiques <small>(le jeu les applique tout seul ; le texte de la carte s'\xE9crit automatiquement)</small></label>
         <div id="ed-fx" class="fxe"></div></div>
       <div class="field"><label for="ed-effect">Texte libre <small>(effet sp\xE9cial non pr\xE9vu : \xE0 appliquer \xE0 la main pendant la partie)</small></label>
@@ -21767,6 +21793,7 @@ ${suffix}`;
       preview();
     });
     bindLayout(r);
+    bindTraits(r);
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       readForm();
@@ -21878,7 +21905,6 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       power: +v("ed-power") || 0,
       counter: +v("ed-counter") || 0,
       attribute: [v("ed-attr"), v("ed-attr2")].map((a) => a.replace(/\//g, "").trim()).filter(Boolean).join(" / "),
-      traits: v("ed-traits"),
       effect: v("ed-effect"),
       trigger: v("ed-trigger"),
       inBoosters: root().querySelector("#ed-inb").checked
@@ -21899,9 +21925,9 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     set("ed-counter", cur.counter || 0);
     set("ed-attr", a1);
     set("ed-attr2", a2);
-    set("ed-traits", cur.traits);
     set("ed-effect", cur.effect);
     set("ed-trigger", cur.trigger);
+    renderTraits();
     r.querySelectorAll("#ed-type [data-type]").forEach((b) => b.classList.toggle("on", b.dataset.type === cur.type));
     r.querySelector("#ed-inb").checked = cur.inBoosters !== false;
     r.querySelectorAll("#ed-ink [data-ink]").forEach((b) => b.classList.toggle("on", b.dataset.ink === (cur.ink === "dark" ? "dark" : "light")));
@@ -21923,6 +21949,53 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     fillLayout();
     r.querySelector("#ed-title").textContent = S.byId[cur.id] ? `Modifier \xAB ${cur.name} \xBB` : "Nouvelle carte";
     preview();
+  }
+  var traitsOf = (c) => String(c?.traits || "").split("/").map((t) => t.trim()).filter(Boolean);
+  function renderTraits() {
+    const r = root();
+    const mine = traitsOf(cur);
+    r.querySelector("#ed-traits-chips").innerHTML = mine.length ? mine.map((t) => `<span class="chip">${esc(t)}<button type="button" data-rm-trait="${esc(t)}" aria-label="Retirer ${esc(t)}">\xD7</button></span>`).join("") : '<span class="muted small">Aucune famille.</span>';
+    const others = allTraits().filter((t) => !mine.includes(t));
+    r.querySelector("#ed-traits-sel").innerHTML = `<option value="">+ Ajouter une famille\u2026</option>
+    ${others.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join("")}
+    <option value="__new">+ Nouvelle famille\u2026</option>`;
+  }
+  function setTraits(list) {
+    cur.traits = [...new Set(list)].join(" / ");
+    renderTraits();
+    preview();
+  }
+  function bindTraits(r) {
+    const sel = r.querySelector("#ed-traits-sel");
+    const box = r.querySelector("#ed-traits-new");
+    const inp = r.querySelector("#ed-traits-in");
+    sel.addEventListener("change", () => {
+      if (sel.value === "__new") {
+        box.hidden = false;
+        inp.focus();
+        sel.value = "";
+        return;
+      }
+      if (sel.value) setTraits([...traitsOf(cur), sel.value]);
+    });
+    const add = () => {
+      const t = inp.value.replace(/\//g, " ").trim();
+      if (!t) return;
+      setTraits([...traitsOf(cur), t]);
+      inp.value = "";
+      box.hidden = true;
+    };
+    r.querySelector("#ed-traits-add").addEventListener("click", add);
+    inp.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        add();
+      }
+    });
+    r.querySelector("#ed-traits-chips").addEventListener("click", (e) => {
+      const t = e.target.closest("[data-rm-trait]")?.dataset.rmTrait;
+      if (t) setTraits(traitsOf(cur).filter((x) => x !== t));
+    });
   }
   var defaultBox = () => ({ l: 5, w: 90, b: cur.type === "leader" ? 17.2 : 14.3, fs: 1 });
   var layGet = (path) => {

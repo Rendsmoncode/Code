@@ -4,6 +4,7 @@ import {
   COLORS, TYPES, RARITIES, ATTRIBUTES, attributesOf, KEYWORDS, esc, uid, newCard, cardHTML, resizeImage, download, readJSONFile,
 } from './cards.js';
 import { mountEffectsEditor } from './effects-editor.js';
+import { allTraits } from './store.js';
 
 const root = () => document.getElementById('tab-cards');
 let cur = newCard();
@@ -42,7 +43,15 @@ export function initEditor() {
         <div class="field f-attr2"><label for="ed-attr2">2<sup>e</sup> attribut <small>(facultatif)</small></label>
           <input id="ed-attr2" list="ed-attrs"></div>
       </div>
-      <div class="field"><label for="ed-traits">Types / Familles</label><input id="ed-traits" maxlength="80" placeholder="Ex. : Équipage du Requin / Marine"></div>
+      <div class="field"><label for="ed-traits-sel">Types / Familles</label>
+        <div class="traits-ed">
+          <div id="ed-traits-chips" class="chips"></div>
+          <div class="row-btns">
+            <select id="ed-traits-sel"></select>
+            <span id="ed-traits-new" hidden><input id="ed-traits-in" maxlength="40" placeholder="Nom de la nouvelle famille">
+              <button type="button" class="btn small" id="ed-traits-add">Ajouter</button></span>
+          </div>
+        </div></div>
       <div class="field"><label>Effets automatiques <small>(le jeu les applique tout seul ; le texte de la carte s'écrit automatiquement)</small></label>
         <div id="ed-fx" class="fxe"></div></div>
       <div class="field"><label for="ed-effect">Texte libre <small>(effet spécial non prévu : à appliquer à la main pendant la partie)</small></label>
@@ -142,6 +151,7 @@ export function initEditor() {
   });
   val('ed-noimg').addEventListener('click', () => { cur.image = ''; preview(); });
   bindLayout(r);
+  bindTraits(r);
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     readForm();
@@ -227,7 +237,7 @@ function readForm() {
     name: v('ed-name'), code: v('ed-code'), cost: +v('ed-cost') || 0, life: +v('ed-life') || 0,
     power: +v('ed-power') || 0, counter: +v('ed-counter') || 0,
     attribute: [v('ed-attr'), v('ed-attr2')].map((a) => a.replace(/\//g, '').trim()).filter(Boolean).join(' / '),
-    traits: v('ed-traits'), effect: v('ed-effect'), trigger: v('ed-trigger'),
+    effect: v('ed-effect'), trigger: v('ed-trigger'),
     inBoosters: root().querySelector('#ed-inb').checked,
   });
   preview();
@@ -239,7 +249,8 @@ function fill() {
   set('ed-name', cur.name); set('ed-code', cur.code); set('ed-cost', cur.cost); set('ed-life', cur.life);
   const [a1, a2] = attributesOf(cur);
   set('ed-power', cur.power); set('ed-counter', cur.counter || 0); set('ed-attr', a1); set('ed-attr2', a2);
-  set('ed-traits', cur.traits); set('ed-effect', cur.effect); set('ed-trigger', cur.trigger);
+  set('ed-effect', cur.effect); set('ed-trigger', cur.trigger);
+  renderTraits();
   r.querySelectorAll('#ed-type [data-type]').forEach((b) => b.classList.toggle('on', b.dataset.type === cur.type));
   r.querySelector('#ed-inb').checked = cur.inBoosters !== false;
   r.querySelectorAll('#ed-ink [data-ink]').forEach((b) => b.classList.toggle('on', b.dataset.ink === (cur.ink === 'dark' ? 'dark' : 'light')));
@@ -259,6 +270,48 @@ function fill() {
   fillLayout();
   r.querySelector('#ed-title').textContent = S.byId[cur.id] ? `Modifier « ${cur.name} »` : 'Nouvelle carte';
   preview();
+}
+
+// ---------- types / familles ----------
+// Stockés dans card.traits sous la forme « Impel Down / Buggy Pirates ».
+const traitsOf = (c) => String(c?.traits || '').split('/').map((t) => t.trim()).filter(Boolean);
+function renderTraits() {
+  const r = root();
+  const mine = traitsOf(cur);
+  r.querySelector('#ed-traits-chips').innerHTML = mine.length
+    ? mine.map((t) => `<span class="chip">${esc(t)}<button type="button" data-rm-trait="${esc(t)}" aria-label="Retirer ${esc(t)}">×</button></span>`).join('')
+    : '<span class="muted small">Aucune famille.</span>';
+  const others = allTraits().filter((t) => !mine.includes(t));
+  r.querySelector('#ed-traits-sel').innerHTML = `<option value="">+ Ajouter une famille…</option>
+    ${others.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}
+    <option value="__new">+ Nouvelle famille…</option>`;
+}
+function setTraits(list) {
+  cur.traits = [...new Set(list)].join(' / ');
+  renderTraits();
+  preview();
+}
+function bindTraits(r) {
+  const sel = r.querySelector('#ed-traits-sel');
+  const box = r.querySelector('#ed-traits-new');
+  const inp = r.querySelector('#ed-traits-in');
+  sel.addEventListener('change', () => {
+    if (sel.value === '__new') { box.hidden = false; inp.focus(); sel.value = ''; return; }
+    if (sel.value) setTraits([...traitsOf(cur), sel.value]);
+  });
+  const add = () => {
+    const t = inp.value.replace(/\//g, ' ').trim();
+    if (!t) return;
+    setTraits([...traitsOf(cur), t]);
+    inp.value = '';
+    box.hidden = true;
+  };
+  r.querySelector('#ed-traits-add').addEventListener('click', add);
+  inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+  r.querySelector('#ed-traits-chips').addEventListener('click', (e) => {
+    const t = e.target.closest('[data-rm-trait]')?.dataset.rmTrait;
+    if (t) setTraits(traitsOf(cur).filter((x) => x !== t));
+  });
 }
 
 // ---------- mise en page libre (image et encadré des effets) ----------

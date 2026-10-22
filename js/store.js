@@ -64,6 +64,21 @@ function reindex() {
   S.byId = Object.fromEntries(S.cards.map((c) => [c.id, c]));
 }
 
+// Toutes les familles (types) utilisées sur les cartes du jeu, triées.
+export function allTraits() {
+  const set = new Set();
+  for (const c of S.cards) String(c.traits || '').split('/').map((t) => t.trim()).filter(Boolean).forEach((t) => set.add(t));
+  return [...set].sort((a, b) => a.localeCompare(b, 'fr'));
+}
+
+// Liste <datalist id="all-traits"> pour proposer les familles existantes dans les champs « Type ».
+function refreshTraitsList() {
+  let dl = document.getElementById('all-traits');
+  if (!dl) { dl = document.createElement('datalist'); dl.id = 'all-traits'; document.body.append(dl); }
+  dl.innerHTML = allTraits().map((t) => `<option value="${t.replace(/"/g, '&quot;')}">`).join('');
+}
+listeners.add(refreshTraitsList);
+
 export async function load() {
   const [status, cards, coll, decks, starters, owners] = await Promise.all([
     sb.rpc('booster_status'),
