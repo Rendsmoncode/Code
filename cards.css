@@ -1,10 +1,13 @@
 /* =====================================================================
-   Cartes, style « Impact » : illustration plein cadre, gros chiffres,
-   nom en majuscules, cadre coloré selon la rareté.
+   Cartes : illustration plein cadre, éléments en acier à coins coupés
+   (inspiré de Riftbound), cadre coloré selon la rareté.
    Toutes les tailles internes sont en cqw (% de la largeur de la carte).
    ===================================================================== */
 
+@font-face { font-family: "Cinzel"; font-weight: 700; font-display: swap; src: url("fonts/cinzel-latin-700-normal.woff2") format("woff2"); }
 @font-face { font-family: "Cinzel"; font-weight: 900; font-display: swap; src: url("fonts/cinzel-latin-900-normal.woff2") format("woff2"); }
+@font-face { font-family: "Crimson Pro"; font-weight: 500; font-display: swap; src: url("fonts/crimson-pro-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "Crimson Pro"; font-weight: 700; font-display: swap; src: url("fonts/crimson-pro-latin-700-normal.woff2") format("woff2"); }
 @font-face { font-family: "Anton"; font-weight: 400; font-display: swap; src: url("fonts/anton-latin-400-normal.woff2") format("woff2"); }
 
 .card {
@@ -85,53 +88,102 @@
     repeating-linear-gradient(135deg, #ffffff0a 0 2cqw, transparent 2cqw 4cqw),
     linear-gradient(160deg, var(--c1), var(--c1d) 55%, var(--c1k));
 }
-.card .nm, .card .cost, .card .pow, .card .ctr, .card .attr, .card .info, .card .rar { position: absolute; z-index: 3; }
+.card .nm, .card .cost, .card .life, .card .lead-tag, .card .pow, .card .ctr, .card .attr, .card .info, .card .rar { position: absolute; z-index: 3; }
 .card .nm { z-index: 4; }
 .card .nm span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card { --steel: linear-gradient(160deg, #e9edf5, #8a93a8 35%, #2d323d 60%, #c4cad6 85%); }
 
-.card .cost {
-  left: 3.5cqw; top: 3.5cqw; width: 19cqw; height: 19cqw; border-radius: 50%; display: grid; place-items: center;
-  font: 400 12cqw/1 "Anton", sans-serif; color: #fff; -webkit-text-stroke: .9cqw var(--ink); paint-order: stroke fill;
-  background: radial-gradient(circle at 35% 30%, #7fc0ff, #1d63d6 60%, #0d2f6e); border: 1.1cqw solid var(--ink);
-  box-shadow: inset 0 -1cqw 0 #0005, 0 .6cqw 1cqw #0008;
+/* Coût (et Vie des Leaders) : anneau d'acier segmenté, cœur lumineux */
+.card .cost, .card .life {
+  width: 19cqw; height: 19cqw; display: grid; place-items: center;
+  font: 900 11cqw/1 "Cinzel", serif; color: #fff; filter: drop-shadow(0 .8cqw 1.2cqw #000d);
 }
-.card .cost.life { background: radial-gradient(circle at 35% 30%, #ff9c8f, #d62a1e 60%, #6b0b06); }
+.card .cost { left: 3.6cqw; top: 3.6cqw; text-shadow: 0 0 2.4cqw var(--c1l), 0 .4cqw .8cqw #000; }
+.card .cost::before, .card .cost::after, .card .life::before, .card .life::after { content: ""; position: absolute; inset: 0; border-radius: 50%; }
+.card .cost::before, .card .life::before {
+  background: repeating-conic-gradient(from 22.5deg, #d9dee8 0 40deg, #1c1f27 40deg 45deg), var(--steel);
+  -webkit-mask: radial-gradient(circle, #0000 58%, #000 59%); mask: radial-gradient(circle, #0000 58%, #000 59%);
+}
+.card .cost::after { inset: 2cqw; background: radial-gradient(circle at 50% 40%, var(--c1l), var(--c1) 35%, var(--c1k) 80%); box-shadow: inset 0 0 1.5cqw #000c; }
+.card .cost span, .card .life span { position: relative; z-index: 1; }
+
+/* Leader : mention LEADER en haut à gauche, Vie en bas à droite */
+.card .lead-tag {
+  left: 3.6cqw; top: 4.6cqw; padding: 1.4cqw 3cqw 1.4cqw 2.4cqw; text-transform: uppercase;
+  font: 900 4.2cqw/1 "Cinzel", serif; letter-spacing: .16em; color: #fff; text-shadow: 0 0 1.5cqw var(--c1l);
+  background: linear-gradient(90deg, #0c0d11e8, #22252ee0); box-shadow: inset 0 -.5cqw 0 var(--c1l);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 2cqw) 100%, 0 100%);
+}
+.card .life { right: 3.4cqw; bottom: 3.4cqw; width: 20cqw; height: 20cqw; z-index: 6; font-size: 10.5cqw; text-shadow: 0 0 2cqw #ff7a6a, 0 .4cqw .8cqw #000; }
+.card .life::after { inset: 2cqw; background: radial-gradient(circle at 50% 38%, #ffb3a8, #d02a20 38%, #3a0603 82%); box-shadow: inset 0 0 1.5cqw #000c; }
+.card .life span { margin-top: -1.2cqw; }
+.card .life span::after {
+  content: "VIE"; position: absolute; left: 50%; bottom: -3.4cqw; transform: translateX(-50%);
+  font: 700 2.6cqw/1 "Cinzel", serif; letter-spacing: .14em; color: #ffd9d4; text-shadow: 0 0 1cqw #000;
+}
+.card.t-leader .nm { left: 4cqw; right: 25cqw; text-align: left; padding-left: 2cqw; }
+.card.t-leader .nm.long { font-size: 5.6cqw; } .card.t-leader .nm.xlong { font-size: 4.8cqw; }
+.card.t-leader .info { bottom: 22cqw; }
+
+/* Puissance : plaque d'acier à coins coupés, liseré lumineux */
 .card .pow {
-  right: 2.5cqw; top: 4cqw; width: 30cqw; height: 17cqw; display: grid; place-items: center;
-  font: 400 9.5cqw/1 "Anton", sans-serif; color: #fff; -webkit-text-stroke: .9cqw var(--ink); paint-order: stroke fill;
+  right: 3.6cqw; top: 4.4cqw; width: 31cqw; height: 14cqw; display: grid; place-items: center;
+  font: 900 8.8cqw/1 "Cinzel", serif; color: #fff; text-shadow: 0 0 2cqw #ff7a3a, 0 .4cqw .8cqw #000;
+  filter: drop-shadow(0 .8cqw 1.2cqw #000d);
 }
 .card .pow::before, .card .pow::after {
-  content: ""; position: absolute; inset: 0; clip-path: polygon(18% 0, 82% 0, 100% 50%, 82% 100%, 18% 100%, 0 50%);
+  content: ""; position: absolute; inset: 0;
+  clip-path: polygon(3cqw 0, calc(100% - 3cqw) 0, 100% 3cqw, 100% calc(100% - 3cqw), calc(100% - 3cqw) 100%, 3cqw 100%, 0 calc(100% - 3cqw), 0 3cqw);
 }
-.card .pow::before { background: var(--ink); }
-.card .pow::after { inset: 1.1cqw; background: radial-gradient(circle at 40% 30%, #ffc27a, #ef6a1c 60%, #8f2c04); }
+.card .pow::before { background: var(--steel); }
+.card .pow::after { inset: .9cqw; background: linear-gradient(180deg, #2a2e38, #0c0d11 70%); box-shadow: inset 0 -.8cqw 0 #ff6a2a; }
 .card .pow span { position: relative; z-index: 1; }
 .card .pow.up span { color: #5cf08f; }
 .card .pow.down span { color: #ff8080; }
-/* Attributs (1 ou 2), empilés sous la puissance */
-.card .attr {
-  right: 4cqw; top: 23cqw; display: flex; flex-direction: column; align-items: flex-end; gap: 1cqw;
-}
+
+/* Attributs (1 ou 2) : pastilles d'acier avec icône */
+.card .attr { right: 3.6cqw; top: 21cqw; display: flex; flex-direction: column; align-items: flex-end; gap: 1.4cqw; }
 .card .attr span {
-  font: 400 4.2cqw/1 "Anton", sans-serif; letter-spacing: .04em; text-transform: uppercase;
-  padding: 1cqw 2.4cqw; border-radius: 99px; background: #0b0b0bcc;
+  display: inline-flex; align-items: center; gap: 1.2cqw; text-transform: uppercase;
+  font: 700 3.4cqw/1 "Cinzel", serif; letter-spacing: .08em; color: #e9edf5; padding: 1cqw 2.4cqw 1cqw 1cqw;
+  background: linear-gradient(90deg, #0c0d11e8, #22252ee8); clip-path: polygon(2cqw 0, 100% 0, 100% 100%, 2cqw 100%, 0 50%);
 }
+.card .attr span::before {
+  content: ""; width: 5cqw; height: 5cqw; flex: none; background: var(--c1l);
+  -webkit-mask-size: 70%; mask-size: 70%; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-position: center; mask-position: center;
+}
+.card .attr .a-frappe::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22%23fff%22%3E%3Cpath%20d%3D%22M5%2011V8.5a1.8%201.8%200%200%201%203.6%200V11V7a1.8%201.8%200%200%201%203.6%200v4V7.5a1.8%201.8%200%200%201%203.6%200V11V9a1.8%201.8%200%200%201%203.6%200v4.5C19.4%2018%2016.5%2021%2012.5%2021S5%2018.5%205%2015z%22/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22%23fff%22%3E%3Cpath%20d%3D%22M5%2011V8.5a1.8%201.8%200%200%201%203.6%200V11V7a1.8%201.8%200%200%201%203.6%200v4V7.5a1.8%201.8%200%200%201%203.6%200V11V9a1.8%201.8%200%200%201%203.6%200v4.5C19.4%2018%2016.5%2021%2012.5%2021S5%2018.5%205%2015z%22/%3E%3C/svg%3E"); }
+.card .attr .a-tranchant::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22%23fff%22%3E%3Cpath%20d%3D%22M21%202.5l-.6%204.4L10.7%2016.6l-3.3-3.3L17.1%203.6zM6.3%2014.4l3.3%203.3-1.6%201.6%201.4%201.4-1.4%201.4-1.4-1.4-2.3%202.3-1.4-1.4%202.3-2.3-1.4-1.4%201.4-1.4%201.4%201.4z%22/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22%23fff%22%3E%3Cpath%20d%3D%22M21%202.5l-.6%204.4L10.7%2016.6l-3.3-3.3L17.1%203.6zM6.3%2014.4l3.3%203.3-1.6%201.6%201.4%201.4-1.4%201.4-1.4-1.4-2.3%202.3-1.4-1.4%202.3-2.3-1.4-1.4%201.4-1.4%201.4%201.4z%22/%3E%3C/svg%3E"); }
+.card .attr .a-distance::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22%23fff%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M12%203a9%209%200%201%201%200%2018%209%209%200%200%201%200-18zm0%203a6%206%200%201%200%200%2012%206%206%200%200%200%200-12zm0%204a2%202%200%201%201%200%204%202%202%200%200%201%200-4z%22/%3E%3Cpath%20d%3D%22M11%200h2v6h-2zM11%2018h2v6h-2zM0%2011h6v2H0zM18%2011h6v2h-6z%22/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22%23fff%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M12%203a9%209%200%201%201%200%2018%209%209%200%200%201%200-18zm0%203a6%206%200%201%200%200%2012%206%206%200%200%200%200-12zm0%204a2%202%200%201%201%200%204%202%202%200%200%201%200-4z%22/%3E%3Cpath%20d%3D%22M11%200h2v6h-2zM11%2018h2v6h-2zM0%2011h6v2H0zM18%2011h6v2h-6z%22/%3E%3C/svg%3E"); }
+.card .attr .a-special::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22%23fff%22%3E%3Cpath%20d%3D%22M12%201l2.8%208.2L23%2012l-8.2%202.8L12%2023l-2.8-8.2L1%2012l8.2-2.8z%22/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22%23fff%22%3E%3Cpath%20d%3D%22M12%201l2.8%208.2L23%2012l-8.2%202.8L12%2023l-2.8-8.2L1%2012l8.2-2.8z%22/%3E%3C/svg%3E"); }
+.card .attr .a-sagesse::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22%23fff%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M12%205C6%205%201.5%2012%201.5%2012S6%2019%2012%2019s10.5-7%2010.5-7S18%205%2012%205zm0%203a4%204%200%201%201%200%208%204%204%200%200%201%200-8z%22/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22%23fff%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M12%205C6%205%201.5%2012%201.5%2012S6%2019%2012%2019s10.5-7%2010.5-7S18%205%2012%205zm0%203a4%204%200%201%201%200%208%204%204%200%200%201%200-8z%22/%3E%3C/svg%3E"); }
+
+/* Contre : onglet d'acier sur le bord gauche */
 .card .ctr {
-  left: 4cqw; top: 25cqw; font: 400 5cqw/1 "Anton", sans-serif; color: #111; padding: 1cqw 2.6cqw; border-radius: 99px;
-  background: linear-gradient(#ffe36b, #f2b33d); border: .8cqw solid var(--ink);
+  left: 2.6cqw; top: 27cqw; writing-mode: vertical-rl; transform: rotate(180deg); padding: 3.4cqw 1.6cqw;
+  font: 900 4.6cqw/1 "Cinzel", serif; color: #ffe36b; text-shadow: 0 0 1.5cqw #ffb800;
+  background: linear-gradient(90deg, #0c0d11, #2a2e38); clip-path: polygon(0 0, 100% 2cqw, 100% calc(100% - 2cqw), 0 100%);
+  display: flex; align-items: center; gap: 1.4cqw;
 }
+.card .ctr::before { content: "CONTRE"; font-size: 2.6cqw; letter-spacing: .16em; color: #c4cad6; text-shadow: none; }
+
+/* Nom */
 .card .nm {
-  left: 4cqw; right: 4cqw; bottom: 5cqw; text-align: center; font: 400 10cqw/1.05 "Anton", sans-serif;
-  text-transform: uppercase; letter-spacing: .01em; -webkit-text-stroke: 1.4cqw var(--ink); paint-order: stroke fill;
+  left: 4cqw; right: 4cqw; bottom: 5.5cqw; text-align: center; text-transform: uppercase;
+  font: 900 7.6cqw/1.05 "Cinzel", serif; letter-spacing: .05em; text-shadow: 0 .4cqw 0 #000a, 0 0 2.4cqw #000c;
 }
-.card .nm.long { font-size: 8cqw; }
-.card .nm.xlong { font-size: 6.6cqw; }
-.card .info { left: 5cqw; right: 5cqw; bottom: 17.5cqw; text-align: center; font-size: 4.4cqw; }
-.card .info-in { position: relative; max-height: 58cqw; overflow: hidden; padding: 2cqw 3cqw; }
-/* Encadré sombre du texte */
+.card .nm.long { font-size: 6.2cqw; }
+.card .nm.xlong { font-size: 5.2cqw; }
+
+/* Encadré du texte : panneau fumé translucide à coins coupés */
+.card .info { left: 5cqw; right: 5cqw; bottom: 17.5cqw; text-align: center; font: 500 4.9cqw/1.22 "Crimson Pro", serif; }
+.card .info-in { position: relative; max-height: 58cqw; overflow: hidden; padding: 3cqw 4cqw 2.6cqw; text-shadow: 0 .2cqw .8cqw #000, 0 0 .4cqw #000; }
 .card .info::after {
-  content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 3cqw;
-  background: #000000b8; box-shadow: 0 0 0 .4cqw #ffffff1f;
+  content: ""; position: absolute; inset: 0; z-index: -1; backdrop-filter: blur(4px);
+  background: linear-gradient(180deg, #0c0e14b8, #0c0e14d8);
+  clip-path: polygon(3cqw 0, calc(100% - 3cqw) 0, 100% 3cqw, 100% calc(100% - 3cqw), calc(100% - 3cqw) 100%, 3cqw 100%, 0 calc(100% - 3cqw), 0 3cqw);
+  box-shadow: inset 0 .5cqw 0 var(--c1l), inset 0 0 0 .3cqw #ffffff30;
 }
 /* Bande unie à la couleur de la carte (deux moitiés pour un Leader bicolore) :
    elle part du milieu de l'encadré et descend jusqu'en bas de la carte. */
@@ -141,27 +193,42 @@
   box-shadow: inset 0 .6cqw 0 #ffffff40, 0 -.5cqw 1.5cqw #0006;
 }
 .card .info .fx, .card .info .trg { margin-top: 1.2cqw; }
-.card .tl { font: 400 3.6cqw/1.2 "Anton", sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #ffd23f; }
-.card .kw { display: inline-block; background: #1f3d8a; color: #fff; border-radius: .3em; padding: 0 .35em; font-weight: 700; line-height: 1.35; }
-.card .kw.trig { background: #d9a90f; color: #111; }
-
-/* Pastille de rareté en bas à droite */
-.card .rar {
-  right: 5cqw; bottom: 1.4cqw; z-index: 6; font: 400 3.8cqw/1 "Anton", sans-serif; letter-spacing: .03em;
-  padding: .5cqw 1.8cqw; border-radius: 99px; color: #111; background: #c4c8d0; border: .5cqw solid var(--ink);
+.card .tl { font: 700 3.3cqw/1.2 "Cinzel", serif; color: var(--c1l); letter-spacing: .14em; text-transform: uppercase; }
+.card .kw {
+  display: inline-block; font: 700 3.3cqw/1.5 "Cinzel", serif; letter-spacing: .05em; text-transform: uppercase;
+  background: #ffffff14; color: #fff; box-shadow: inset 0 0 0 .3cqw #ffffff55; padding: 0 1.2cqw;
 }
+.card .kw.trig { background: #ffd23f; color: #111; box-shadow: none; }
+
+/* Texte noir (réglage par carte, pour les fonds clairs) */
+.card.ink-dark .nm { color: #111; text-shadow: 0 0 1.4cqw #ffffffcc, 0 .3cqw 0 #ffffff80; }
+.card.ink-dark .info { color: #15171d; }
+.card.ink-dark .info::after { background: linear-gradient(180deg, #ffffffc8, #ffffffe0); box-shadow: inset 0 .5cqw 0 var(--c1d), inset 0 0 0 .3cqw #00000025; }
+.card.ink-dark .info-in { text-shadow: none; }
+.card.ink-dark .tl { color: var(--c1d); }
+.card.ink-dark .kw { background: #15171d; color: #fff; box-shadow: none; }
+.card.ink-dark .kw.trig { background: #c9920c; color: #fff; }
+
+/* Pastille de rareté en bas à droite (en bas à gauche pour un Leader) */
+.card .rar {
+  right: 5cqw; bottom: 1.4cqw; z-index: 6; font: 900 3.2cqw/1 "Cinzel", serif; letter-spacing: .03em;
+  padding: .6cqw 2cqw; color: #111; background: #c4c8d0; clip-path: polygon(1cqw 0, 100% 0, calc(100% - 1cqw) 100%, 0 100%);
+}
+.card.t-leader .rar { right: auto; left: 5cqw; }
 .card.r-UC .rar { background: #7cc8ff; }
 .card.r-R .rar { background: #c3a6ff; }
 .card.r-SR .rar { background: #ff7ac8; }
 .card.r-UR .rar { background: #ff9a3c; }
 .card.r-L .rar { background: linear-gradient(160deg, #fff1b8, #e0a92a 55%, #a86f0c); }
-/* Sceau 1ON1 : grand médaillon noir et or, en haut au centre, entre le coût et la puissance */
+/* Sceau 1ON1 : grand médaillon noir et or, en haut au centre */
 .card.r-S .rar {
-  left: 50%; right: auto; top: 5cqw; bottom: auto; transform: translateX(-50%); padding: 1.6cqw 3.4cqw 1.2cqw;
+  left: 50%; right: auto; top: 5cqw; bottom: auto; transform: translateX(-50%); padding: 1.6cqw 3.4cqw 1.2cqw; clip-path: none;
   font: 400 8cqw/1 "Anton", sans-serif; color: #ffe08a; letter-spacing: .06em; border-radius: 2.4cqw;
   background: radial-gradient(circle at 50% 25%, #3a3a3a, #000); border: .8cqw solid #e8c46a;
   text-shadow: 0 0 1.5cqw #f7f052aa; box-shadow: 0 0 2.5cqw #f7f052aa, inset 0 0 1.5cqw #e8c46a66;
 }
+.card.t-leader.r-S .rar { font-size: 6cqw; top: 18.5cqw; left: auto; right: 3.6cqw; transform: none; }
+.card.t-leader.r-S .attr { top: 31cqw; }
 
 /* ---------- dos de carte ---------- */
 .card.back .frame {

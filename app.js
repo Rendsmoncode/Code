@@ -21028,6 +21028,7 @@ ${suffix}`;
   var hasDoubleAttack = (c) => hasWord(c, ["[double attaque]", "[double attack]"]);
   var hasBanish = (c) => hasWord(c, ["[exil]", "[banish]"]);
   var attributesOf = (card) => String(card?.attribute || "").split("/").map((a) => a.trim()).filter(Boolean).slice(0, 2);
+  var attrKey = (a) => a.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z]+/g, "");
   function newCard() {
     return {
       id: uid(),
@@ -21045,7 +21046,8 @@ ${suffix}`;
       trigger: "",
       image: "",
       rarity: "C",
-      inBoosters: true
+      inBoosters: true,
+      ink: "light"
     };
   }
   function fmtEffect(txt) {
@@ -21060,7 +21062,7 @@ ${suffix}`;
     if (!card) return `<div class="card back ${o.cls || ""}" ${o.attrs || ""}><div class="frame"><div class="back-logo">OPTCG<small>Maison</small></div></div></div>`;
     const t = card.type;
     const fighter = t === "leader" || t === "character";
-    const cost = t === "leader" ? `<div class="cost life" title="Vie"><span>${esc(card.life)}</span></div>` : `<div class="cost" title="Co\xFBt"><span>${esc(card.cost ?? 0)}</span></div>`;
+    const cost = t === "leader" ? `<div class="lead-tag">Leader</div><div class="life" title="Vie"><span>${esc(card.life)}</span></div>` : `<div class="cost" title="Co\xFBt"><span>${esc(card.cost ?? 0)}</span></div>`;
     let pow = "";
     if (fighter) {
       const base = Number(card.power) || 0;
@@ -21070,7 +21072,7 @@ ${suffix}`;
     }
     const ctr = t === "character" && Number(card.counter) > 0 ? `<div class="ctr" title="Contre"><span>+${esc(card.counter)}</span></div>` : "";
     const attrs = attributesOf(card);
-    const attr = fighter && attrs.length ? `<div class="attr">${attrs.map((a) => `<span>${esc(a)}</span>`).join("")}</div>` : "";
+    const attr = fighter && attrs.length ? `<div class="attr">${attrs.map((a) => `<span class="a-${attrKey(a)}">${esc(a)}</span>`).join("")}</div>` : "";
     const trig = card.trigger && t !== "leader" ? `<div class="trg"><span class="kw trig">D\xE9clenchement</span> ${fmtEffect(card.trigger)}</div>` : "";
     const r = RARITIES[card.rarity] ? card.rarity : "C";
     const hex = (card.colors?.length ? card.colors : ["noir"]).map((c) => COLORS[c]?.hex || "#555");
@@ -21078,7 +21080,8 @@ ${suffix}`;
     const art = card.image ? ` style="background-image:url('${card.image}')"` : "";
     const c2 = hex[1] || hex[0];
     const vars = `--c1:${hex[0]};--c2:${c2};--c1l:${shade(hex[0], 0.45)};--c1d:${shade(hex[0], -0.55)};--c1k:${shade(hex[0], -0.85)};--c2d:${shade(c2, -0.55)}`;
-    return `<div class="card t-${t} r-${r} ${o.cls || ""}" style="${vars}" ${o.attrs || ""}>
+    const ink = card.ink === "dark" ? " ink-dark" : "";
+    return `<div class="card t-${t} r-${r}${ink} ${o.cls || ""}" style="${vars}" ${o.attrs || ""}>
     <div class="frame">
       <div class="art${card.image ? "" : " empty"}"${art}></div>
       ${cost}${pow}${ctr}${attr}
@@ -21220,6 +21223,8 @@ ${suffix}`;
       <div class="field"><label>Raret\xE9</label>
         <div class="seg" id="ed-rarity">${Object.entries(RARITIES).map(([k, v]) => `<button type="button" data-rarity="${k}" class="rb r-${k}">${v.label}</button>`).join("")}</div>
         <label class="check"><input type="checkbox" id="ed-inb"> Peut sortir dans les boosters</label></div>
+      <div class="field"><label>Texte <small>(noir si le bas de l'illustration est tr\xE8s clair)</small></label>
+        <div class="seg" id="ed-ink"><button type="button" data-ink="light">Blanc</button><button type="button" data-ink="dark">Noir</button></div></div>
       <div class="field"><label>Couleur <small id="ed-cnote"></small></label>
         <div class="colors" id="ed-colors">${Object.entries(COLORS).map(([k, v]) => `<button type="button" data-color="${k}" style="--c:${v.hex}">${v.label}</button>`).join("")}</div></div>
       <div class="grid3">
@@ -21279,6 +21284,13 @@ ${suffix}`;
       if (t) {
         cur.type = t;
         cur.colors = cur.colors.slice(0, maxColors());
+        fill();
+      }
+    });
+    r.querySelector("#ed-ink").addEventListener("click", (e) => {
+      const k = e.target.closest("[data-ink]")?.dataset.ink;
+      if (k) {
+        cur.ink = k;
         fill();
       }
     });
@@ -21456,6 +21468,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     set("ed-trigger", cur.trigger);
     r.querySelectorAll("#ed-type [data-type]").forEach((b) => b.classList.toggle("on", b.dataset.type === cur.type));
     r.querySelector("#ed-inb").checked = cur.inBoosters !== false;
+    r.querySelectorAll("#ed-ink [data-ink]").forEach((b) => b.classList.toggle("on", b.dataset.ink === (cur.ink === "dark" ? "dark" : "light")));
     r.querySelectorAll("#ed-rarity [data-rarity]").forEach((b) => b.classList.toggle("on", b.dataset.rarity === (cur.rarity || "C")));
     r.querySelector("#ed-cnote").textContent = cur.type === "leader" ? "(1 ou 2 : un Leader peut \xEAtre bicolore)" : "(une seule : seuls les Leaders peuvent \xEAtre bicolores)";
     r.querySelectorAll("#ed-colors [data-color]").forEach((b) => b.classList.toggle("on", cur.colors.includes(b.dataset.color)));

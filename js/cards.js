@@ -65,7 +65,7 @@ export function newCard() {
   return {
     id: uid(), code: '', name: '', type: 'character', colors: ['rouge'],
     cost: 1, life: 5, power: 1000, counter: 1000, attribute: 'Frappe',
-    traits: '', effect: '', trigger: '', image: '', rarity: 'C', inBoosters: true,
+    traits: '', effect: '', trigger: '', image: '', rarity: 'C', inBoosters: true, ink: 'light',
   };
 }
 
@@ -88,7 +88,7 @@ export function cardHTML(card, o = {}) {
   const t = card.type;
   const fighter = t === 'leader' || t === 'character';
   const cost = t === 'leader'
-    ? `<div class="cost life" title="Vie"><span>${esc(card.life)}</span></div>`
+    ? `<div class="lead-tag">Leader</div><div class="life" title="Vie"><span>${esc(card.life)}</span></div>`
     : `<div class="cost" title="Coût"><span>${esc(card.cost ?? 0)}</span></div>`;
   let pow = '';
   if (fighter) {
@@ -109,7 +109,8 @@ export function cardHTML(card, o = {}) {
   const art = card.image ? ` style="background-image:url('${card.image}')"` : '';
   const c2 = hex[1] || hex[0];
   const vars = `--c1:${hex[0]};--c2:${c2};--c1l:${shade(hex[0], 0.45)};--c1d:${shade(hex[0], -0.55)};--c1k:${shade(hex[0], -0.85)};--c2d:${shade(c2, -0.55)}`;
-  return `<div class="card t-${t} r-${r} ${o.cls || ''}" style="${vars}" ${o.attrs || ''}>
+  const ink = card.ink === 'dark' ? ' ink-dark' : '';
+  return `<div class="card t-${t} r-${r}${ink} ${o.cls || ''}" style="${vars}" ${o.attrs || ''}>
     <div class="frame">
       <div class="art${card.image ? '' : ' empty'}"${art}></div>
       ${cost}${pow}${ctr}${attr}
