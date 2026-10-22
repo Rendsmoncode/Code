@@ -149,6 +149,7 @@ function filterHTML(path, f) {
     <label>Attribut ${select(`${path}.attr`, { '': '—', ...Object.fromEntries(ATTRIBUTES.map((a) => [a, a])) }, f.attr || '')}</label>
     <label>Coût max <input type="number" data-p="${path}.maxCost" value="${esc(f.maxCost ?? '')}"></label>
     <label>Puissance max <input type="number" step="1000" data-p="${path}.maxPower" value="${esc(f.maxPower ?? '')}"></label>
+    <label>Puissance de base max <input type="number" step="1000" data-p="${path}.maxBasePower" value="${esc(f.maxBasePower ?? '')}"></label>
     <label>État ${select(`${path}.rested`, { '': '—', yes: 'reposé', no: 'actif' }, f.rested || '')}</label>
   </span>`;
 }

@@ -5,7 +5,7 @@ import { S, validateDeck, onChange } from './store.js';
 import {
   cardHTML, esc, uid, fmtEffect, TYPES, isBlocker, hasRush, hasDoubleAttack, hasBanish, isUnblockable, attributesOf,
 } from './cards.js';
-import { WHEN, effectText, effectsText } from './effects.js';
+import { WHEN, CONTINUOUS_ACTIONS, effectText, effectsText } from './effects.js';
 import * as net from './net.js';
 
 const root = () => document.getElementById('tab-play');
@@ -29,7 +29,7 @@ const myCard = (inst) => G.myCards[inst.c];
 const oppCard = (inst) => G.oppCards[inst.c];
 const power = (inst, card, ownerTurn) => (Number(card?.power) || 0) + (inst.m || 0) + (inst.bm || 0) + (inst.pm || 0)
   + (ownerTurn ? (inst.d || 0) * 1000 : 0);
-const myPower = (inst) => power(inst, myCard(inst), myTurn()) + staticSum(inst, 'power');
+const myPower = (inst) => power(inst, myCard(inst), myTurn()) + staticSum(inst, 'power') + auraSum(inst, 'power');
 // L'adversaire envoie la puissance actuelle de ses cartes (p), effets permanents compris.
 const oppPower = (inst) => inst.p ?? power(inst, oppCard(inst), oppTurn());
 const name = (c) => `« ${c?.name || '?'} »`;
@@ -172,7 +172,13 @@ function onMsg(m) {
       break;
     case 'coin': applyCoin(m.winner); break;
     case 'first': applyFirst(m.first); break;
-    case 'view': G.opp = m.v; break;
+    case 'view': {
+      // Si ses effets permanents sur mes cartes changent, ma puissance change : je renvoie ma vue.
+      const changed = JSON.stringify(G.opp?.auras || []) !== JSON.stringify(m.v.auras || []);
+      G.opp = m.v;
+      if (changed && G.phase === 'play') { commit(); return; }
+      break;
+    }
     case 'ready': G.oppReady = true; maybeStart(); break;
     case 'turn': G.turn = { player: m.player, count: m.count }; break;
     case 'endTurn': oppTurnEnded(m.count); return;
@@ -204,7 +210,7 @@ function pub() {
   // Puissance et coût actuels calculés ici (l'adversaire ne connaît pas mes effets permanents).
   const deco = (i) => i && { ...i, p: myPower(i), cc: curCost(i, myCard(i)) };
   return {
-    leader: deco(m.leader), chars: m.chars.map(deco), stage: m.stage, trash: m.trash,
+    leader: deco(m.leader), chars: m.chars.map(deco), stage: m.stage, trash: m.trash, auras: myAuras(),
     hand: m.hand.length, deck: m.deck.length, life: m.life.length,
     donDeck: m.donDeck, donActive: m.donActive, donRested: m.donRested,
     phase: G.phase,
@@ -574,6 +580,7 @@ async function takeDamage(n, banish) {
       me.trash.push(inst);
       log(`perd 1 Vie (Exil) : ${name(c)} va à la défausse.`);
       reveal(inst, 'Vie exilée');
+      await fireAll('onLifeLost');
       continue;
     }
     if (c.trigger || hasEffect(inst, 'trigger')) {
@@ -620,7 +627,8 @@ async function takeDamage(n, banish) {
 //   kw : { motClé: durée } ; prot : { battle|effect: durée } ; frozen ; noAtk (n° de tour) ; neg ; used
 const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const hasNum = (v) => v !== undefined && v !== '' && v !== null;
-const curCost = (inst, c) => (Number(c?.cost) || 0) + (inst?.cm || 0) + (inst?.cmt || 0);
+const curCost = (inst, c) => (Number(c?.cost) || 0) + (inst?.cm || 0) + (inst?.cmt || 0)
+  + (inst?.u ? staticSum(inst, 'cost') + auraSum(inst, 'cost') : 0);
 const effectsOf = (inst) => (inst?.neg ? [] : myCard(inst)?.effects || []);
 const donTotal = () => G.me.donActive + G.me.donRested + fieldInsts().reduce((s, i) => s + (i.d || 0), 0);
 
@@ -661,6 +669,7 @@ function matches(c, f = {}, inst = null, side = 'me') {
     const pw = inst ? (side === 'opp' ? oppPower(inst) : myPower(inst)) : Number(c.power) || 0;
     if (pw > f.maxPower) return false;
   }
+  if (hasNum(f.maxBasePower) && (Number(c.power) || 0) > f.maxBasePower) return false;
   if (f.rested === 'yes' && !inst?.r) return false;
   if (f.rested === 'no' && inst?.r) return false;
   return true;
@@ -732,16 +741,49 @@ function staticFlag(inst, kind, test) {
       && staticTargets(a, src).some((x) => x?.u === inst.u)));
   } finally { inStatic = false; }
 }
-// Mot-clé d'une de mes cartes en jeu (carte, effet temporaire ou effet permanent).
+// Effets permanents de l'ADVERSAIRE qui visent mes cartes (« auras ») : il me les envoie avec sa vue.
+function myAuras() {
+  if (!G?.me?.leader) return [];
+  const out = [];
+  for (const { e } of staticEffects()) {
+    for (const a of e.actions || []) {
+      if (a.t?.side !== 'opp' || !CONTINUOUS_ACTIONS.includes(a.k)) continue;
+      out.push({ k: a.k, amount: Number(a.amount) || 0, kw: a.kw, by: a.by, who: a.t.who, f: a.t.f || {} });
+    }
+  }
+  return out;
+}
+function auraHits(a, inst) {
+  const isLeader = G.me.leader?.u === inst.u;
+  const isChar = G.me.chars.some((x) => x.u === inst.u);
+  if (a.who === 'leader') return isLeader;
+  if (isLeader) return ['leaderOrChar', 'leaderAndAll'].includes(a.who);
+  return isChar && a.who !== 'self' && matches(myCard(inst), a.f, inst, 'me');
+}
+function auraSum(inst, kind) {
+  if (inStatic || !G?.opp?.auras?.length) return 0;
+  inStatic = true;
+  try {
+    return G.opp.auras.filter((a) => a.k === kind && auraHits(a, inst)).reduce((s, a) => s + a.amount, 0);
+  } finally { inStatic = false; }
+}
+function auraFlag(inst, kind, test) {
+  if (inStatic || !G?.opp?.auras?.length) return false;
+  inStatic = true;
+  try { return G.opp.auras.some((a) => a.k === kind && test(a) && auraHits(a, inst)); } finally { inStatic = false; }
+}
+
+// Mot-clé d'une de mes cartes en jeu (carte, effet temporaire, effet permanent, ou aura adverse).
 function hasKw(inst, k) {
   const c = myCard(inst);
   if (!inst.neg && ({ blocker: isBlocker, rush: hasRush, double: hasDoubleAttack, banish: hasBanish, unblockable: isUnblockable }[k])?.(c)) return true;
   if (inst.kw?.[k]) return true;
-  return staticFlag(inst, 'grantKw', (a) => a.kw === k);
+  return staticFlag(inst, 'grantKw', (a) => a.kw === k) || auraFlag(inst, 'grantKw', (a) => a.kw === k);
 }
 function isProtected(inst, kind) {
   if (inst.prot?.[kind] || inst.prot?.both) return true;
-  return staticFlag(inst, 'protect', (a) => a.by === kind || a.by === 'both');
+  const test = (a) => a.by === kind || a.by === 'both';
+  return staticFlag(inst, 'protect', test) || auraFlag(inst, 'protect', test);
 }
 
 // Applique un modificateur à une de MES cartes (effet de moi ou reçu de l'adversaire).
@@ -805,6 +847,7 @@ function canPay(costs, src) {
     if (c.k === 'koOwn' && !me.chars.length) return 'Il faut un Personnage à mettre KO.';
     if (c.k === 'trashToDeck' && me.trash.length < c.n) return `Il faut ${c.n} carte(s) en défausse.`;
     if (c.k === 'lifeToHand' && !me.life.length) return 'Il faut une Vie.';
+    if (c.k === 'revealHand' && !me.hand.some((i) => matches(myCard(i), c.f || {}))) return 'Aucune carte de votre main ne convient.';
   }
   return '';
 }
@@ -829,6 +872,11 @@ async function payCosts(costs, src) {
       const picked = await pickMany(`Coût : ${c.n} carte(s) de la défausse sous le deck`, me.trash, myCard, { min: c.n, max: c.n, cancel: false });
       for (const i of picked) move(i.u, 'deck', 'bottom');
     } else if (c.k === 'lifeToHand') { const i = me.life.at(-1); if (i) move(i.u, 'hand'); }
+    else if (c.k === 'revealHand') {
+      const ok = (i) => matches(myCard(i), c.f || {});
+      const [i] = await pickMany('Coût : révélez une carte de votre main', me.hand, myCard, { min: 1, max: 1, selectable: ok, cancel: false });
+      if (i) { reveal(i, 'Révélée (coût)'); log(`révèle ${name(myCard(i))}.`); }
+    }
   }
 }
 
@@ -991,7 +1039,14 @@ async function doFx(a, ctx) {
       break;
     }
     case 'oppLifeRemove': sendFx('lifeRemove', { n: a.n, to: a.to }, src); break;
-    case 'lifeLook': openViewer('life'); break;
+    case 'lifeLook': {
+      if (me.life.length < 2) break;
+      const top = [...me.life].reverse(); // dessus en premier
+      const order = await orderCards('Vos Vies : remettez-les dans l\'ordre (la première est le dessus)', top, myCard);
+      me.life = order.reverse();
+      log('regarde ses Vies et les réordonne.');
+      break;
+    }
     case 'redirect': {
       const b = G.battle;
       if (b?.role !== 'def') break;
@@ -1310,6 +1365,31 @@ function pickMany(title, insts, getCard, opts = {}) {
   });
 }
 
+// Remettre des cartes dans l'ordre voulu (flèches) → nouveau tableau.
+function orderCards(title, insts, getCard) {
+  return new Promise((resolve) => {
+    const list = [...insts];
+    const o = document.createElement('div');
+    o.className = 'overlay';
+    const draw = () => {
+      o.innerHTML = `<div class="dialog wide" role="dialog" aria-label="${esc(title)}"><h3>${esc(title)}</h3>
+        <div class="card-grid">${list.map((i, k) => `<div class="order-card">${cardHTML(getCard(i))}
+          <div class="row-btns"><button class="btn small" data-up="${k}" ${k ? '' : 'disabled'}>←</button><span class="muted small">${k + 1}</span>
+          <button class="btn small" data-down="${k}" ${k < list.length - 1 ? '' : 'disabled'}>→</button></div></div>`).join('')}</div>
+        <div class="row-btns"><button class="btn primary" data-ok>Valider</button></div></div>`;
+    };
+    draw();
+    document.body.append(o);
+    o.addEventListener('click', (e) => {
+      const up = e.target.closest('[data-up]')?.dataset.up;
+      const down = e.target.closest('[data-down]')?.dataset.down;
+      if (up !== undefined) { const k = +up; [list[k - 1], list[k]] = [list[k], list[k - 1]]; draw(); }
+      else if (down !== undefined) { const k = +down; [list[k + 1], list[k]] = [list[k], list[k + 1]]; draw(); }
+      else if (e.target.closest('[data-ok]')) { o.remove(); resolve(list); }
+    });
+  });
+}
+
 function openViewer(zone, count = null, side = 'me') { G.viewer = { zone, count, side }; render(); }
 
 function toast(text) {
@@ -1620,4 +1700,30 @@ function doAction(a, el) {
     case 'r-close': G.reveals = G.reveals.filter((r) => r.id !== el.dataset.rid); return render();
     default: return undefined;
   }
+}
+
+// ---------- outil de test automatique ----------
+// Actif seulement en mode local avec ?test=1 : permet de lancer un effet et d'inspecter la partie.
+const TESTING = new URLSearchParams(location.search).get('test') === '1';
+if (TESTING) {
+  window.__optcg = {
+    G: () => G,
+    run: async (effect, u) => {
+      const src = (u && locate(u)?.inst) || G.me.leader;
+      const ctx = await runEffect(src, effect, { idx: 99 });
+      return ctx ? { played: Boolean(ctx.played) } : null;
+    },
+    place: (cardId, zone = 'chars', extra = {}) => {
+      const inst = { u: uid(), c: cardId, r: false, d: 0, t: 0, ...extra };
+      if (zone === 'stage') G.me.stage = inst; else G.me[zone].push(inst);
+      commit();
+      return inst.u;
+    },
+    power: (u) => myPower(locate(u).inst),
+    cost: (u) => curCost(locate(u).inst, myCard(locate(u).inst)),
+    kw: (u, k) => hasKw(locate(u).inst, k),
+    prot: (u, k) => isProtected(locate(u).inst, k),
+    commit: () => commit(),
+    endTurn: () => endTurn(),
+  };
 }

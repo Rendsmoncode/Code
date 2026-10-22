@@ -2,9 +2,13 @@
   "name": "optcg-maison",
   "private": true,
   "scripts": {
-    "build": "npx -y esbuild@0.24.0 js/app.js --bundle --format=iife --target=es2020 --outfile=app.js && node scripts/stamp.js"
+    "build": "npx -y esbuild@0.24.0 js/app.js --bundle --format=iife --target=es2020 --outfile=app.js && node scripts/stamp.js",
+    "test": "node tests/allfx.test.mjs && node tests/fxgame.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.117.2"
+  },
+  "devDependencies": {
+    "playwright": "1.56.1"
   }
 }

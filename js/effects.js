@@ -69,6 +69,7 @@ export const COSTS = {
   koOwn: { label: 'Mettre KO un de ses Personnages', params: [], text: () => 'Mettez KO 1 de vos Personnages' },
   trashToDeck: { label: 'Placer X cartes de sa défausse sous son deck', params: [n('n', 'Cartes', 3)], text: (p) => `Placez ${p.n} cartes de votre défausse sous votre deck` },
   lifeToHand: { label: 'Prendre une de ses Vies en main', params: [], text: () => 'Ajoutez 1 de vos Vies à votre main' },
+  revealHand: { label: 'Révéler une carte de sa main', params: [FILTER], text: (p) => `Révélez 1 carte${filterText(p.f)} de votre main` },
 };
 
 // ---------- Actions ----------
@@ -137,7 +138,7 @@ export const ACTIONS = {
     label: 'Retirer une Vie adverse', params: [n('n', 'Vies'), { k: 'to', label: 'Vers', type: 'sel', def: 'trash', opts: { trash: 'sa défausse', hand: 'sa main' } }],
     text: (p) => `placez ${p.n} des Vies de votre adversaire dans ${p.to === 'hand' ? 'sa main' : 'sa défausse'}`,
   },
-  lifeLook: { label: 'Regarder ses Vies', params: [], text: () => 'regardez toutes vos Vies' },
+  lifeLook: { label: 'Regarder et réordonner ses Vies', params: [], text: () => 'regardez toutes vos Vies et replacez-les dans l\'ordre de votre choix' },
   protect: {
     label: 'Ne peut pas être mis KO', params: [TARGET({ side: 'mine', who: 'self', n: 1 }),
       { k: 'by', label: 'Par', type: 'sel', def: 'both', opts: { battle: 'en combat', effect: 'par effet', both: 'en combat ni par effet' } }, DUR],
@@ -168,6 +169,7 @@ export function filterText(f = {}, short = false) {
   if (f.maxCost !== undefined && f.maxCost !== '') parts.push(`de coût ${f.maxCost} ou moins`);
   if (f.minCost !== undefined && f.minCost !== '') parts.push(`de coût ${f.minCost} ou plus`);
   if (f.maxPower !== undefined && f.maxPower !== '') parts.push(`de puissance ${f.maxPower} ou moins`);
+  if (f.maxBasePower !== undefined && f.maxBasePower !== '') parts.push(`de puissance de base ${f.maxBasePower} ou moins`);
   if (f.rested === 'yes') parts.push('reposé');
   if (f.rested === 'no') parts.push('actif');
   if (!parts.length) return '';

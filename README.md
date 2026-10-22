@@ -56,3 +56,7 @@ Le site est fait de fichiers statiques : HTML, CSS et JavaScript, sans installat
 Pour ouvrir le site sur votre ordinateur, double-cliquez sur `index.html`.
 
 Le code source est dans `js/`. Le fichier `app.js` à la racine est généré à partir de ce dossier avec `npm run build` : relancez cette commande après chaque modification de `js/`.
+
+## Tests
+
+`npm test` lance deux parties automatiques à deux onglets, avec un faux serveur Supabase : la première essaie chaque action, coût, condition et déclencheur d'effet ; la seconde joue une partie avec attaque, blocage et Contre. Il faut d'abord installer les outils : `npm install` puis `npx playwright install chromium`.

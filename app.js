@@ -21035,7 +21035,8 @@ ${suffix}`;
     restSelf: { label: "Reposer cette carte", params: [], text: () => "Reposez cette carte" },
     koOwn: { label: "Mettre KO un de ses Personnages", params: [], text: () => "Mettez KO 1 de vos Personnages" },
     trashToDeck: { label: "Placer X cartes de sa d\xE9fausse sous son deck", params: [n("n", "Cartes", 3)], text: (p) => `Placez ${p.n} cartes de votre d\xE9fausse sous votre deck` },
-    lifeToHand: { label: "Prendre une de ses Vies en main", params: [], text: () => "Ajoutez 1 de vos Vies \xE0 votre main" }
+    lifeToHand: { label: "Prendre une de ses Vies en main", params: [], text: () => "Ajoutez 1 de vos Vies \xE0 votre main" },
+    revealHand: { label: "R\xE9v\xE9ler une carte de sa main", params: [FILTER], text: (p) => `R\xE9v\xE9lez 1 carte${filterText(p.f)} de votre main` }
   };
   var ACTION_GROUPS = {
     "Pioche et main": ["draw", "discard", "oppDiscard"],
@@ -21119,7 +21120,7 @@ ${suffix}`;
       params: [n("n", "Vies"), { k: "to", label: "Vers", type: "sel", def: "trash", opts: { trash: "sa d\xE9fausse", hand: "sa main" } }],
       text: (p) => `placez ${p.n} des Vies de votre adversaire dans ${p.to === "hand" ? "sa main" : "sa d\xE9fausse"}`
     },
-    lifeLook: { label: "Regarder ses Vies", params: [], text: () => "regardez toutes vos Vies" },
+    lifeLook: { label: "Regarder et r\xE9ordonner ses Vies", params: [], text: () => "regardez toutes vos Vies et replacez-les dans l'ordre de votre choix" },
     protect: {
       label: "Ne peut pas \xEAtre mis KO",
       params: [
@@ -21154,6 +21155,7 @@ ${suffix}`;
     if (f.maxCost !== void 0 && f.maxCost !== "") parts.push(`de co\xFBt ${f.maxCost} ou moins`);
     if (f.minCost !== void 0 && f.minCost !== "") parts.push(`de co\xFBt ${f.minCost} ou plus`);
     if (f.maxPower !== void 0 && f.maxPower !== "") parts.push(`de puissance ${f.maxPower} ou moins`);
+    if (f.maxBasePower !== void 0 && f.maxBasePower !== "") parts.push(`de puissance de base ${f.maxBasePower} ou moins`);
     if (f.rested === "yes") parts.push("repos\xE9");
     if (f.rested === "no") parts.push("actif");
     if (!parts.length) return "";
@@ -21588,6 +21590,7 @@ ${suffix}`;
     <label>Attribut ${select(`${path}.attr`, { "": "\u2014", ...Object.fromEntries(ATTRIBUTES.map((a) => [a, a])) }, f.attr || "")}</label>
     <label>Co\xFBt max <input type="number" data-p="${path}.maxCost" value="${esc(f.maxCost ?? "")}"></label>
     <label>Puissance max <input type="number" step="1000" data-p="${path}.maxPower" value="${esc(f.maxPower ?? "")}"></label>
+    <label>Puissance de base max <input type="number" step="1000" data-p="${path}.maxBasePower" value="${esc(f.maxBasePower ?? "")}"></label>
     <label>\xC9tat ${select(`${path}.rested`, { "": "\u2014", yes: "repos\xE9", no: "actif" }, f.rested || "")}</label>
   </span>`;
   }
@@ -22194,7 +22197,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   var myCard = (inst) => G.myCards[inst.c];
   var oppCard = (inst) => G.oppCards[inst.c];
   var power = (inst, card, ownerTurn) => (Number(card?.power) || 0) + (inst.m || 0) + (inst.bm || 0) + (inst.pm || 0) + (ownerTurn ? (inst.d || 0) * 1e3 : 0);
-  var myPower = (inst) => power(inst, myCard(inst), myTurn()) + staticSum(inst, "power");
+  var myPower = (inst) => power(inst, myCard(inst), myTurn()) + staticSum(inst, "power") + auraSum(inst, "power");
   var oppPower = (inst) => inst.p ?? power(inst, oppCard(inst), oppTurn());
   var name = (c) => `\xAB ${c?.name || "?"} \xBB`;
   var emptySide = () => ({
@@ -22398,9 +22401,15 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       case "first":
         applyFirst(m.first);
         break;
-      case "view":
+      case "view": {
+        const changed = JSON.stringify(G.opp?.auras || []) !== JSON.stringify(m.v.auras || []);
         G.opp = m.v;
+        if (changed && G.phase === "play") {
+          commit();
+          return;
+        }
         break;
+      }
       case "ready":
         G.oppReady = true;
         maybeStart();
@@ -22470,6 +22479,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       chars: m.chars.map(deco),
       stage: m.stage,
       trash: m.trash,
+      auras: myAuras(),
       hand: m.hand.length,
       deck: m.deck.length,
       life: m.life.length,
@@ -22864,6 +22874,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         me.trash.push(inst);
         log(`perd 1 Vie (Exil) : ${name(c)} va \xE0 la d\xE9fausse.`);
         reveal(inst, "Vie exil\xE9e");
+        await fireAll("onLifeLost");
         continue;
       }
       if (c.trigger || hasEffect(inst, "trigger")) {
@@ -22905,7 +22916,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   }
   var norm = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
   var hasNum = (v) => v !== void 0 && v !== "" && v !== null;
-  var curCost = (inst, c) => (Number(c?.cost) || 0) + (inst?.cm || 0) + (inst?.cmt || 0);
+  var curCost = (inst, c) => (Number(c?.cost) || 0) + (inst?.cm || 0) + (inst?.cmt || 0) + (inst?.u ? staticSum(inst, "cost") + auraSum(inst, "cost") : 0);
   var effectsOf = (inst) => inst?.neg ? [] : myCard(inst)?.effects || [];
   var donTotal = () => G.me.donActive + G.me.donRested + fieldInsts().reduce((s, i) => s + (i.d || 0), 0);
   function condOK(c, src) {
@@ -22957,6 +22968,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       const pw = inst ? side === "opp" ? oppPower(inst) : myPower(inst) : Number(c.power) || 0;
       if (pw > f.maxPower) return false;
     }
+    if (hasNum(f.maxBasePower) && (Number(c.power) || 0) > f.maxBasePower) return false;
     if (f.rested === "yes" && !inst?.r) return false;
     if (f.rested === "no" && inst?.r) return false;
     return true;
@@ -23026,15 +23038,52 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       inStatic = false;
     }
   }
+  function myAuras() {
+    if (!G?.me?.leader) return [];
+    const out = [];
+    for (const { e } of staticEffects()) {
+      for (const a of e.actions || []) {
+        if (a.t?.side !== "opp" || !CONTINUOUS_ACTIONS.includes(a.k)) continue;
+        out.push({ k: a.k, amount: Number(a.amount) || 0, kw: a.kw, by: a.by, who: a.t.who, f: a.t.f || {} });
+      }
+    }
+    return out;
+  }
+  function auraHits(a, inst) {
+    const isLeader = G.me.leader?.u === inst.u;
+    const isChar = G.me.chars.some((x) => x.u === inst.u);
+    if (a.who === "leader") return isLeader;
+    if (isLeader) return ["leaderOrChar", "leaderAndAll"].includes(a.who);
+    return isChar && a.who !== "self" && matches(myCard(inst), a.f, inst, "me");
+  }
+  function auraSum(inst, kind) {
+    if (inStatic || !G?.opp?.auras?.length) return 0;
+    inStatic = true;
+    try {
+      return G.opp.auras.filter((a) => a.k === kind && auraHits(a, inst)).reduce((s, a) => s + a.amount, 0);
+    } finally {
+      inStatic = false;
+    }
+  }
+  function auraFlag(inst, kind, test) {
+    if (inStatic || !G?.opp?.auras?.length) return false;
+    inStatic = true;
+    try {
+      return G.opp.auras.some((a) => a.k === kind && test(a) && auraHits(a, inst));
+    } finally {
+      inStatic = false;
+    }
+  }
   function hasKw(inst, k) {
     const c = myCard(inst);
     if (!inst.neg && { blocker: isBlocker, rush: hasRush, double: hasDoubleAttack, banish: hasBanish, unblockable: isUnblockable }[k]?.(c)) return true;
     if (inst.kw?.[k]) return true;
-    return staticFlag(inst, "grantKw", (a) => a.kw === k);
+    return staticFlag(inst, "grantKw", (a) => a.kw === k) || auraFlag(inst, "grantKw", (a) => a.kw === k);
   }
   function isProtected(inst, kind) {
     if (inst.prot?.[kind] || inst.prot?.both) return true;
-    return staticFlag(inst, "protect", (a) => a.by === kind || a.by === "both");
+    const test = (a) => a.by === kind || a.by === "both";
+    return staticFlag(inst, "protect", test) || auraFlag(inst, "protect", test);
   }
   function applyMod(inst, a) {
     const dur = a.dur || "turn";
@@ -23093,6 +23142,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       if (c.k === "koOwn" && !me.chars.length) return "Il faut un Personnage \xE0 mettre KO.";
       if (c.k === "trashToDeck" && me.trash.length < c.n) return `Il faut ${c.n} carte(s) en d\xE9fausse.`;
       if (c.k === "lifeToHand" && !me.life.length) return "Il faut une Vie.";
+      if (c.k === "revealHand" && !me.hand.some((i) => matches(myCard(i), c.f || {}))) return "Aucune carte de votre main ne convient.";
     }
     return "";
   }
@@ -23130,6 +23180,13 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       } else if (c.k === "lifeToHand") {
         const i = me.life.at(-1);
         if (i) move(i.u, "hand");
+      } else if (c.k === "revealHand") {
+        const ok = (i2) => matches(myCard(i2), c.f || {});
+        const [i] = await pickMany("Co\xFBt : r\xE9v\xE9lez une carte de votre main", me.hand, myCard, { min: 1, max: 1, selectable: ok, cancel: false });
+        if (i) {
+          reveal(i, "R\xE9v\xE9l\xE9e (co\xFBt)");
+          log(`r\xE9v\xE8le ${name(myCard(i))}.`);
+        }
       }
     }
   }
@@ -23339,9 +23396,14 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       case "oppLifeRemove":
         sendFx("lifeRemove", { n: a.n, to: a.to }, src);
         break;
-      case "lifeLook":
-        openViewer("life");
+      case "lifeLook": {
+        if (me.life.length < 2) break;
+        const top = [...me.life].reverse();
+        const order = await orderCards("Vos Vies : remettez-les dans l'ordre (la premi\xE8re est le dessus)", top, myCard);
+        me.life = order.reverse();
+        log("regarde ses Vies et les r\xE9ordonne.");
         break;
+      }
       case "redirect": {
         const b = G.battle;
         if (b?.role !== "def") break;
@@ -23853,6 +23915,38 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       });
     });
   }
+  function orderCards(title, insts, getCard) {
+    return new Promise((resolve) => {
+      const list = [...insts];
+      const o = document.createElement("div");
+      o.className = "overlay";
+      const draw = () => {
+        o.innerHTML = `<div class="dialog wide" role="dialog" aria-label="${esc(title)}"><h3>${esc(title)}</h3>
+        <div class="card-grid">${list.map((i, k) => `<div class="order-card">${cardHTML(getCard(i))}
+          <div class="row-btns"><button class="btn small" data-up="${k}" ${k ? "" : "disabled"}>\u2190</button><span class="muted small">${k + 1}</span>
+          <button class="btn small" data-down="${k}" ${k < list.length - 1 ? "" : "disabled"}>\u2192</button></div></div>`).join("")}</div>
+        <div class="row-btns"><button class="btn primary" data-ok>Valider</button></div></div>`;
+      };
+      draw();
+      document.body.append(o);
+      o.addEventListener("click", (e) => {
+        const up = e.target.closest("[data-up]")?.dataset.up;
+        const down = e.target.closest("[data-down]")?.dataset.down;
+        if (up !== void 0) {
+          const k = +up;
+          [list[k - 1], list[k]] = [list[k], list[k - 1]];
+          draw();
+        } else if (down !== void 0) {
+          const k = +down;
+          [list[k + 1], list[k]] = [list[k], list[k + 1]];
+          draw();
+        } else if (e.target.closest("[data-ok]")) {
+          o.remove();
+          resolve(list);
+        }
+      });
+    });
+  }
   function openViewer(zone, count = null, side = "me") {
     G.viewer = { zone, count, side };
     render();
@@ -24184,6 +24278,30 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       default:
         return void 0;
     }
+  }
+  var TESTING = new URLSearchParams(location.search).get("test") === "1";
+  if (TESTING) {
+    window.__optcg = {
+      G: () => G,
+      run: async (effect, u) => {
+        const src = u && locate(u)?.inst || G.me.leader;
+        const ctx = await runEffect(src, effect, { idx: 99 });
+        return ctx ? { played: Boolean(ctx.played) } : null;
+      },
+      place: (cardId, zone = "chars", extra = {}) => {
+        const inst = { u: uid(), c: cardId, r: false, d: 0, t: 0, ...extra };
+        if (zone === "stage") G.me.stage = inst;
+        else G.me[zone].push(inst);
+        commit();
+        return inst.u;
+      },
+      power: (u) => myPower(locate(u).inst),
+      cost: (u) => curCost(locate(u).inst, myCard(locate(u).inst)),
+      kw: (u, k) => hasKw(locate(u).inst, k),
+      prot: (u, k) => isProtected(locate(u).inst, k),
+      commit: () => commit(),
+      endTurn: () => endTurn()
+    };
   }
 
   // js/boosters.js
