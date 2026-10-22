@@ -58,6 +58,11 @@ export const CONDS = {
     label: 'Vous avez X Personnages ou plus', params: [n('n', 'Personnages', 2), { k: 'type', label: 'Type (facultatif)', type: 'text', def: '' }],
     text: (p) => `Si vous avez ${p.n} Personnages${p.type ? ` de type {${p.type}}` : ''} ou plus,`,
   },
+  noTypeField: {
+    label: 'Vous n\'avez aucune carte de type… sur votre terrain',
+    params: [{ k: 'type', label: 'Type', type: 'text', def: '' }, { k: 'self', label: 'Cette carte', type: 'sel', def: 'skip', opts: { skip: 'ne compte pas', count: 'compte aussi' } }],
+    text: (p) => `Si vous n'avez aucune ${p.self === 'count' ? '' : 'autre '}carte de type {${p.type}} sur votre terrain,`,
+  },
   trashGE: { label: 'Votre défausse a X cartes ou plus', params: [n('n', 'Cartes', 10)], text: (p) => `Si votre défausse contient ${p.n} cartes ou plus,` },
   myTurn: { label: 'C\'est votre tour', params: [], text: () => 'Pendant votre tour,' },
   oppTurn: { label: 'C\'est le tour adverse', params: [], text: () => 'Pendant le tour adverse,' },

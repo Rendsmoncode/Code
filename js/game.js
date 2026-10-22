@@ -727,6 +727,7 @@ function condOK(c, src) {
     case 'oppLifeLE': return (G.opp?.life ?? 99) <= c.n;
     case 'handLE': return me.hand.length <= c.n;
     case 'charsGE': return me.chars.filter((i) => !c.type || norm(myCard(i).traits).includes(norm(c.type))).length >= c.n;
+    case 'noTypeField': return !fieldInsts().some((i) => (c.self === 'count' || i.u !== src?.u) && norm(myCard(i).traits).includes(norm(c.type)));
     case 'trashGE': return me.trash.length >= c.n;
     case 'myTurn': return myTurn();
     case 'oppTurn': return oppTurn();
