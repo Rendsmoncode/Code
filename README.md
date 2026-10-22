@@ -27,4 +27,6 @@ Dans *Jouer*, ouvrez « Tester seul », cochez *Mode local*, créez une partie, 
 
 Le site est fait de fichiers statiques : HTML, CSS et JavaScript, sans installation. Les cartes et les decks sont enregistrés dans le navigateur (IndexedDB). La connexion entre joueurs est directe, de navigateur à navigateur, avec [PeerJS](https://peerjs.com/).
 
-Pour lancer le site sur votre ordinateur : `python3 -m http.server`, puis ouvrez http://localhost:8000.
+Pour ouvrir le site sur votre ordinateur, double-cliquez sur `index.html`.
+
+Le code source est dans `js/`. Le fichier `app.js` à la racine est généré à partir de ce dossier avec `npm run build` : relancez cette commande après chaque modification de `js/`.

@@ -13,12 +13,12 @@ function show(name) {
 
 tabs.forEach((t) => t.addEventListener('click', () => show(t.dataset.tab)));
 
-await load();
-initEditor();
-initDecks();
-initPlay();
-
-let start = 'cards';
-try { start = localStorage.getItem('optcgm-tab') || 'cards'; } catch { /* rien */ }
-if (new URLSearchParams(location.search).get('join')) start = 'play';
-show(start);
+load().then(() => {
+  initEditor();
+  initDecks();
+  initPlay();
+  let start = 'cards';
+  try { start = localStorage.getItem('optcgm-tab') || 'cards'; } catch { /* rien */ }
+  if (new URLSearchParams(location.search).get('join')) start = 'play';
+  show(start);
+});
