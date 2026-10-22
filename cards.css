@@ -122,8 +122,9 @@
   font: 700 2.6cqw/1 "Cinzel", serif; letter-spacing: .14em; color: #ffd9d4; text-shadow: 0 0 1cqw #000;
 }
 .card.t-leader .nm { left: 4cqw; right: 25cqw; text-align: left; padding-left: 2cqw; }
+.card.t-leader .traits { left: 6cqw; right: 25cqw; text-align: left; }
 .card.t-leader .nm.long { font-size: 5.6cqw; } .card.t-leader .nm.xlong { font-size: 4.8cqw; }
-.card.t-leader { --info-b: 22cqw; --band-h: 29cqw; }
+.card.t-leader { --info-b: 24cqw; --band-h: 31cqw; }
 
 /* Puissance : plaque d'acier à coins coupés, liseré lumineux */
 .card .pow {
@@ -170,14 +171,22 @@
 
 /* Nom */
 .card .nm {
-  left: 4cqw; right: 4cqw; bottom: 5.5cqw; text-align: center; text-transform: uppercase;
+  left: 4cqw; right: 4cqw; bottom: 8cqw; text-align: center; text-transform: uppercase;
   font: 900 7.6cqw/1.05 "Cinzel", serif; letter-spacing: .05em; text-shadow: 0 .4cqw 0 #000a, 0 0 2.4cqw #000c;
 }
 .card .nm.long { font-size: 6.2cqw; }
 .card .nm.xlong { font-size: 5.2cqw; }
 
+/* Types / familles, sous le nom */
+.card .traits {
+  position: absolute; z-index: 4; left: 12cqw; right: 12cqw; bottom: 4cqw; text-align: center;
+  font: italic 500 3.6cqw/1.1 "Crimson Pro", serif; letter-spacing: .02em; color: #ffffffd9;
+  text-shadow: 0 .3cqw .6cqw #000c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.card.ink-dark .traits { color: #111c; text-shadow: 0 0 1cqw #fff9; }
+
 /* Encadré du texte : panneau fumé translucide à coins coupés */
-.card { --info-b: 17.5cqw; --band-h: 25cqw; }
+.card { --info-b: 20cqw; --band-h: 27.5cqw; }
 .card .info { left: 5cqw; right: 5cqw; bottom: var(--info-b); text-align: center; font: 500 4.3cqw/1.2 "Crimson Pro", serif; }
 .card .info-in { position: relative; max-height: 58cqw; overflow: hidden; padding: 3cqw 4cqw 2.6cqw; text-shadow: 0 .2cqw .8cqw #000, 0 0 .4cqw #000; }
 .card .info::after {
@@ -215,7 +224,7 @@
   right: 5cqw; bottom: 1.4cqw; z-index: 6; font: 900 3.2cqw/1 "Cinzel", serif; letter-spacing: .03em;
   padding: .6cqw 2cqw; color: #111; background: #c4c8d0; clip-path: polygon(1cqw 0, 100% 0, calc(100% - 1cqw) 100%, 0 100%);
 }
-.card.t-leader .rar { right: auto; left: 5cqw; }
+.card.t-leader:not(.r-S) .rar { right: auto; left: 3.6cqw; bottom: auto; top: 13cqw; }
 .card.r-UC .rar { background: #7cc8ff; }
 .card.r-R .rar { background: #c3a6ff; }
 .card.r-SR .rar { background: #ff7ac8; }

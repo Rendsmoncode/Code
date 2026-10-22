@@ -124,8 +124,9 @@ export function cardHTML(card, o = {}) {
       <div class="art${card.image ? '' : ' empty'}"${art}></div>
       ${cost}${pow}${ctr}${attr}
       <div class="nm${len > 18 ? ' xlong' : len > 13 ? ' long' : ''}"><span>${esc(card.name || 'Sans nom')}</span></div>
+      ${card.traits ? `<div class="traits">${esc(card.traits)}</div>` : ''}
       <div class="info"><div class="info-in">
-        <div class="tl">${TYPES[t] || ''}${card.traits ? ' · ' + esc(card.traits) : ''}</div>
+        <div class="tl">${TYPES[t] || ''}</div>
         ${fxText ? `<div class="fx">${fmtEffect(fxText)}</div>` : ''}
         ${trig}
       </div></div>
