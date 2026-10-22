@@ -1,4 +1,5 @@
 // Modèle de carte, constantes du jeu et rendu HTML d'une carte.
+import { effectsText } from './effects.js';
 
 export const COLORS = {
   rouge: { label: 'Rouge', hex: '#c8302c' },
@@ -46,14 +47,17 @@ export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
 export const uid = () => (crypto.randomUUID ? crypto.randomUUID()
   : Date.now().toString(36) + Math.random().toString(36).slice(2));
 
-const hasWord = (card, words) => {
+// Mots-clés : cases cochées dans l'éditeur (card.keywords), ou écrits dans le texte libre.
+const hasWord = (card, key, words) => {
+  if (card?.keywords?.includes(key)) return true;
   const t = `${card?.effect || ''}`.toLowerCase();
   return words.some((w) => t.includes(w));
 };
-export const isBlocker = (c) => hasWord(c, ['[bloqueur]', '[blocker]']);
-export const hasRush = (c) => hasWord(c, ['[initiative]', '[rush]']);
-export const hasDoubleAttack = (c) => hasWord(c, ['[double attaque]', '[double attack]']);
-export const hasBanish = (c) => hasWord(c, ['[exil]', '[banish]']);
+export const isBlocker = (c) => hasWord(c, 'blocker', ['[bloqueur]', '[blocker]']);
+export const hasRush = (c) => hasWord(c, 'rush', ['[initiative]', '[rush]']);
+export const hasDoubleAttack = (c) => hasWord(c, 'double', ['[double attaque]', '[double attack]']);
+export const hasBanish = (c) => hasWord(c, 'banish', ['[exil]', '[banish]']);
+export const isUnblockable = (c) => hasWord(c, 'unblockable', ['[imblocable]']);
 
 // Une carte a 1 ou 2 attributs, stockés dans `attribute` sous la forme « Frappe / Tranchant ».
 export const attributesOf = (card) => String(card?.attribute || '').split('/').map((a) => a.trim()).filter(Boolean).slice(0, 2);
@@ -66,6 +70,7 @@ export function newCard() {
     id: uid(), code: '', name: '', type: 'character', colors: ['rouge'],
     cost: 1, life: 5, power: 1000, counter: 1000, attribute: 'Frappe',
     traits: '', effect: '', trigger: '', image: '', rarity: 'C', inBoosters: true, ink: 'light',
+    keywords: [], effects: [],
   };
 }
 
@@ -101,8 +106,12 @@ export function cardHTML(card, o = {}) {
     ? `<div class="ctr" title="Contre"><span>+${esc(card.counter)}</span></div>` : '';
   const attrs = attributesOf(card);
   const attr = fighter && attrs.length ? `<div class="attr">${attrs.map((a) => `<span class="a-${attrKey(a)}">${esc(a)}</span>`).join('')}</div>` : '';
-  const trig = card.trigger && t !== 'leader'
-    ? `<div class="trg"><span class="kw trig">Déclenchement</span> ${fmtEffect(card.trigger)}</div>` : '';
+  // Texte affiché = effets automatiques (générés) + texte libre.
+  const auto = effectsText(card);
+  const fxText = [auto.main, card.effect].filter(Boolean).join('\n');
+  const trigText = [auto.trigger, card.trigger].filter(Boolean).join(' ');
+  const trig = trigText && t !== 'leader'
+    ? `<div class="trg"><span class="kw trig">Déclenchement</span> ${fmtEffect(trigText)}</div>` : '';
   const r = RARITIES[card.rarity] ? card.rarity : 'C';
   const hex = (card.colors?.length ? card.colors : ['noir']).map((c) => COLORS[c]?.hex || '#555');
   const len = (card.name || '').length;
@@ -117,7 +126,7 @@ export function cardHTML(card, o = {}) {
       <div class="nm${len > 18 ? ' xlong' : len > 13 ? ' long' : ''}"><span>${esc(card.name || 'Sans nom')}</span></div>
       <div class="info"><div class="info-in">
         <div class="tl">${TYPES[t] || ''}${card.traits ? ' · ' + esc(card.traits) : ''}</div>
-        ${card.effect ? `<div class="fx">${fmtEffect(card.effect)}</div>` : ''}
+        ${fxText ? `<div class="fx">${fmtEffect(fxText)}</div>` : ''}
         ${trig}
       </div></div>
       <div class="rar" title="${RARITIES[r].label}">${RARITIES[r].short}</div>

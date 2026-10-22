@@ -3,9 +3,11 @@ import { S, saveCard, saveCards, deleteCard, onChange } from './store.js';
 import {
   COLORS, TYPES, RARITIES, ATTRIBUTES, attributesOf, KEYWORDS, esc, uid, newCard, cardHTML, resizeImage, download, readJSONFile,
 } from './cards.js';
+import { mountEffectsEditor } from './effects-editor.js';
 
 const root = () => document.getElementById('tab-cards');
 let cur = newCard();
+let fxEd = null;
 let filter = { q: '', type: '', color: '', rarity: '' };
 
 export function initEditor() {
@@ -41,10 +43,12 @@ export function initEditor() {
           <input id="ed-attr2" list="ed-attrs"></div>
       </div>
       <div class="field"><label for="ed-traits">Types / Familles</label><input id="ed-traits" maxlength="80" placeholder="Ex. : Équipage du Requin / Marine"></div>
-      <div class="field"><label for="ed-effect">Effet</label>
+      <div class="field"><label>Effets automatiques <small>(le jeu les applique tout seul ; le texte de la carte s'écrit automatiquement)</small></label>
+        <div id="ed-fx" class="fxe"></div></div>
+      <div class="field"><label for="ed-effect">Texte libre <small>(effet spécial non prévu : à appliquer à la main pendant la partie)</small></label>
         <div class="kws">${KEYWORDS.map((k) => `<button type="button" data-kw="${esc(k)}">${esc(k)}</button>`).join('')}</div>
         <textarea id="ed-effect" rows="5" placeholder="[Jouée] Piochez 1 carte."></textarea></div>
-      <div class="field f-trigger"><label for="ed-trigger">Déclenchement <small>(effet quand la carte est révélée depuis la Vie)</small></label>
+      <div class="field f-trigger"><label for="ed-trigger">Déclenchement en texte libre <small>(sinon, ajoutez un effet automatique « Déclenchement » ci-dessus)</small></label>
         <textarea id="ed-trigger" rows="2" placeholder="Jouez cette carte."></textarea></div>
       <div class="field"><label>Image</label>
         <div class="row-btns">
@@ -81,6 +85,7 @@ export function initEditor() {
 
   const r = root();
   const form = r.querySelector('form');
+  fxEd = mountEffectsEditor(r.querySelector('#ed-fx'), () => cur, preview);
   const val = (id) => r.querySelector('#' + id);
 
   r.querySelector('#ed-type').addEventListener('click', (e) => {
@@ -127,7 +132,7 @@ export function initEditor() {
     if (!cur.name.trim()) return msg('Donnez un nom à la carte.', true);
     msg('Enregistrement…');
     try {
-      const c = { ...cur, colors: cur.colors.slice(0, maxColors()) };
+      const c = { ...structuredClone(cur), colors: cur.colors.slice(0, maxColors()) };
       await saveCard(c);
       cur.image = c.image;
       fill();
@@ -136,7 +141,7 @@ export function initEditor() {
   });
   val('ed-new').addEventListener('click', () => { const t = cur.type; cur = newCard(); cur.type = t; fill(); msg(''); });
   val('ed-dup').addEventListener('click', () => {
-    cur = { ...cur, id: uid(), colors: [...cur.colors], name: cur.name ? cur.name + ' (copie)' : '' };
+    cur = { ...structuredClone(cur), id: uid(), name: cur.name ? cur.name + ' (copie)' : '' };
     fill(); msg('Copie créée : pensez à enregistrer.');
   });
   val('ed-del').addEventListener('click', async () => {
@@ -234,6 +239,7 @@ function fill() {
   show('.f-attr', t === 'leader' || t === 'character');
   show('.f-attr2', t === 'leader' || t === 'character');
   show('.f-trigger', t !== 'leader');
+  fxEd?.render();
   r.querySelector('#ed-title').textContent = S.byId[cur.id] ? `Modifier « ${cur.name} »` : 'Nouvelle carte';
   preview();
 }

@@ -14908,8 +14908,8 @@ ${suffix}`;
       const result = await this.initializePromise;
       const queue = (_a = this._pendingInitNotifications) !== null && _a !== void 0 ? _a : [];
       this._pendingInitNotifications = null;
-      for (const n of queue) {
-        await this._notifyAllSubscribers(n.event, n.session, n.broadcast);
+      for (const n2 of queue) {
+        await this._notifyAllSubscribers(n2.event, n2.session, n2.broadcast);
       }
       return result;
     }
@@ -20260,12 +20260,12 @@ ${suffix}`;
     warnedTopLevelSchema = true;
     console.warn(`@supabase/supabase-js: The "schema" option must be nested under "db", e.g. createClient(url, key, { db: { schema: 'myschema' } }). A top-level "schema" is ignored and queries go to the default schema.`);
   }
-  function applySettingDefaults(options, defaults) {
+  function applySettingDefaults(options, defaults2) {
     var _DEFAULT_GLOBAL_OPTIO, _globalOptions$header, _ref, _tracePropagationOpti, _ref2, _tracePropagationOpti2;
     const { db: dbOptions, auth: authOptions, realtime: realtimeOptions, global: globalOptions } = options;
-    const { db: DEFAULT_DB_OPTIONS$1, auth: DEFAULT_AUTH_OPTIONS$1, realtime: DEFAULT_REALTIME_OPTIONS$1, global: DEFAULT_GLOBAL_OPTIONS$1 } = defaults;
+    const { db: DEFAULT_DB_OPTIONS$1, auth: DEFAULT_AUTH_OPTIONS$1, realtime: DEFAULT_REALTIME_OPTIONS$1, global: DEFAULT_GLOBAL_OPTIONS$1 } = defaults2;
     const tracePropagationOptions = normalizeTracePropagation(options.tracePropagation);
-    const DEFAULT_TRACE_PROPAGATION_OPTIONS$1 = normalizeTracePropagation(defaults.tracePropagation);
+    const DEFAULT_TRACE_PROPAGATION_OPTIONS$1 = normalizeTracePropagation(defaults2.tracePropagation);
     const result = {
       db: _objectSpread23(_objectSpread23({}, DEFAULT_DB_OPTIONS$1), dbOptions),
       auth: _objectSpread23(_objectSpread23({}, DEFAULT_AUTH_OPTIONS$1), authOptions),
@@ -20924,17 +20924,17 @@ ${suffix}`;
     else if (!owned && leader.rarity === "S") errs.push(`\xAB ${leader.name} \xBB est une 1on1 : interdite dans un deck pr\xE9construit.`);
     let total = 0;
     const perCode = {};
-    for (const [id, n] of Object.entries(deck.cards || {})) {
+    for (const [id, n2] of Object.entries(deck.cards || {})) {
       const c = S.byId[id];
       if (!c) {
         errs.push("Une carte du deck n'existe plus.");
         continue;
       }
-      total += n;
+      total += n2;
       const key = c.code || c.id;
-      perCode[key] = (perCode[key] || 0) + n;
+      perCode[key] = (perCode[key] || 0) + n2;
       if (perCode[key] > 4) errs.push(`\xAB ${c.name} \xBB : 4 exemplaires maximum.`);
-      if (owned && n > (S.collection[id] || 0)) errs.push(`\xAB ${c.name} \xBB : vous n'en poss\xE9dez que ${S.collection[id] || 0}.`);
+      if (owned && n2 > (S.collection[id] || 0)) errs.push(`\xAB ${c.name} \xBB : vous n'en poss\xE9dez que ${S.collection[id] || 0}.`);
       if (c.type === "leader") errs.push(`\xAB ${c.name} \xBB est un Leader : il ne va pas dans le deck.`);
       if (!owned && c.rarity === "S") errs.push(`\xAB ${c.name} \xBB est une 1on1 : interdite dans un deck pr\xE9construit.`);
       if (leader && !c.colors.some((x) => leader.colors.includes(x))) {
@@ -20961,12 +20961,248 @@ ${suffix}`;
     return check(await sb.from("profiles").select("username, role, boosters, created_at").order("username"));
   }
   async function giveBoosters(target, amount) {
-    const n = check(await sb.rpc("admin_give_boosters", { target: target || null, amount }));
+    const n2 = check(await sb.rpc("admin_give_boosters", { target: target || null, amount }));
     await refreshStatus();
-    return n;
+    return n2;
   }
   async function setRole(target, role) {
     check(await sb.rpc("admin_set_role", { target, new_role: role }));
+  }
+
+  // js/effects.js
+  var COLORS_FR = { rouge: "rouge", vert: "vert", bleu: "bleu", violet: "violet", noir: "noir", jaune: "jaune" };
+  var WHEN = {
+    onPlay: { label: "Jou\xE9e", tag: "[Jou\xE9e]" },
+    onAttack: { label: "Attaque", tag: "[Attaque]" },
+    onBlock: { label: "Bloqu\xE9e", tag: "[Bloqu\xE9e]" },
+    onKO: { label: "KO", tag: "[KO]" },
+    activateMain: { label: "Activation : Principale", tag: "[Activation : Principale]" },
+    main: { label: "Principale (\xC9v\xE9nement)", tag: "[Principale]" },
+    counter: { label: "Contre (\xC9v\xE9nement)", tag: "[Contre]" },
+    trigger: { label: "D\xE9clenchement (depuis la Vie)", tag: "" },
+    startOfTurn: { label: "D\xE9but de votre tour", tag: "[D\xE9but de votre tour]" },
+    endOfTurn: { label: "Fin de votre tour", tag: "[Fin de votre tour]" },
+    endOfOppTurn: { label: "Fin du tour adverse", tag: "[Fin du tour adverse]" },
+    yourTurn: { label: "Votre tour (permanent)", tag: "[Votre tour]", continuous: true },
+    oppTurn: { label: "Tour adverse (permanent)", tag: "[Tour adverse]", continuous: true },
+    static: { label: "Permanent", tag: "", continuous: true },
+    onOppAttack: { label: "Quand l'adversaire attaque", tag: "[Quand l'adversaire attaque]" },
+    onOwnKO: { label: "Quand un de vos Personnages est mis KO", tag: "[Quand un de vos Personnages est mis KO]" },
+    onLifeLost: { label: "Quand vous perdez une Vie", tag: "[Quand vous perdez une Vie]" },
+    onPlayChar: { label: "Quand vous jouez un Personnage", tag: "[Quand vous jouez un Personnage]" }
+  };
+  var n = (k = "n", label = "Nombre", def = 1) => ({ k, label, type: "num", def });
+  var DUR = {
+    k: "dur",
+    label: "Dur\xE9e",
+    type: "sel",
+    def: "turn",
+    opts: { battle: "pendant ce combat", turn: "jusqu'\xE0 la fin du tour", perm: "en permanence" }
+  };
+  var TARGET = (def = {}) => ({ k: "t", label: "Cible", type: "target", def: { side: "mine", who: "self", n: 1, ...def } });
+  var FILTER = { k: "f", label: "Filtre", type: "filter", def: {} };
+  var KEYWORDS_AUTO = {
+    blocker: "Bloqueur",
+    rush: "Initiative",
+    double: "Double attaque",
+    banish: "Exil",
+    unblockable: "Imblocable"
+  };
+  var CONDS = {
+    donAttached: { label: "DON!! attach\xE9s \xE0 cette carte (min.)", params: [n("n", "DON!!")], text: (p) => `[DON!! x${p.n}]` },
+    donField: { label: "DON!! sur votre terrain (min.)", params: [n("n", "DON!!", 5)], text: (p) => `Si vous avez ${p.n} DON!! ou plus sur votre terrain,` },
+    leaderType: { label: "Votre Leader a le type\u2026", params: [{ k: "v", label: "Type", type: "text", def: "" }], text: (p) => `Si votre Leader a le type {${p.v}},` },
+    leaderColor: { label: "Votre Leader est de couleur\u2026", params: [{ k: "v", label: "Couleur", type: "sel", def: "rouge", opts: COLORS_FR }], text: (p) => `Si votre Leader est ${p.v},` },
+    leaderAttr: { label: "Votre Leader a l'attribut\u2026", params: [{ k: "v", label: "Attribut", type: "text", def: "Frappe" }], text: (p) => `Si votre Leader a l'attribut ${p.v},` },
+    lifeLE: { label: "Vous avez X Vies ou moins", params: [n("n", "Vies", 2)], text: (p) => `Si vous avez ${p.n} Vie${p.n > 1 ? "s" : ""} ou moins,` },
+    lifeGE: { label: "Vous avez X Vies ou plus", params: [n("n", "Vies", 3)], text: (p) => `Si vous avez ${p.n} Vies ou plus,` },
+    oppLifeLE: { label: "L'adversaire a X Vies ou moins", params: [n("n", "Vies", 2)], text: (p) => `Si votre adversaire a ${p.n} Vie${p.n > 1 ? "s" : ""} ou moins,` },
+    handLE: { label: "Vous avez X cartes ou moins en main", params: [n("n", "Cartes", 3)], text: (p) => `Si vous avez ${p.n} carte${p.n > 1 ? "s" : ""} ou moins en main,` },
+    charsGE: {
+      label: "Vous avez X Personnages ou plus",
+      params: [n("n", "Personnages", 2), { k: "type", label: "Type (facultatif)", type: "text", def: "" }],
+      text: (p) => `Si vous avez ${p.n} Personnages${p.type ? ` de type {${p.type}}` : ""} ou plus,`
+    },
+    trashGE: { label: "Votre d\xE9fausse a X cartes ou plus", params: [n("n", "Cartes", 10)], text: (p) => `Si votre d\xE9fausse contient ${p.n} cartes ou plus,` },
+    myTurn: { label: "C'est votre tour", params: [], text: () => "Pendant votre tour," },
+    oppTurn: { label: "C'est le tour adverse", params: [], text: () => "Pendant le tour adverse," }
+  };
+  var CIRCLED = ["\u24EA", "\u2460", "\u2461", "\u2462", "\u2463", "\u2464", "\u2465", "\u2466", "\u2467", "\u2468", "\u2469"];
+  var COSTS = {
+    restDon: { label: "Reposer X DON!! actifs", params: [n("n", "DON!!")], text: (p) => CIRCLED[p.n] || `${p.n} DON!!` },
+    donReturn: { label: "Renvoyer X DON!! au deck DON!! (DON!! \u2212X)", params: [n("n", "DON!!")], text: (p) => `DON!! \u2212${p.n}` },
+    discard: { label: "D\xE9fausser X cartes de sa main", params: [n("n", "Cartes")], text: (p) => `D\xE9faussez ${p.n} carte${p.n > 1 ? "s" : ""} de votre main` },
+    restSelf: { label: "Reposer cette carte", params: [], text: () => "Reposez cette carte" },
+    koOwn: { label: "Mettre KO un de ses Personnages", params: [], text: () => "Mettez KO 1 de vos Personnages" },
+    trashToDeck: { label: "Placer X cartes de sa d\xE9fausse sous son deck", params: [n("n", "Cartes", 3)], text: (p) => `Placez ${p.n} cartes de votre d\xE9fausse sous votre deck` },
+    lifeToHand: { label: "Prendre une de ses Vies en main", params: [], text: () => "Ajoutez 1 de vos Vies \xE0 votre main" }
+  };
+  var ACTION_GROUPS = {
+    "Pioche et main": ["draw", "discard", "oppDiscard"],
+    Deck: ["look", "search", "mill"],
+    Terrain: ["playFree", "ko", "bounce", "toBottom", "rest", "untap", "freeze", "playSelf"],
+    Puissance: ["power", "cost", "grantKw"],
+    "DON!!": ["donAdd", "donAttach", "donUntap", "donOppReturn", "restOppDon"],
+    Vie: ["lifeFromDeck", "lifeFromHand", "lifeToHand", "oppLifeRemove", "lifeLook"],
+    Combat: ["protect", "cannotAttack", "redirect", "noBlockers", "negate"]
+  };
+  var ZONES = { hand: "votre main", trash: "votre d\xE9fausse", deck: "votre deck" };
+  var ACTIONS = {
+    draw: { label: "Piocher", params: [n("n", "Cartes")], text: (p) => `piochez ${p.n} carte${p.n > 1 ? "s" : ""}` },
+    discard: {
+      label: "D\xE9fausser (au choix)",
+      params: [n("n", "Cartes"), { k: "random", label: "Au hasard", type: "sel", def: "no", opts: { no: "non", yes: "oui" } }],
+      text: (p) => `d\xE9faussez ${p.n} carte${p.n > 1 ? "s" : ""} de votre main${p.random === "yes" ? " au hasard" : ""}`
+    },
+    oppDiscard: { label: "L'adversaire d\xE9fausse", params: [n("n", "Cartes")], text: (p) => `votre adversaire d\xE9fausse ${p.n} carte${p.n > 1 ? "s" : ""} de sa main` },
+    look: {
+      label: "Regarder le dessus du deck et prendre",
+      params: [
+        n("n", "Cartes regard\xE9es", 5),
+        n("take", "Cartes prises (max)", 1),
+        FILTER,
+        { k: "rest", label: "Le reste", type: "sel", def: "bottom", opts: { bottom: "sous le deck", trash: "\xE0 la d\xE9fausse" } }
+      ],
+      text: (p) => `regardez les ${p.n} cartes du dessus de votre deck, r\xE9v\xE9lez jusqu'\xE0 ${p.take} carte${p.take > 1 ? "s" : ""}${filterText(p.f, true)} et ajoutez-la \xE0 votre main, puis placez le reste ${p.rest === "trash" ? "dans votre d\xE9fausse" : "sous votre deck dans l'ordre de votre choix"}`
+    },
+    search: { label: "Chercher une carte dans le deck", params: [FILTER], text: (p) => `cherchez dans votre deck 1 carte${filterText(p.f, true)}, ajoutez-la \xE0 votre main, puis m\xE9langez votre deck` },
+    mill: { label: "D\xE9fausser le dessus du deck", params: [n("n", "Cartes", 2)], text: (p) => `placez les ${p.n} cartes du dessus de votre deck dans votre d\xE9fausse` },
+    playFree: {
+      label: "Jouer gratuitement un Personnage",
+      params: [
+        n("max", "Co\xFBt max", 3),
+        FILTER,
+        { k: "from", label: "Depuis", type: "sel", def: "hand", opts: ZONES }
+      ],
+      text: (p) => `jouez jusqu'\xE0 1 Personnage${filterText(p.f, true)} de co\xFBt ${p.max} ou moins depuis ${ZONES[p.from]}`
+    },
+    ko: { label: "Mettre KO", params: [TARGET({ side: "opp", who: "chars", n: 1 })], text: (p) => `mettez KO ${targetText(p.t)}` },
+    bounce: { label: "Renvoyer en main", params: [TARGET({ side: "opp", who: "chars", n: 1 })], text: (p) => `renvoyez ${targetText(p.t)} dans la main de son propri\xE9taire` },
+    toBottom: { label: "Placer sous le deck", params: [TARGET({ side: "opp", who: "chars", n: 1 })], text: (p) => `placez ${targetText(p.t)} sous le deck de son propri\xE9taire` },
+    rest: { label: "Reposer", params: [TARGET({ side: "opp", who: "chars", n: 1 })], text: (p) => `reposez ${targetText(p.t)}` },
+    untap: { label: "Redresser", params: [TARGET({ side: "mine", who: "leaderOrChar", n: 1 })], text: (p) => `redressez ${targetText(p.t)}` },
+    freeze: { label: "Ne se redresse pas au prochain tour", params: [TARGET({ side: "opp", who: "chars", n: 1 })], text: (p) => `${targetText(p.t)} ne se redresse pas lors de la prochaine phase de rafra\xEEchissement de son propri\xE9taire` },
+    playSelf: { label: "Jouer cette carte (D\xE9clenchement)", params: [], text: () => "jouez cette carte" },
+    power: {
+      label: "Puissance + / \u2212",
+      params: [TARGET({ side: "mine", who: "leaderOrChar", n: 1 }), n("amount", "Puissance (+ ou \u2212)", 1e3), DUR],
+      text: (p) => `${targetText(p.t)} ${p.amount >= 0 ? `gagne +${p.amount}` : `perd ${-p.amount}`} de puissance ${DUR.opts[p.dur]}`
+    },
+    cost: {
+      label: "Co\xFBt + / \u2212",
+      params: [TARGET({ side: "opp", who: "chars", n: 1 }), n("amount", "Co\xFBt (+ ou \u2212)", -2), DUR],
+      text: (p) => `${targetText(p.t)} ${p.amount >= 0 ? "gagne" : "perd"} ${Math.abs(p.amount)} de co\xFBt ${DUR.opts[p.dur]}`
+    },
+    grantKw: {
+      label: "Donner un mot-cl\xE9",
+      params: [
+        TARGET({ side: "mine", who: "chars", n: 1 }),
+        { k: "kw", label: "Mot-cl\xE9", type: "sel", def: "blocker", opts: KEYWORDS_AUTO },
+        DUR
+      ],
+      text: (p) => `${targetText(p.t)} gagne [${KEYWORDS_AUTO[p.kw]}] ${DUR.opts[p.dur]}`
+    },
+    donAdd: {
+      label: "Ajouter des DON!!",
+      params: [n("n", "DON!!"), { k: "state", label: "\xC9tat", type: "sel", def: "rested", opts: { rested: "repos\xE9(s)", active: "actif(s)" } }],
+      text: (p) => `ajoutez jusqu'\xE0 ${p.n} DON!! de votre deck DON!! et ${p.state === "active" ? "gardez-les actifs" : "reposez-les"}`
+    },
+    donAttach: { label: "Attacher des DON!! repos\xE9s", params: [n("n", "DON!!"), TARGET({ side: "mine", who: "leaderOrChar", n: 1 })], text: (p) => `attachez jusqu'\xE0 ${p.n} DON!! repos\xE9${p.n > 1 ? "s" : ""} \xE0 ${targetText(p.t)}` },
+    donUntap: { label: "Redresser des DON!!", params: [n("n", "DON!!")], text: (p) => `redressez jusqu'\xE0 ${p.n} de vos DON!!` },
+    donOppReturn: { label: "L'adversaire renvoie des DON!!", params: [n("n", "DON!!")], text: (p) => `votre adversaire renvoie ${p.n} DON!! de son terrain dans son deck DON!!` },
+    restOppDon: { label: "Reposer des DON!! adverses", params: [n("n", "DON!!")], text: (p) => `reposez jusqu'\xE0 ${p.n} DON!! de votre adversaire` },
+    lifeFromDeck: { label: "Ajouter le dessus du deck \xE0 sa Vie", params: [n("n", "Cartes")], text: (p) => `ajoutez jusqu'\xE0 ${p.n} carte${p.n > 1 ? "s" : ""} du dessus de votre deck au-dessus de votre Vie` },
+    lifeFromHand: { label: "Ajouter une carte de sa main \xE0 sa Vie", params: [n("n", "Cartes")], text: (p) => `ajoutez jusqu'\xE0 ${p.n} carte${p.n > 1 ? "s" : ""} de votre main au-dessus de votre Vie` },
+    lifeToHand: { label: "Prendre une de ses Vies en main", params: [n("n", "Vies")], text: (p) => `ajoutez ${p.n} de vos Vies \xE0 votre main` },
+    oppLifeRemove: {
+      label: "Retirer une Vie adverse",
+      params: [n("n", "Vies"), { k: "to", label: "Vers", type: "sel", def: "trash", opts: { trash: "sa d\xE9fausse", hand: "sa main" } }],
+      text: (p) => `placez ${p.n} des Vies de votre adversaire dans ${p.to === "hand" ? "sa main" : "sa d\xE9fausse"}`
+    },
+    lifeLook: { label: "Regarder ses Vies", params: [], text: () => "regardez toutes vos Vies" },
+    protect: {
+      label: "Ne peut pas \xEAtre mis KO",
+      params: [
+        TARGET({ side: "mine", who: "self", n: 1 }),
+        { k: "by", label: "Par", type: "sel", def: "both", opts: { battle: "en combat", effect: "par effet", both: "en combat ni par effet" } },
+        DUR
+      ],
+      text: (p) => `${targetText(p.t)} ne peut pas \xEAtre mis KO ${p.by === "battle" ? "en combat" : p.by === "effect" ? "par des effets" : "en combat ni par des effets"} ${DUR.opts[p.dur]}`
+    },
+    cannotAttack: { label: "Ne peut pas attaquer", params: [TARGET({ side: "opp", who: "chars", n: 1 })], text: (p) => `${targetText(p.t)} ne peut pas attaquer jusqu'\xE0 la fin du prochain tour adverse` },
+    redirect: { label: "Changer la cible de l'attaque", params: [], text: () => "choisissez votre Leader ou un de vos Personnages : il devient la cible de l'attaque" },
+    noBlockers: { label: "L'adversaire ne peut pas bloquer", params: [], text: () => "votre adversaire ne peut pas activer de [Bloqueur] pendant ce combat" },
+    negate: { label: "Annuler les effets", params: [TARGET({ side: "opp", who: "chars", n: 1 })], text: (p) => `${targetText(p.t)} perd ses effets jusqu'\xE0 la fin du tour` }
+  };
+  var CONTINUOUS_ACTIONS = ["power", "cost", "grantKw", "protect"];
+  var SIDES = { mine: "\xE0 vous", opp: "adverse" };
+  var WHO = {
+    self: "cette carte",
+    leader: "Leader",
+    chars: "Personnage(s)",
+    leaderOrChar: "Leader ou Personnage",
+    allChars: "tous les Personnages",
+    leaderAndAll: "Leader et tous les Personnages"
+  };
+  function filterText(f = {}, short = false) {
+    const parts = [];
+    if (f.type) parts.push(`de type {${f.type}}`);
+    if (f.color) parts.push(f.color);
+    if (f.attr) parts.push(`d'attribut ${f.attr}`);
+    if (f.name) parts.push(`nomm\xE9 \xAB ${f.name} \xBB`);
+    if (f.cardType) parts.push(`de type ${{ character: "Personnage", event: "\xC9v\xE9nement", stage: "Lieu", leader: "Leader" }[f.cardType]}`);
+    if (f.maxCost !== void 0 && f.maxCost !== "") parts.push(`de co\xFBt ${f.maxCost} ou moins`);
+    if (f.minCost !== void 0 && f.minCost !== "") parts.push(`de co\xFBt ${f.minCost} ou plus`);
+    if (f.maxPower !== void 0 && f.maxPower !== "") parts.push(`de puissance ${f.maxPower} ou moins`);
+    if (f.rested === "yes") parts.push("repos\xE9");
+    if (f.rested === "no") parts.push("actif");
+    if (!parts.length) return "";
+    return (short ? " " : " ") + parts.join(" ");
+  }
+  function targetText(t = {}) {
+    const opp = t.side === "opp";
+    const f = filterText(t.f);
+    switch (t.who) {
+      case "self":
+        return "cette carte";
+      case "leader":
+        return opp ? "le Leader adverse" : "votre Leader";
+      case "allChars":
+        return opp ? `tous les Personnages adverses${f}` : `tous vos Personnages${f}`;
+      case "leaderAndAll":
+        return opp ? "le Leader adverse et tous ses Personnages" : "votre Leader et tous vos Personnages";
+      case "leaderOrChar":
+        return opp ? `le Leader adverse ou jusqu'\xE0 ${t.n} Personnage${t.n > 1 ? "s" : ""} adverse${t.n > 1 ? "s" : ""}${f}` : `votre Leader ou jusqu'\xE0 ${t.n} de vos Personnages${f}`;
+      default:
+        return opp ? `jusqu'\xE0 ${t.n} Personnage${t.n > 1 ? "s" : ""} adverse${t.n > 1 ? "s" : ""}${f}` : `jusqu'\xE0 ${t.n} de vos Personnages${f}`;
+    }
+  }
+  var cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+  function effectText(e) {
+    const w = WHEN[e.when] || {};
+    const head2 = [w.tag, e.once ? "[Une fois par tour]" : ""].filter(Boolean);
+    const donCond = (e.conds || []).filter((c) => c.k === "donAttached").map((c) => CONDS.donAttached.text(c));
+    const otherConds = (e.conds || []).filter((c) => c.k !== "donAttached" && CONDS[c.k]).map((c) => CONDS[c.k].text(c));
+    const costs = (e.costs || []).filter((c) => COSTS[c.k]).map((c) => COSTS[c.k].text(c));
+    const acts = (e.actions || []).filter((a) => ACTIONS[a.k]).map((a) => ACTIONS[a.k].text(a));
+    let body = acts.join(", puis ");
+    if (otherConds.length) body = `${otherConds.join(" ")} ${body}`;
+    body = cap(body.trim());
+    if (body && !body.endsWith(".")) body += ".";
+    const costTxt = costs.length ? `${costs.join(", ")} : ` : "";
+    return [...donCond, ...head2].join(" ") + (head2.length || donCond.length ? " " : "") + costTxt + body;
+  }
+  function effectsText(card) {
+    const list = card?.effects || [];
+    const kws = (card?.keywords || []).map((k) => `[${KEYWORDS_AUTO[k]}]`).join(" ");
+    const main = list.filter((e) => e.when !== "trigger").map(effectText);
+    const trig = list.filter((e) => e.when === "trigger").map(effectText);
+    return { main: [kws, ...main].filter(Boolean).join("\n"), trigger: trig.join(" ") };
+  }
+  function defaults(params) {
+    const o = {};
+    for (const p of params) o[p.k] = structuredClone(p.def);
+    return o;
   }
 
   // js/cards.js
@@ -21019,14 +21255,16 @@ ${suffix}`;
   ];
   var esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   var uid = () => crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2);
-  var hasWord = (card, words) => {
+  var hasWord = (card, key, words) => {
+    if (card?.keywords?.includes(key)) return true;
     const t = `${card?.effect || ""}`.toLowerCase();
     return words.some((w) => t.includes(w));
   };
-  var isBlocker = (c) => hasWord(c, ["[bloqueur]", "[blocker]"]);
-  var hasRush = (c) => hasWord(c, ["[initiative]", "[rush]"]);
-  var hasDoubleAttack = (c) => hasWord(c, ["[double attaque]", "[double attack]"]);
-  var hasBanish = (c) => hasWord(c, ["[exil]", "[banish]"]);
+  var isBlocker = (c) => hasWord(c, "blocker", ["[bloqueur]", "[blocker]"]);
+  var hasRush = (c) => hasWord(c, "rush", ["[initiative]", "[rush]"]);
+  var hasDoubleAttack = (c) => hasWord(c, "double", ["[double attaque]", "[double attack]"]);
+  var hasBanish = (c) => hasWord(c, "banish", ["[exil]", "[banish]"]);
+  var isUnblockable = (c) => hasWord(c, "unblockable", ["[imblocable]"]);
   var attributesOf = (card) => String(card?.attribute || "").split("/").map((a) => a.trim()).filter(Boolean).slice(0, 2);
   var attrKey = (a) => a.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z]+/g, "");
   function newCard() {
@@ -21047,16 +21285,18 @@ ${suffix}`;
       image: "",
       rarity: "C",
       inBoosters: true,
-      ink: "light"
+      ink: "light",
+      keywords: [],
+      effects: []
     };
   }
   function fmtEffect(txt) {
     return esc(txt).replace(/\[([^\]]+)\]/g, '<span class="kw">$1</span>').replace(/\n/g, "<br>");
   }
   function shade(hex, amt) {
-    const n = parseInt(hex.slice(1), 16);
+    const n2 = parseInt(hex.slice(1), 16);
     const ch = (v) => Math.round(amt > 0 ? v + (255 - v) * amt : v * (1 + amt));
-    return `rgb(${ch(n >> 16)}, ${ch(n >> 8 & 255)}, ${ch(n & 255)})`;
+    return `rgb(${ch(n2 >> 16)}, ${ch(n2 >> 8 & 255)}, ${ch(n2 & 255)})`;
   }
   function cardHTML(card, o = {}) {
     if (!card) return `<div class="card back ${o.cls || ""}" ${o.attrs || ""}><div class="frame"><div class="back-logo">OPTCG<small>Maison</small></div></div></div>`;
@@ -21073,7 +21313,10 @@ ${suffix}`;
     const ctr = t === "character" && Number(card.counter) > 0 ? `<div class="ctr" title="Contre"><span>+${esc(card.counter)}</span></div>` : "";
     const attrs = attributesOf(card);
     const attr = fighter && attrs.length ? `<div class="attr">${attrs.map((a) => `<span class="a-${attrKey(a)}">${esc(a)}</span>`).join("")}</div>` : "";
-    const trig = card.trigger && t !== "leader" ? `<div class="trg"><span class="kw trig">D\xE9clenchement</span> ${fmtEffect(card.trigger)}</div>` : "";
+    const auto = effectsText(card);
+    const fxText = [auto.main, card.effect].filter(Boolean).join("\n");
+    const trigText = [auto.trigger, card.trigger].filter(Boolean).join(" ");
+    const trig = trigText && t !== "leader" ? `<div class="trg"><span class="kw trig">D\xE9clenchement</span> ${fmtEffect(trigText)}</div>` : "";
     const r = RARITIES[card.rarity] ? card.rarity : "C";
     const hex = (card.colors?.length ? card.colors : ["noir"]).map((c) => COLORS[c]?.hex || "#555");
     const len = (card.name || "").length;
@@ -21088,7 +21331,7 @@ ${suffix}`;
       <div class="nm${len > 18 ? " xlong" : len > 13 ? " long" : ""}"><span>${esc(card.name || "Sans nom")}</span></div>
       <div class="info"><div class="info-in">
         <div class="tl">${TYPES[t] || ""}${card.traits ? " \xB7 " + esc(card.traits) : ""}</div>
-        ${card.effect ? `<div class="fx">${fmtEffect(card.effect)}</div>` : ""}
+        ${fxText ? `<div class="fx">${fmtEffect(fxText)}</div>` : ""}
         ${trig}
       </div></div>
       <div class="rar" title="${RARITIES[r].label}">${RARITIES[r].short}</div>
@@ -21205,9 +21448,165 @@ ${suffix}`;
     });
   }
 
+  // js/effects-editor.js
+  var SECTIONS = { conds: ["Conditions", CONDS], costs: ["Co\xFBts", COSTS], actions: ["Actions", ACTIONS] };
+  var KW_SHOWN = ["blocker", "rush", "double", "banish", "unblockable"];
+  function mountEffectsEditor(el, getCard, onChange2) {
+    el.addEventListener("change", (e) => handle(e, true));
+    el.addEventListener("input", (e) => {
+      if (e.target.matches("input[type=text], input[type=number]")) handle(e, false);
+    });
+    el.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-act]");
+      if (!b) return;
+      const card = getCard();
+      const { act } = b.dataset;
+      const block2 = b.closest("[data-i]");
+      const i = block2 ? +block2.dataset.i : -1;
+      const row = b.closest("[data-j]");
+      if (act === "add-effect") card.effects.push({ when: "onPlay", once: false, conds: [], costs: [], actions: [] });
+      else if (act === "del-effect") card.effects.splice(i, 1);
+      else if (act === "del") card.effects[i][row.dataset.sec].splice(+row.dataset.j, 1);
+      else if (act === "up" && +row.dataset.j > 0) {
+        const arr = card.effects[i][row.dataset.sec];
+        const j = +row.dataset.j;
+        [arr[j - 1], arr[j]] = [arr[j], arr[j - 1]];
+      } else return;
+      render2();
+      onChange2();
+    });
+    function handle(e, structural) {
+      const card = getCard();
+      const t = e.target;
+      if (t.dataset.kw) {
+        const set = new Set(card.keywords || []);
+        if (t.checked) set.add(t.dataset.kw);
+        else set.delete(t.dataset.kw);
+        card.keywords = [...set];
+        onChange2();
+        return;
+      }
+      const block2 = t.closest("[data-i]");
+      if (!block2) return;
+      const eff = card.effects[+block2.dataset.i];
+      if (t.dataset.add) {
+        const sec = t.dataset.add;
+        const k = t.value;
+        if (k) eff[sec].push({ k, ...defaults(SECTIONS[sec][1][k].params) });
+        render2();
+        onChange2();
+        return;
+      }
+      if (t.dataset.f === "when") eff.when = t.value;
+      else if (t.dataset.f === "once") eff.once = t.checked;
+      else if (t.dataset.p) {
+        const row = t.closest("[data-j]");
+        const item = eff[row.dataset.sec][+row.dataset.j];
+        setPath(item, t.dataset.p, t.type === "number" ? t.value === "" ? "" : Number(t.value) : t.value);
+      }
+      if (structural) render2();
+      else block2.querySelector(".fxe-text").textContent = effectText(eff);
+      onChange2();
+    }
+    function render2() {
+      const card = getCard();
+      card.effects || (card.effects = []);
+      card.keywords || (card.keywords = []);
+      el.innerHTML = `
+      <div class="fxe-kws"><b>Mots-cl\xE9s</b>
+        ${KW_SHOWN.map((k) => `<label class="check"><input type="checkbox" data-kw="${k}" ${card.keywords.includes(k) ? "checked" : ""}> ${KEYWORDS_AUTO[k]}</label>`).join("")}
+      </div>
+      ${card.effects.map((eff, i) => blockHTML(eff, i, card)).join("")}
+      <button type="button" class="btn" data-act="add-effect">+ Ajouter un effet automatique</button>`;
+    }
+    render2();
+    return { render: render2 };
+  }
+  function blockHTML(eff, i, card) {
+    const w = WHEN[eff.when] || {};
+    const allowed = Object.entries(WHEN).filter(([k]) => {
+      if (k === "main" || k === "counter") return card.type === "event";
+      if (k === "trigger") return card.type !== "leader";
+      if (card.type === "event") return ["main", "counter", "trigger"].includes(k);
+      return true;
+    });
+    return `<div class="fxe-block" data-i="${i}">
+    <div class="fxe-head">
+      <label>Quand <select data-f="when">${allowed.map(([k, v]) => `<option value="${k}" ${k === eff.when ? "selected" : ""}>${v.label}</option>`).join("")}</select></label>
+      <label class="check"><input type="checkbox" data-f="once" ${eff.once ? "checked" : ""}> Une fois par tour</label>
+      <button type="button" class="btn small danger" data-act="del-effect">Supprimer l'effet</button>
+    </div>
+    ${sectionHTML(eff, "conds")}
+    ${w.continuous ? "" : sectionHTML(eff, "costs")}
+    ${sectionHTML(eff, "actions", w.continuous)}
+    <p class="fxe-text">${esc(effectText(eff))}</p>
+  </div>`;
+  }
+  function sectionHTML(eff, sec, continuous = false) {
+    const [title, defs] = SECTIONS[sec];
+    const rows = eff[sec].map((item, j) => {
+      const def = defs[item.k];
+      if (!def) return "";
+      return `<div class="fxe-row" data-sec="${sec}" data-j="${j}">
+      <span class="fxe-label">${esc(def.label)}</span>
+      ${def.params.map((p) => paramHTML(p, item)).join("")}
+      <span class="fxe-tools">${j ? '<button type="button" class="btn small ghost" data-act="up" title="Monter">\u2191</button>' : ""}<button type="button" class="btn small ghost" data-act="del" title="Retirer">\xD7</button></span>
+    </div>`;
+    }).join("");
+    let options;
+    if (sec === "actions") {
+      options = Object.entries(ACTION_GROUPS).map(([g, keys]) => {
+        const ks = continuous ? keys.filter((k) => CONTINUOUS_ACTIONS.includes(k)) : keys;
+        return ks.length ? `<optgroup label="${g}">${ks.map((k) => `<option value="${k}">${esc(ACTIONS[k].label)}</option>`).join("")}</optgroup>` : "";
+      }).join("");
+    } else options = Object.entries(defs).map(([k, d]) => `<option value="${k}">${esc(d.label)}</option>`).join("");
+    return `<div class="fxe-sec"><div class="fxe-sec-title">${title}</div>${rows}
+    <select data-add="${sec}" class="fxe-add"><option value="">+ Ajouter ${sec === "conds" ? "une condition" : sec === "costs" ? "un co\xFBt" : "une action"}\u2026</option>${options}</select></div>`;
+  }
+  function paramHTML(p, item) {
+    const v = item[p.k];
+    if (p.type === "num") return `<label>${esc(p.label)} <input type="number" data-p="${p.k}" value="${esc(v)}"></label>`;
+    if (p.type === "text") return `<label>${esc(p.label)} <input type="text" data-p="${p.k}" value="${esc(v)}"></label>`;
+    if (p.type === "sel") return `<label>${esc(p.label)} ${select(p.k, p.opts, v)}</label>`;
+    if (p.type === "filter") return filterHTML(p.k, v || {});
+    if (p.type === "target") {
+      const t = v || {};
+      const needN = !["self", "leader", "allChars", "leaderAndAll"].includes(t.who);
+      return `<span class="fxe-target">
+      <label>Camp ${select(`${p.k}.side`, SIDES, t.side)}</label>
+      <label>Qui ${select(`${p.k}.who`, WHO, t.who)}</label>
+      ${needN ? `<label>Jusqu'\xE0 <input type="number" min="1" data-p="${p.k}.n" value="${esc(t.n)}"></label>` : ""}
+      ${["self", "leader"].includes(t.who) ? "" : filterHTML(`${p.k}.f`, t.f || {})}
+    </span>`;
+    }
+    return "";
+  }
+  function filterHTML(path, f) {
+    return `<span class="fxe-filter">
+    <label>Type <input type="text" data-p="${path}.type" value="${esc(f.type || "")}" placeholder="ex. Marine"></label>
+    <label>Couleur ${select(`${path}.color`, { "": "\u2014", ...COLORS_FR }, f.color || "")}</label>
+    <label>Attribut ${select(`${path}.attr`, { "": "\u2014", ...Object.fromEntries(ATTRIBUTES.map((a) => [a, a])) }, f.attr || "")}</label>
+    <label>Co\xFBt max <input type="number" data-p="${path}.maxCost" value="${esc(f.maxCost ?? "")}"></label>
+    <label>Puissance max <input type="number" step="1000" data-p="${path}.maxPower" value="${esc(f.maxPower ?? "")}"></label>
+    <label>\xC9tat ${select(`${path}.rested`, { "": "\u2014", yes: "repos\xE9", no: "actif" }, f.rested || "")}</label>
+  </span>`;
+  }
+  function select(path, opts, v) {
+    return `<select data-p="${path}">${Object.entries(opts).map(([k, l]) => `<option value="${esc(k)}" ${String(k) === String(v ?? "") ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+  }
+  function setPath(obj, path, value) {
+    const keys = path.split(".");
+    let o = obj;
+    for (const k of keys.slice(0, -1)) o = o[k] || (o[k] = {});
+    const last = keys.at(-1);
+    if (value === "" && keys.length > 1) delete o[last];
+    else o[last] = value;
+  }
+
   // js/editor.js
   var root = () => document.getElementById("tab-cards");
   var cur = newCard();
+  var fxEd = null;
   var filter = { q: "", type: "", color: "", rarity: "" };
   function initEditor() {
     root().innerHTML = `
@@ -21239,10 +21638,12 @@ ${suffix}`;
           <input id="ed-attr2" list="ed-attrs"></div>
       </div>
       <div class="field"><label for="ed-traits">Types / Familles</label><input id="ed-traits" maxlength="80" placeholder="Ex. : \xC9quipage du Requin / Marine"></div>
-      <div class="field"><label for="ed-effect">Effet</label>
+      <div class="field"><label>Effets automatiques <small>(le jeu les applique tout seul ; le texte de la carte s'\xE9crit automatiquement)</small></label>
+        <div id="ed-fx" class="fxe"></div></div>
+      <div class="field"><label for="ed-effect">Texte libre <small>(effet sp\xE9cial non pr\xE9vu : \xE0 appliquer \xE0 la main pendant la partie)</small></label>
         <div class="kws">${KEYWORDS.map((k) => `<button type="button" data-kw="${esc(k)}">${esc(k)}</button>`).join("")}</div>
         <textarea id="ed-effect" rows="5" placeholder="[Jou\xE9e] Piochez 1 carte."></textarea></div>
-      <div class="field f-trigger"><label for="ed-trigger">D\xE9clenchement <small>(effet quand la carte est r\xE9v\xE9l\xE9e depuis la Vie)</small></label>
+      <div class="field f-trigger"><label for="ed-trigger">D\xE9clenchement en texte libre <small>(sinon, ajoutez un effet automatique \xAB D\xE9clenchement \xBB ci-dessus)</small></label>
         <textarea id="ed-trigger" rows="2" placeholder="Jouez cette carte."></textarea></div>
       <div class="field"><label>Image</label>
         <div class="row-btns">
@@ -21278,6 +21679,7 @@ ${suffix}`;
   </div>`;
     const r = root();
     const form = r.querySelector("form");
+    fxEd = mountEffectsEditor(r.querySelector("#ed-fx"), () => cur, preview);
     const val = (id) => r.querySelector("#" + id);
     r.querySelector("#ed-type").addEventListener("click", (e) => {
       const t = e.target.closest("[data-type]")?.dataset.type;
@@ -21337,7 +21739,7 @@ ${suffix}`;
       if (!cur.name.trim()) return msg("Donnez un nom \xE0 la carte.", true);
       msg("Enregistrement\u2026");
       try {
-        const c = { ...cur, colors: cur.colors.slice(0, maxColors()) };
+        const c = { ...structuredClone(cur), colors: cur.colors.slice(0, maxColors()) };
         await saveCard(c);
         cur.image = c.image;
         fill();
@@ -21354,7 +21756,7 @@ ${suffix}`;
       msg("");
     });
     val("ed-dup").addEventListener("click", () => {
-      cur = { ...cur, id: uid(), colors: [...cur.colors], name: cur.name ? cur.name + " (copie)" : "" };
+      cur = { ...structuredClone(cur), id: uid(), name: cur.name ? cur.name + " (copie)" : "" };
       fill();
       msg("Copie cr\xE9\xE9e : pensez \xE0 enregistrer.");
     });
@@ -21483,6 +21885,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     show2(".f-attr", t === "leader" || t === "character");
     show2(".f-attr2", t === "leader" || t === "character");
     show2(".f-trigger", t !== "leader");
+    fxEd?.render();
     r.querySelector("#ed-title").textContent = S.byId[cur.id] ? `Modifier \xAB ${cur.name} \xBB` : "Nouvelle carte";
     preview();
   }
@@ -21669,7 +22072,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       const l = S.byId[d.leader];
       main.querySelector(".dk-leader").innerHTML = l ? `<button class="grid-card" data-act="unleader" title="Retirer le Leader">${cardHTML(l)}</button>` : '<p class="muted small">Cliquez sur un Leader dans la liste de droite.</p>';
       const entries = Object.entries(d.cards).filter(([id]) => S.byId[id]).sort(([a], [b]) => S.byId[a].cost - S.byId[b].cost || S.byId[a].name.localeCompare(S.byId[b].name));
-      main.querySelector(".dk-content").innerHTML = entries.length ? entries.map(([id, n]) => `<button class="grid-card" data-act="rm" data-id="${id}">${cardHTML(S.byId[id])}<span class="qty">\xD7${n}</span></button>`).join("") : '<p class="muted small">Vide.</p>';
+      main.querySelector(".dk-content").innerHTML = entries.length ? entries.map(([id, n2]) => `<button class="grid-card" data-act="rm" data-id="${id}">${cardHTML(S.byId[id])}<span class="qty">\xD7${n2}</span></button>`).join("") : '<p class="muted small">Vide.</p>';
       renderPool();
     }
     function renderPool() {
@@ -21790,9 +22193,9 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   var oppTurn = () => G?.phase === "play" && G.turn.player === other(G.role);
   var myCard = (inst) => G.myCards[inst.c];
   var oppCard = (inst) => G.oppCards[inst.c];
-  var power = (inst, card, ownerTurn) => (Number(card?.power) || 0) + (inst.m || 0) + (ownerTurn ? (inst.d || 0) * 1e3 : 0);
-  var myPower = (inst) => power(inst, myCard(inst), myTurn());
-  var oppPower = (inst) => power(inst, oppCard(inst), oppTurn());
+  var power = (inst, card, ownerTurn) => (Number(card?.power) || 0) + (inst.m || 0) + (inst.bm || 0) + (inst.pm || 0) + (ownerTurn ? (inst.d || 0) * 1e3 : 0);
+  var myPower = (inst) => power(inst, myCard(inst), myTurn()) + staticSum(inst, "power");
+  var oppPower = (inst) => inst.p ?? power(inst, oppCard(inst), oppTurn());
   var name = (c) => `\xAB ${c?.name || "?"} \xBB`;
   var emptySide = () => ({
     leader: null,
@@ -22006,11 +22409,20 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         G.turn = { player: m.player, count: m.count };
         break;
       case "endTurn":
-        beginTurn(m.count + 1);
+        oppTurnEnded(m.count);
         return;
       case "log":
-        G.log.push({ who: "opp", text: m.text });
+        G.log.push({ who: "opp", text: m.text, manual: m.manual });
         break;
+      case "fx":
+        applyFx(m);
+        return;
+      case "manual":
+        G.oppManual = m.on ? m.c : null;
+        break;
+      case "contest":
+        contested();
+        return;
       case "chat":
         G.log.push({ who: "opp", text: m.text, chat: true });
         break;
@@ -22019,13 +22431,16 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         break;
       case "attack":
         G.battle = { ...m.b, role: "def" };
-        break;
+        render();
+        fireAll("onOppAttack");
+        return;
       case "battleUpd":
         if (G.battle) Object.assign(G.battle, m.b);
         break;
       case "battleEnd":
         G.battle = null;
         G.select = null;
+        endBattleMods();
         break;
       case "gameover":
         G.phase = "over";
@@ -22040,18 +22455,19 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     }
     render();
   }
-  function log(text) {
-    G.log.push({ who: "me", text });
-    send({ t: "log", text });
+  function log(text, manual = Boolean(G?.manual)) {
+    G.log.push({ who: "me", text, manual });
+    send({ t: "log", text, manual });
   }
   function sys(text) {
     G?.log.push({ who: "sys", text });
   }
   function pub() {
     const m = G.me;
+    const deco = (i) => i && { ...i, p: myPower(i), cc: curCost(i, myCard(i)) };
     return {
-      leader: m.leader,
-      chars: m.chars,
+      leader: deco(m.leader),
+      chars: m.chars.map(deco),
       stage: m.stage,
       trash: m.trash,
       hand: m.hand.length,
@@ -22067,6 +22483,15 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     if (G.phase === "play" && G.me.deck.length === 0) {
       lose("Son deck est vide.");
       return;
+    }
+    const b = G.battle;
+    if (b?.role === "atk" && b.step === "defense") {
+      const atk = locate(b.attacker)?.inst;
+      const pw = atk ? myPower(atk) : b.atkPower;
+      if (pw !== b.atkPower) {
+        b.atkPower = pw;
+        send({ t: "battleUpd", b: { atkPower: pw } });
+      }
     }
     send({ t: "view", v: pub() });
     render();
@@ -22092,7 +22517,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     const me = G.me;
     const leaderId = G.deckDef.leader;
     me.leader = { u: uid(), c: leaderId, r: false, d: 0, m: 0 };
-    me.deck = shuffle(Object.entries(G.deckDef.cards).flatMap(([c, n]) => Array.from({ length: n }, () => ({ u: uid(), c, r: false, d: 0, m: 0 }))));
+    me.deck = shuffle(Object.entries(G.deckDef.cards).flatMap(([c, n2]) => Array.from({ length: n2 }, () => ({ u: uid(), c, r: false, d: 0, m: 0 }))));
     me.hand = me.deck.splice(0, 5);
     G.phase = "mulligan";
     commit();
@@ -22106,8 +22531,8 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       me.hand = me.deck.splice(0, 5);
       log("fait un mulligan.");
     } else log("garde sa main.");
-    const n = Number(myCard(me.leader).life) || 5;
-    for (let i = 0; i < n && me.deck.length; i++) me.life.push(me.deck.shift());
+    const n2 = Number(myCard(me.leader).life) || 5;
+    for (let i = 0; i < n2 && me.deck.length; i++) me.life.push(me.deck.shift());
     G.phase = "ready";
     G.meReady = true;
     send({ t: "ready" });
@@ -22123,7 +22548,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   function fieldInsts() {
     return [G.me.leader, ...G.me.chars, G.me.stage].filter(Boolean);
   }
-  function beginTurn(count) {
+  async function beginTurn(count) {
     const me = G.me;
     G.turn = { player: G.role, count };
     G.battle = null;
@@ -22133,7 +22558,8 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     for (const i of fieldInsts()) {
       back += i.d || 0;
       i.d = 0;
-      i.r = false;
+      if (i.frozen) i.frozen = false;
+      else i.r = false;
     }
     me.donActive += me.donRested + back;
     me.donRested = 0;
@@ -22145,15 +22571,23 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       }
       me.hand.push(me.deck.shift());
     }
-    const n = Math.min(first ? 1 : 2, me.donDeck);
-    me.donDeck -= n;
-    me.donActive += n;
-    log(`${first ? "ne pioche pas (1er tour)" : "pioche 1 carte"} et re\xE7oit ${n} DON!!.`);
+    const n2 = Math.min(first ? 1 : 2, me.donDeck);
+    me.donDeck -= n2;
+    me.donActive += n2;
+    log(`${first ? "ne pioche pas (1er tour)" : "pioche 1 carte"} et re\xE7oit ${n2} DON!!.`);
     commit();
+    await fireAll("startOfTurn");
   }
-  function endTurn() {
+  async function oppTurnEnded(count) {
+    endTurnMods();
+    await fireAll("endOfOppTurn");
+    beginTurn(count + 1);
+  }
+  async function endTurn() {
     if (G.battle) return toast("Terminez le combat en cours d'abord.");
-    for (const i of fieldInsts()) i.m = 0;
+    if (G.manual) endManual();
+    await fireAll("endOfTurn");
+    endTurnMods();
     log("termine son tour.");
     G.turn = { player: other(G.role), count: G.turn.count };
     G.select = null;
@@ -22184,7 +22618,9 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       battle: null,
       select: null,
       winner: null,
-      reveals: []
+      reveals: [],
+      manual: null,
+      oppManual: null
     });
     sys("Nouvelle partie !");
     if (G.role === "host") coinFlip();
@@ -22209,7 +22645,8 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     else me[loc.zone].splice(loc.idx, 1);
     if (loc.zone === "chars" || loc.zone === "stage") {
       me.donRested += inst.d || 0;
-      Object.assign(inst, { d: 0, r: false, m: 0 });
+      for (const k of ["m", "bm", "pm", "cm", "cmt", "kw", "prot", "frozen", "noAtk", "neg", "used"]) delete inst[k];
+      Object.assign(inst, { d: 0, r: false });
     }
     if (to === "stage") {
       if (me.stage) move(me.stage.u, "trash");
@@ -22234,7 +22671,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     const loc = locate(u);
     if (!loc) return;
     const c = myCard(loc.inst);
-    const cost = free ? 0 : Number(c.cost) || 0;
+    const cost = free ? 0 : Math.max(0, curCost(loc.inst, c));
     if (cost > G.me.donActive) return toast(`Pas assez de DON!! actifs : il en faut ${cost}.`);
     if (c.type === "character" && G.me.chars.length >= 5) {
       const victim = await pickCard("Zone pleine (5 Personnages) : choisissez celui \xE0 d\xE9fausser", G.me.chars, myCard);
@@ -22245,6 +22682,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     G.me.donActive -= cost;
     G.me.donRested += cost;
     const from = loc.zone === "hand" ? "" : ` depuis ${zoneName(loc.zone)}`;
+    const inst = loc.inst;
     if (c.type === "character") {
       move(u, "chars");
       log(`joue ${name(c)}${from}${cost ? ` (co\xFBt ${cost})` : ""}.`);
@@ -22253,10 +22691,23 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       log(`joue le Lieu ${name(c)}${from}${cost ? ` (co\xFBt ${cost})` : ""}.`);
     } else if (c.type === "event") {
       move(u, "trash");
-      reveal(loc.inst, "\xC9v\xE9nement activ\xE9");
+      reveal(inst, "\xC9v\xE9nement activ\xE9");
       log(`active l'\xC9v\xE9nement ${name(c)}${cost ? ` (co\xFBt ${cost})` : ""}.`);
     }
     commit();
+    if (c.type === "event") await fireCard(inst, "main");
+    else {
+      await fireCard(inst, "onPlay");
+      if (c.type === "character") await fireAll("onPlayChar", inst.u);
+    }
+    if (hasFreeText(c) && String(c.effect || "").trim() && !G.manual) {
+      const go = await ask(
+        "Effet en texte libre",
+        `<div class="ask-card">${cardHTML(c)}</div><p>Cette carte a un effet que le jeu ne fait pas automatiquement. Le r\xE9soudre \xE0 la main maintenant ?</p>`,
+        [{ label: "R\xE9soudre \xE0 la main", value: true, cls: "primary" }, { label: "Non", value: false, cls: "ghost" }]
+      );
+      if (go) startManual(inst);
+    }
   }
   var zoneName = (z) => ({
     hand: "la main",
@@ -22269,11 +22720,14 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   function startAttack(inst) {
     if (G.turn.count <= 2) return toast("Personne ne peut attaquer pendant son premier tour.");
     const c = myCard(inst);
-    if (c.type === "character" && inst.t === G.turn.count && !hasRush(c) && !confirm(`${c.name} a \xE9t\xE9 jou\xE9 ce tour et n'a pas [Initiative]. Attaquer quand m\xEAme ?`)) return;
+    if ((inst.noAtk || 0) >= G.turn.count) return toast(`${c.name} ne peut pas attaquer ce tour-ci.`);
+    if (c.type === "character" && inst.t === G.turn.count && !hasKw(inst, "rush")) {
+      return toast(`${c.name} a \xE9t\xE9 jou\xE9 ce tour : il lui faut [Initiative] pour attaquer.`);
+    }
     G.select = { kind: "attack", attacker: inst.u };
     render();
   }
-  function declareAttack(targetInst, isLeader) {
+  async function declareAttack(targetInst, isLeader) {
     const atk = locate(G.select.attacker)?.inst;
     G.select = null;
     if (!atk) return;
@@ -22289,11 +22743,13 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       targetIsLeader: isLeader,
       counter: 0,
       blocker: null,
-      double: hasDoubleAttack(c),
-      banish: hasBanish(c)
+      double: hasKw(atk, "double"),
+      banish: hasKw(atk, "banish"),
+      noBlock: hasKw(atk, "unblockable")
     };
     log(`attaque ${name(oppCard(targetInst))} avec ${name(c)}.`);
     commit();
+    await fireCard(atk, "onAttack");
   }
   function sendAttack() {
     const b = G.battle;
@@ -22313,6 +22769,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     const atk = locate(G.battle.attacker)?.inst;
     if (atk) atk.r = false;
     G.battle = null;
+    endBattleMods();
     log("annule son attaque.");
     commit();
   }
@@ -22321,13 +22778,15 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     send({ t: "battleUpd", b: { counter, blocker, target, targetCard, targetIsLeader } });
     commit();
   }
-  function block(inst) {
+  async function block(inst) {
     const c = myCard(inst);
-    if (!isBlocker(c) && !confirm(`${c.name} n'a pas [Bloqueur]. Bloquer quand m\xEAme ?`)) return;
+    if (G.battle.noBlock) return toast("Cette attaque ne peut pas \xEAtre bloqu\xE9e.");
+    if (!hasKw(inst, "blocker")) return toast(`${c.name} n'a pas [Bloqueur].`);
     inst.r = true;
     Object.assign(G.battle, { blocker: inst.u, target: inst.u, targetCard: inst.c, targetIsLeader: false });
     log(`bloque avec ${name(c)}.`);
     battleUpd();
+    await fireCard(inst, "onBlock");
   }
   function counterChar(inst) {
     const c = myCard(inst);
@@ -22339,8 +22798,19 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   }
   async function counterEvent(inst) {
     const c = myCard(inst);
-    const cost = Number(c.cost) || 0;
+    const cost = Math.max(0, curCost(inst, c));
     if (cost > G.me.donActive) return toast(`Pas assez de DON!! actifs : il en faut ${cost}.`);
+    if (hasEffect(inst, "counter")) {
+      G.me.donActive -= cost;
+      G.me.donRested += cost;
+      move(inst.u, "trash");
+      reveal(inst, "\xC9v\xE9nement [Contre]");
+      log(`active ${name(c)} en Contre.`);
+      commit();
+      await fireCard(inst, "counter");
+      if (G.battle) battleUpd();
+      return;
+    }
     const bonus = await ask(
       `Contre : ${c.name}`,
       `<div class="ask-card">${cardHTML(c)}</div><p>Quel bonus de puissance donne cet \xC9v\xE9nement ? (0 si l'effet est autre)</p>`,
@@ -22369,18 +22839,20 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
           log(`subit l'attaque sur son Leader (${b.atkPower} contre ${def}).`);
           const lost = await takeDamage(b.double ? 2 : 1, b.banish);
           if (lost) return;
+        } else if (isProtected(tgt, "battle")) {
+          log(`${name(tc)} ne peut pas \xEAtre mis KO en combat (${b.atkPower} contre ${def}).`);
         } else {
-          move(tgt.u, "trash");
-          log(`voit ${name(tc)} mis KO (${b.atkPower} contre ${def}).`);
+          await koMine(tgt, ` (${b.atkPower} contre ${def})`);
         }
       } else log(`repousse l'attaque (${b.atkPower} contre ${def}).`);
     } else log("constate que l'attaque n'a plus de cible.");
     G.battle = null;
+    endBattleMods();
     send({ t: "battleEnd" });
     commit();
   }
-  async function takeDamage(n, banish) {
-    for (let k = 0; k < n; k++) {
+  async function takeDamage(n2, banish) {
+    for (let k = 0; k < n2; k++) {
       const me = G.me;
       if (!me.life.length) {
         lose("Son Leader a \xE9t\xE9 touch\xE9 sans carte Vie restante.");
@@ -22394,12 +22866,22 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         reveal(inst, "Vie exil\xE9e");
         continue;
       }
-      if (c.trigger) {
+      if (c.trigger || hasEffect(inst, "trigger")) {
         commit();
         const choice = await ask("D\xE9clenchement !", `<div class="ask-card">${cardHTML(c)}</div><p>Cette carte Vie a un effet <b>D\xE9clenchement</b>.</p>`, [
           { label: "Activer le D\xE9clenchement", value: "trig", cls: "primary" },
           { label: "Ajouter \xE0 la main", value: "hand" }
         ]);
+        if (choice === "trig" && hasEffect(inst, "trigger")) {
+          reveal(inst, "D\xE9clenchement");
+          log(`r\xE9v\xE8le ${name(c)} et active son D\xE9clenchement.`);
+          me.hand.push(inst);
+          const ctx = await fireCard(inst, "trigger");
+          if (ctx?.played && locate(inst.u)?.zone === "hand") await playCard(inst.u, true);
+          else if (locate(inst.u)?.zone === "hand") move(inst.u, "trash");
+          await fireAll("onLifeLost");
+          continue;
+        }
         if (choice === "trig") {
           reveal(inst, "D\xE9clenchement");
           log(`r\xE9v\xE8le ${name(c)} et active son D\xE9clenchement : ${c.trigger}`);
@@ -22417,8 +22899,580 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       }
       me.hand.push(inst);
       log("perd 1 Vie (ajout\xE9e \xE0 la main).");
+      await fireAll("onLifeLost");
     }
     return false;
+  }
+  var norm = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  var hasNum = (v) => v !== void 0 && v !== "" && v !== null;
+  var curCost = (inst, c) => (Number(c?.cost) || 0) + (inst?.cm || 0) + (inst?.cmt || 0);
+  var effectsOf = (inst) => inst?.neg ? [] : myCard(inst)?.effects || [];
+  var donTotal = () => G.me.donActive + G.me.donRested + fieldInsts().reduce((s, i) => s + (i.d || 0), 0);
+  function condOK(c, src) {
+    const me = G.me;
+    const L = myCard(me.leader);
+    switch (c.k) {
+      case "donAttached":
+        return (src?.d || 0) >= c.n;
+      case "donField":
+        return donTotal() >= c.n;
+      case "leaderType":
+        return norm(L.traits).includes(norm(c.v));
+      case "leaderColor":
+        return (L.colors || []).includes(c.v);
+      case "leaderAttr":
+        return attributesOf(L).map(norm).includes(norm(c.v));
+      case "lifeLE":
+        return me.life.length <= c.n;
+      case "lifeGE":
+        return me.life.length >= c.n;
+      case "oppLifeLE":
+        return (G.opp?.life ?? 99) <= c.n;
+      case "handLE":
+        return me.hand.length <= c.n;
+      case "charsGE":
+        return me.chars.filter((i) => !c.type || norm(myCard(i).traits).includes(norm(c.type))).length >= c.n;
+      case "trashGE":
+        return me.trash.length >= c.n;
+      case "myTurn":
+        return myTurn();
+      case "oppTurn":
+        return oppTurn();
+      default:
+        return true;
+    }
+  }
+  var condsOK = (e, src) => (e.conds || []).every((c) => condOK(c, src));
+  function matches(c, f = {}, inst = null, side = "me") {
+    if (!c) return false;
+    if (f.type && !norm(c.traits).includes(norm(f.type))) return false;
+    if (f.color && !(c.colors || []).includes(f.color)) return false;
+    if (f.attr && !attributesOf(c).map(norm).includes(norm(f.attr))) return false;
+    if (f.name && !norm(c.name).includes(norm(f.name))) return false;
+    if (f.cardType && c.type !== f.cardType) return false;
+    const cost = inst ? side === "opp" ? inst.cc ?? curCost(inst, c) : curCost(inst, c) : Number(c.cost) || 0;
+    if (hasNum(f.maxCost) && cost > f.maxCost) return false;
+    if (hasNum(f.minCost) && cost < f.minCost) return false;
+    if (hasNum(f.maxPower)) {
+      const pw = inst ? side === "opp" ? oppPower(inst) : myPower(inst) : Number(c.power) || 0;
+      if (pw > f.maxPower) return false;
+    }
+    if (f.rested === "yes" && !inst?.r) return false;
+    if (f.rested === "no" && inst?.r) return false;
+    return true;
+  }
+  function candidates(t, src) {
+    if (t.who === "self") return src ? [src] : [];
+    const opp = t.side === "opp";
+    const S2 = opp ? G.opp : G.me;
+    if (!S2) return [];
+    const getC = opp ? oppCard : myCard;
+    const out = [];
+    if (["leader", "leaderOrChar", "leaderAndAll"].includes(t.who) && S2.leader) out.push(S2.leader);
+    if (t.who !== "leader") out.push(...S2.chars.filter((i) => matches(getC(i), t.f, i, opp ? "opp" : "me")));
+    return out;
+  }
+  async function chooseTargets(t, src, title) {
+    const list = candidates(t, src);
+    if (["self", "leader", "allChars", "leaderAndAll"].includes(t.who)) return list;
+    if (!list.length) return [];
+    return await pickMany(title, list, t.side === "opp" ? oppCard : myCard, { max: t.n || 1 }) || [];
+  }
+  function staticEffects() {
+    const out = [];
+    for (const src of fieldInsts()) {
+      for (const e of effectsOf(src)) {
+        const w = WHEN[e.when];
+        if (!w?.continuous) continue;
+        if (e.when === "yourTurn" && !myTurn()) continue;
+        if (e.when === "oppTurn" && !oppTurn()) continue;
+        if (!condsOK(e, src)) continue;
+        out.push({ src, e });
+      }
+    }
+    return out;
+  }
+  function staticTargets(a, src) {
+    const t = { ...a.t || {}, side: "mine" };
+    if (a.t?.side === "opp") return [];
+    if (t.who === "self") return [src];
+    if (t.who === "leader") return [G.me.leader];
+    const chars = G.me.chars.filter((i) => matches(myCard(i), t.f, i, "me"));
+    return ["leaderOrChar", "leaderAndAll"].includes(t.who) ? [G.me.leader, ...chars] : chars;
+  }
+  var inStatic = false;
+  function staticSum(inst, kind) {
+    if (inStatic || !G?.me?.leader) return 0;
+    inStatic = true;
+    let s = 0;
+    try {
+      for (const { src, e } of staticEffects()) {
+        for (const a of e.actions || []) {
+          if (a.k !== kind) continue;
+          if (staticTargets(a, src).some((x) => x?.u === inst.u)) s += Number(a.amount) || 0;
+        }
+      }
+    } finally {
+      inStatic = false;
+    }
+    return s;
+  }
+  function staticFlag(inst, kind, test) {
+    if (inStatic || !G?.me?.leader) return false;
+    inStatic = true;
+    try {
+      return staticEffects().some(({ src, e }) => (e.actions || []).some((a) => a.k === kind && test(a) && staticTargets(a, src).some((x) => x?.u === inst.u)));
+    } finally {
+      inStatic = false;
+    }
+  }
+  function hasKw(inst, k) {
+    const c = myCard(inst);
+    if (!inst.neg && { blocker: isBlocker, rush: hasRush, double: hasDoubleAttack, banish: hasBanish, unblockable: isUnblockable }[k]?.(c)) return true;
+    if (inst.kw?.[k]) return true;
+    return staticFlag(inst, "grantKw", (a) => a.kw === k);
+  }
+  function isProtected(inst, kind) {
+    if (inst.prot?.[kind] || inst.prot?.both) return true;
+    return staticFlag(inst, "protect", (a) => a.by === kind || a.by === "both");
+  }
+  function applyMod(inst, a) {
+    const dur = a.dur || "turn";
+    if (a.k === "power") {
+      const key = dur === "battle" ? "bm" : dur === "perm" ? "pm" : "m";
+      inst[key] = (inst[key] || 0) + (Number(a.amount) || 0);
+    } else if (a.k === "cost") {
+      const key = dur === "perm" ? "cm" : "cmt";
+      inst[key] = (inst[key] || 0) + (Number(a.amount) || 0);
+    } else if (a.k === "grantKw") {
+      inst.kw = { ...inst.kw || {}, [a.kw]: dur };
+    } else if (a.k === "protect") {
+      inst.prot = { ...inst.prot || {}, [a.by || "both"]: dur };
+    } else if (a.k === "rest") inst.r = true;
+    else if (a.k === "untap") inst.r = false;
+    else if (a.k === "freeze") inst.frozen = true;
+    else if (a.k === "cannotAttack") inst.noAtk = G.turn.count + 1;
+    else if (a.k === "negate") inst.neg = true;
+  }
+  function clearDur(inst, dur) {
+    for (const key of ["kw", "prot"]) {
+      if (!inst[key]) continue;
+      for (const [k, v] of Object.entries(inst[key])) if (v === dur) delete inst[key][k];
+    }
+  }
+  function endBattleMods() {
+    for (const i of fieldInsts()) {
+      i.bm = 0;
+      clearDur(i, "battle");
+    }
+  }
+  function endTurnMods() {
+    for (const i of fieldInsts()) {
+      Object.assign(i, { m: 0, cmt: 0, neg: false });
+      clearDur(i, "turn");
+      clearDur(i, "battle");
+      i.bm = 0;
+    }
+  }
+  async function koMine(inst, why = "") {
+    const loc = locate(inst.u);
+    if (!loc || !["chars", "stage"].includes(loc.zone)) return;
+    const c = myCard(inst);
+    move(inst.u, "trash");
+    log(`voit ${name(c)} mis KO${why}.`);
+    await fireCard(inst, "onKO");
+    if (c.type === "character") await fireAll("onOwnKO");
+  }
+  function canPay(costs, src) {
+    const me = G.me;
+    for (const c of costs || []) {
+      if (c.k === "restDon" && me.donActive < c.n) return `Il faut ${c.n} DON!! actif(s).`;
+      if (c.k === "donReturn" && donTotal() < c.n) return `Il faut ${c.n} DON!! sur le terrain.`;
+      if (c.k === "discard" && me.hand.length < c.n) return `Il faut ${c.n} carte(s) en main.`;
+      if (c.k === "restSelf" && src?.r) return "Cette carte est d\xE9j\xE0 repos\xE9e.";
+      if (c.k === "koOwn" && !me.chars.length) return "Il faut un Personnage \xE0 mettre KO.";
+      if (c.k === "trashToDeck" && me.trash.length < c.n) return `Il faut ${c.n} carte(s) en d\xE9fausse.`;
+      if (c.k === "lifeToHand" && !me.life.length) return "Il faut une Vie.";
+    }
+    return "";
+  }
+  async function payCosts(costs, src) {
+    const me = G.me;
+    for (const c of costs || []) {
+      if (c.k === "restDon") {
+        me.donActive -= c.n;
+        me.donRested += c.n;
+      } else if (c.k === "donReturn") {
+        let n2 = c.n;
+        const take = (k) => {
+          const x = Math.min(n2, me[k]);
+          me[k] -= x;
+          n2 -= x;
+        };
+        take("donActive");
+        take("donRested");
+        for (const i of fieldInsts()) {
+          const x = Math.min(n2, i.d || 0);
+          i.d -= x;
+          n2 -= x;
+        }
+        me.donDeck += c.n - n2;
+      } else if (c.k === "discard") {
+        const picked = await pickMany(`Co\xFBt : d\xE9faussez ${c.n} carte(s)`, me.hand, myCard, { min: c.n, max: c.n, cancel: false });
+        for (const i of picked) move(i.u, "trash");
+      } else if (c.k === "restSelf") src.r = true;
+      else if (c.k === "koOwn") {
+        const [v] = await pickMany("Co\xFBt : mettez KO un de vos Personnages", me.chars, myCard, { min: 1, max: 1, cancel: false });
+        if (v) await koMine(v, " (co\xFBt)");
+      } else if (c.k === "trashToDeck") {
+        const picked = await pickMany(`Co\xFBt : ${c.n} carte(s) de la d\xE9fausse sous le deck`, me.trash, myCard, { min: c.n, max: c.n, cancel: false });
+        for (const i of picked) move(i.u, "deck", "bottom");
+      } else if (c.k === "lifeToHand") {
+        const i = me.life.at(-1);
+        if (i) move(i.u, "hand");
+      }
+    }
+  }
+  async function runEffect(src, eff, { optional = false, idx = 0 } = {}) {
+    const c = myCard(src);
+    if (!condsOK(eff, src)) return false;
+    const usedKey = `${src.c}:${idx}`;
+    if (eff.once && src.used?.[usedKey] === G.turn.count) {
+      toast("Cet effet a d\xE9j\xE0 \xE9t\xE9 utilis\xE9 ce tour.");
+      return false;
+    }
+    const why = canPay(eff.costs, src);
+    if (why) {
+      if (!optional) toast(why);
+      return false;
+    }
+    const txt = effectText(eff);
+    if (optional || (eff.costs || []).length) {
+      const go = await ask(
+        `Effet de ${c.name}`,
+        `<div class="ask-card">${cardHTML(c)}</div><p class="fx-ask">${fmtEffect(txt)}</p><p>Activer cet effet ?</p>`,
+        [{ label: "Activer", value: true, cls: "primary" }, { label: "Ne pas activer", value: false, cls: "ghost" }]
+      );
+      if (!go) return false;
+    }
+    await payCosts(eff.costs, src);
+    src.used = { ...src.used || {}, [usedKey]: G.turn.count };
+    log(`active l'effet de ${name(c)} : ${txt}`);
+    const ctx = { src, eff };
+    for (const a of eff.actions || []) {
+      try {
+        await doFx(a, ctx);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+    commit();
+    return ctx;
+  }
+  async function fireCard(inst, when, opts = {}) {
+    const list = effectsOf(inst);
+    let ctx = null;
+    for (let idx = 0; idx < list.length; idx++) {
+      if (list[idx].when !== when) continue;
+      ctx = await runEffect(inst, list[idx], { ...opts, idx }) || ctx;
+    }
+    return ctx;
+  }
+  async function fireAll(when, except = null) {
+    for (const inst of fieldInsts()) {
+      if (inst.u === except) continue;
+      if (effectsOf(inst).some((e) => e.when === when)) await fireCard(inst, when);
+    }
+  }
+  var hasEffect = (inst, when) => effectsOf(inst).some((e) => e.when === when);
+  function sendFx(op, data, src) {
+    send({ t: "fx", op, by: myCard(src)?.name || "", ...data });
+  }
+  async function doFx(a, ctx) {
+    const me = G.me;
+    const { src } = ctx;
+    const srcName = myCard(src)?.name || "";
+    const t = a.t || {};
+    const opp = t.side === "opp";
+    const title = (verb) => `${srcName} : ${verb}`;
+    switch (a.k) {
+      case "draw": {
+        for (let i = 0; i < a.n && me.deck.length; i++) me.hand.push(me.deck.shift());
+        log(`pioche ${a.n} carte(s).`);
+        break;
+      }
+      case "discard": {
+        const n2 = Math.min(a.n, me.hand.length);
+        const picked = a.random === "yes" ? shuffle([...me.hand]).slice(0, n2) : await pickMany(title(`d\xE9faussez ${n2} carte(s)`), me.hand, myCard, { min: n2, max: n2, cancel: false });
+        for (const i of picked) {
+          move(i.u, "trash");
+          reveal(i, "D\xE9fauss\xE9e");
+        }
+        log(`d\xE9fausse ${picked.map((i) => name(myCard(i))).join(", ")}.`);
+        break;
+      }
+      case "oppDiscard":
+        sendFx("discard", { n: a.n }, src);
+        break;
+      case "look": {
+        const top = me.deck.slice(0, a.n);
+        const ok = (i) => matches(myCard(i), a.f || {});
+        const picked = await pickMany(title(`prenez jusqu'\xE0 ${a.take} carte(s)`), top, myCard, { max: a.take, selectable: ok }) || [];
+        for (const i of picked) {
+          move(i.u, "hand");
+          reveal(i, "Ajout\xE9e \xE0 la main");
+        }
+        for (const i of top.filter((x) => !picked.includes(x))) move(i.u, a.rest === "trash" ? "trash" : "deck", "bottom");
+        log(`regarde ${top.length} carte(s) du dessus de son deck${picked.length ? ` et prend ${picked.map((i) => name(myCard(i))).join(", ")}` : ""}.`);
+        break;
+      }
+      case "search": {
+        const list = me.deck.filter((i2) => matches(myCard(i2), a.f || {}));
+        const [i] = await pickMany(title("choisissez une carte de votre deck"), list, myCard, { max: 1 }) || [];
+        if (i) {
+          move(i.u, "hand");
+          reveal(i, "Ajout\xE9e depuis le deck");
+        }
+        shuffle(me.deck);
+        log(`cherche dans son deck${i ? ` et prend ${name(myCard(i))}` : ""}, puis le m\xE9lange.`);
+        break;
+      }
+      case "mill": {
+        const top = me.deck.slice(0, a.n);
+        for (const i of top) move(i.u, "trash");
+        log(`place ${top.length} carte(s) du dessus de son deck dans sa d\xE9fausse.`);
+        break;
+      }
+      case "playFree": {
+        const zone = a.from || "hand";
+        const list = me[zone].filter((i2) => myCard(i2).type === "character" && curCost(i2, myCard(i2)) <= a.max && matches(myCard(i2), a.f || {}));
+        const [i] = await pickMany(title(`jouez un Personnage de co\xFBt ${a.max} ou moins`), list, myCard, { max: 1 }) || [];
+        if (i) await playCard(i.u, true);
+        break;
+      }
+      case "ko":
+      case "bounce":
+      case "toBottom":
+      case "rest":
+      case "untap":
+      case "freeze":
+      case "power":
+      case "cost":
+      case "grantKw":
+      case "protect":
+      case "cannotAttack":
+      case "negate": {
+        const verbs = { ko: "mettre KO", bounce: "renvoyer en main", toBottom: "placer sous le deck", rest: "reposer", untap: "redresser", freeze: "bloquer", power: "modifier la puissance", cost: "modifier le co\xFBt", grantKw: "donner un mot-cl\xE9", protect: "prot\xE9ger", cannotAttack: "emp\xEAcher d'attaquer", negate: "annuler les effets" };
+        const targets = await chooseTargets(t, src, title(`choisissez la cible (${verbs[a.k]})`));
+        if (!targets.length) break;
+        if (opp) {
+          sendFx(a.k, { us: targets.map((x) => x.u), amount: a.amount, dur: a.dur, kw: a.kw, by2: a.by }, src);
+          log(`cible ${targets.map((x) => name(oppCard(x))).join(", ")} (${verbs[a.k]}).`);
+          break;
+        }
+        for (const x of targets) {
+          if (a.k === "ko") {
+            if (isProtected(x, "effect")) {
+              log(`${name(myCard(x))} ne peut pas \xEAtre mis KO.`);
+              continue;
+            }
+            await koMine(x);
+          } else if (a.k === "bounce") {
+            move(x.u, "hand");
+            log(`renvoie ${name(myCard(x))} en main.`);
+          } else if (a.k === "toBottom") {
+            move(x.u, "deck", "bottom");
+            log(`place ${name(myCard(x))} sous son deck.`);
+          } else applyMod(x, a);
+        }
+        break;
+      }
+      case "playSelf":
+        ctx.played = true;
+        break;
+      case "donAdd": {
+        const n2 = Math.min(a.n, me.donDeck);
+        me.donDeck -= n2;
+        if (a.state === "active") me.donActive += n2;
+        else me.donRested += n2;
+        log(`ajoute ${n2} DON!! ${a.state === "active" ? "actif(s)" : "repos\xE9(s)"}.`);
+        break;
+      }
+      case "donAttach": {
+        const [x] = await chooseTargets({ ...t, n: 1 }, src, title("\xE0 qui attacher les DON!!"));
+        if (!x) break;
+        const n2 = Math.min(a.n, me.donRested);
+        me.donRested -= n2;
+        x.d = (x.d || 0) + n2;
+        log(`attache ${n2} DON!! repos\xE9(s) \xE0 ${name(myCard(x))}.`);
+        break;
+      }
+      case "donUntap": {
+        const n2 = Math.min(a.n, me.donRested);
+        me.donRested -= n2;
+        me.donActive += n2;
+        log(`redresse ${n2} DON!!.`);
+        break;
+      }
+      case "donOppReturn":
+        sendFx("donReturn", { n: a.n }, src);
+        break;
+      case "restOppDon":
+        sendFx("restDon", { n: a.n }, src);
+        break;
+      case "lifeFromDeck": {
+        for (let k = 0; k < a.n && me.deck.length; k++) move(me.deck[0].u, "life", "top");
+        log(`ajoute ${a.n} carte(s) du deck \xE0 sa Vie.`);
+        break;
+      }
+      case "lifeFromHand": {
+        const picked = await pickMany(title(`ajoutez jusqu'\xE0 ${a.n} carte(s) \xE0 votre Vie`), me.hand, myCard, { max: a.n }) || [];
+        for (const i of picked) move(i.u, "life", "top");
+        if (picked.length) log(`ajoute ${picked.length} carte(s) de sa main \xE0 sa Vie.`);
+        break;
+      }
+      case "lifeToHand": {
+        for (let k = 0; k < a.n && me.life.length; k++) move(me.life.at(-1).u, "hand");
+        log(`ajoute ${a.n} de ses Vies \xE0 sa main.`);
+        break;
+      }
+      case "oppLifeRemove":
+        sendFx("lifeRemove", { n: a.n, to: a.to }, src);
+        break;
+      case "lifeLook":
+        openViewer("life");
+        break;
+      case "redirect": {
+        const b = G.battle;
+        if (b?.role !== "def") break;
+        const list = [G.me.leader, ...G.me.chars].filter((i) => i.u !== b.target);
+        const [x] = await pickMany(title("nouvelle cible de l'attaque"), list, myCard, { max: 1 }) || [];
+        if (x) {
+          Object.assign(b, { target: x.u, targetCard: x.c, targetIsLeader: x.u === G.me.leader.u });
+          log(`change la cible de l'attaque : ${name(myCard(x))}.`);
+          battleUpd();
+        }
+        break;
+      }
+      case "noBlockers":
+        if (G.battle?.role === "atk") G.battle.noBlock = true;
+        break;
+      default:
+        break;
+    }
+    commit();
+  }
+  async function applyFx(m) {
+    const me = G.me;
+    const by = m.by ? ` (effet de \xAB ${m.by} \xBB)` : "";
+    const insts = (m.us || []).map((u) => locate(u)?.inst).filter(Boolean);
+    switch (m.op) {
+      case "ko":
+        for (const x of insts) {
+          if (isProtected(x, "effect")) {
+            log(`${name(myCard(x))} ne peut pas \xEAtre mis KO${by}.`);
+            continue;
+          }
+          await koMine(x, by);
+        }
+        break;
+      case "bounce":
+        for (const x of insts) {
+          move(x.u, "hand");
+          log(`reprend ${name(myCard(x))} en main${by}.`);
+        }
+        break;
+      case "toBottom":
+        for (const x of insts) {
+          move(x.u, "deck", "bottom");
+          log(`place ${name(myCard(x))} sous son deck${by}.`);
+        }
+        break;
+      case "rest":
+      case "untap":
+      case "freeze":
+      case "power":
+      case "cost":
+      case "grantKw":
+      case "protect":
+      case "cannotAttack":
+      case "negate":
+        for (const x of insts) applyMod(x, { k: m.op, amount: m.amount, dur: m.dur, kw: m.kw, by: m.by2 });
+        break;
+      case "discard": {
+        const n2 = Math.min(m.n, me.hand.length);
+        if (!n2) break;
+        const picked = await pickMany(`Votre adversaire vous fait d\xE9fausser ${n2} carte(s)${by}`, me.hand, myCard, { min: n2, max: n2, cancel: false });
+        for (const i of picked) {
+          move(i.u, "trash");
+          reveal(i, "D\xE9fauss\xE9e");
+        }
+        log(`d\xE9fausse ${picked.map((i) => name(myCard(i))).join(", ")}${by}.`);
+        break;
+      }
+      case "donReturn": {
+        let n2 = m.n;
+        const take = (k) => {
+          const x = Math.min(n2, me[k]);
+          me[k] -= x;
+          me.donDeck += x;
+          n2 -= x;
+        };
+        take("donActive");
+        take("donRested");
+        log(`renvoie ${m.n - n2} DON!! dans son deck DON!!${by}.`);
+        break;
+      }
+      case "restDon": {
+        const x = Math.min(m.n, me.donActive);
+        me.donActive -= x;
+        me.donRested += x;
+        log(`voit ${x} DON!! repos\xE9(s)${by}.`);
+        break;
+      }
+      case "lifeRemove": {
+        for (let k = 0; k < m.n && me.life.length; k++) {
+          const i = me.life.pop();
+          me[m.to === "hand" ? "hand" : "trash"].push(i);
+        }
+        log(`perd ${m.n} Vie(s) vers sa ${m.to === "hand" ? "main" : "d\xE9fausse"}${by}.`);
+        break;
+      }
+      default:
+        break;
+    }
+    commit();
+  }
+  var hasFreeText = (c) => Boolean(String(c?.effect || "").trim() || String(c?.trigger || "").trim());
+  function startManual(inst) {
+    const c = myCard(inst);
+    G.manual = { c: inst.c, snapshot: structuredClone(G.me) };
+    reveal(inst, "Effet r\xE9solu \xE0 la main");
+    log(`r\xE9sout \xE0 la main l'effet de ${name(c)} : \xAB ${[c.effect, c.trigger].filter(Boolean).join(" / ")} \xBB`, true);
+    send({ t: "manual", on: true, c: inst.c });
+    commit();
+  }
+  function endManual() {
+    if (!G.manual) return;
+    G.manual = null;
+    log("termine la r\xE9solution manuelle.", true);
+    send({ t: "manual", on: false });
+    commit();
+  }
+  function contested() {
+    if (!G.manual) return;
+    G.me = G.manual.snapshot;
+    G.manual = null;
+    log("annule sa r\xE9solution manuelle (contest\xE9e par l'adversaire).", true);
+    send({ t: "manual", on: false });
+    commit();
+  }
+  async function chooseManualCard() {
+    const me = G.me;
+    const list = [me.leader, ...me.chars, me.stage, ...me.trash.slice(-3)].filter((i2) => i2 && hasFreeText(myCard(i2)));
+    if (!list.length) return toast("Aucune de vos cartes visibles n'a d'effet en texte libre.");
+    const [i] = await pickMany("Quelle carte a un effet \xE0 r\xE9soudre \xE0 la main ?", list, myCard, { max: 1 }) || [];
+    if (i) startManual(i);
   }
   function menuForCard(u) {
     const loc = locate(u);
@@ -22429,95 +23483,104 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     const defending = b?.role === "def";
     const it = [];
     const act = (label, fn, opt = {}) => it.push({ label, fn, ...opt });
+    const man = (label, fn, opt = {}) => {
+      if (G.manual) act(`\u270B ${label}`, fn, opt);
+    };
     const done = (msg2) => () => {
       if (msg2) log(msg2);
       commit();
     };
     const playable = c.type !== "leader";
+    const field = ["leader", "chars", "stage"].includes(zone);
+    if (field && myTurn() && !b && G.phase === "play") {
+      effectsOf(inst).forEach((e, idx) => {
+        if (e.when !== "activateMain") return;
+        const txt = effectText(e);
+        act(`\u2728 ${txt.length > 70 ? `${txt.slice(0, 70)}\u2026` : txt}`, () => runEffect(inst, e, { idx }), { cls: "hl" });
+      });
+    }
+    if (field && hasFreeText(c) && !G.manual && (myTurn() || defending)) {
+      act("\u270B R\xE9soudre son effet \xE0 la main", () => startManual(inst));
+    }
     if (zone === "hand") {
       if (defending && c.type === "character" && Number(c.counter) > 0) act(`\u{1F6E1} Contre +${c.counter}`, () => counterChar(inst), { cls: "hl" });
       if (defending && c.type === "event") act("\u{1F6E1} Jouer en Contre (\xC9v\xE9nement)", () => counterEvent(inst), { cls: "hl" });
-      if (myTurn() && !b) act(`\u25B6 Jouer (co\xFBt ${c.cost || 0})`, () => playCard(u), { cls: "hl" });
-      act("Jouer sans payer le co\xFBt", () => playCard(u, true));
-      act("D\xE9fausser", () => {
-        move(u, "trash");
-        done(`d\xE9fausse ${name(c)} de sa main.`)();
-      });
+      if (myTurn() && !b && c.type !== "leader") act(`\u25B6 Jouer (co\xFBt ${Math.max(0, curCost(inst, c))})`, () => playCard(u), { cls: "hl" });
       act("R\xE9v\xE9ler \xE0 l'adversaire", () => {
         reveal(inst, "Carte r\xE9v\xE9l\xE9e");
         log(`r\xE9v\xE8le ${name(c)}.`);
         commit();
       });
-      act("Placer sur le dessus du deck", () => {
+      man("Jouer sans payer le co\xFBt", () => playCard(u, true));
+      man("D\xE9fausser", () => {
+        move(u, "trash");
+        done(`d\xE9fausse ${name(c)} de sa main.`)();
+      });
+      man("Placer sur le dessus du deck", () => {
         move(u, "deck", "top");
         done("place une carte de sa main sur son deck.")();
       });
-      act("Placer sous le deck", () => {
+      man("Placer sous le deck", () => {
         move(u, "deck", "bottom");
         done("place une carte de sa main sous son deck.")();
       });
-      act("Ajouter sur la Vie (face cach\xE9e)", () => {
+      man("Ajouter sur la Vie (face cach\xE9e)", () => {
         move(u, "life", "top");
         done("ajoute une carte de sa main \xE0 sa Vie.")();
       });
     } else if (zone === "leader" || zone === "chars" || zone === "stage") {
       if (zone !== "stage" && myTurn() && !b && !inst.r) act("\u2694 Attaquer", () => startAttack(inst), { cls: "hl" });
-      if (defending && zone === "chars" && !inst.r && !b.blocker && b.target !== inst.u) {
-        act(`\u{1F6E1} Bloquer${isBlocker(c) ? "" : " (sans [Bloqueur])"}`, () => block(inst), { cls: isBlocker(c) ? "hl" : "" });
+      if (defending && zone === "chars" && !inst.r && !b.blocker && !b.noBlock && b.target !== inst.u && hasKw(inst, "blocker")) {
+        act("\u{1F6E1} Bloquer", () => block(inst), { cls: "hl" });
       }
-      act(inst.r ? "Redresser (actif)" : "Reposer", () => {
-        inst.r = !inst.r;
-        done(`${inst.r ? "repose" : "redresse"} ${name(c)}.`)();
-      });
-      if (zone !== "stage") {
+      if (zone !== "stage" && myTurn() && !b) {
         act(`Attacher 1 DON!! (${G.me.donActive} actif${G.me.donActive > 1 ? "s" : ""})`, () => {
           G.me.donActive--;
           inst.d = (inst.d || 0) + 1;
           done(`attache 1 DON!! \xE0 ${name(c)}.`)();
         }, { disabled: !G.me.donActive });
+      }
+      man(inst.r ? "Redresser (actif)" : "Reposer", () => {
+        inst.r = !inst.r;
+        done(`${inst.r ? "repose" : "redresse"} ${name(c)}.`)();
+      });
+      if (zone !== "stage") {
         if (inst.d) {
-          act("D\xE9tacher 1 DON!! (\u2192 zone de co\xFBt, repos\xE9)", () => {
+          man("D\xE9tacher 1 DON!! (\u2192 zone de co\xFBt, repos\xE9)", () => {
             inst.d--;
             G.me.donRested++;
             done(`d\xE9tache 1 DON!! de ${name(c)}.`)();
           });
-          act("Renvoyer 1 DON!! attach\xE9 au deck DON!!", () => {
+          man("Renvoyer 1 DON!! attach\xE9 au deck DON!!", () => {
             inst.d--;
             G.me.donDeck++;
             done(`renvoie 1 DON!! de ${name(c)} au deck DON!!.`)();
           });
         }
-        act("+1000 puissance (jusqu'\xE0 la fin du tour)", () => {
+        man("+1000 puissance (jusqu'\xE0 la fin du tour)", () => {
           inst.m = (inst.m || 0) + 1e3;
           done(`${name(c)} gagne +1000.`)();
         });
-        act("\u22121000 puissance (jusqu'\xE0 la fin du tour)", () => {
+        man("\u22121000 puissance (jusqu'\xE0 la fin du tour)", () => {
           inst.m = (inst.m || 0) - 1e3;
           done(`${name(c)} perd 1000.`)();
         });
-        if (inst.m) act("Annuler les modifs de puissance", () => {
-          inst.m = 0;
-          done(`${name(c)} revient \xE0 sa puissance normale.`)();
-        });
       }
       if (zone !== "leader") {
-        act("KO / D\xE9fausser", () => {
-          move(u, "trash");
-          done(`${name(c)} va \xE0 la d\xE9fausse.`)();
-        }, { sep: true });
-        act("Renvoyer en main", () => {
+        man("KO", () => koMine(inst), { sep: true });
+        man("Renvoyer en main", () => {
           move(u, "hand");
           done(`renvoie ${name(c)} en main.`)();
         });
-        act("Placer sur le dessus du deck", () => {
+        man("Placer sur le dessus du deck", () => {
           move(u, "deck", "top");
           done(`place ${name(c)} sur son deck.`)();
         });
-        act("Placer sous le deck", () => {
+        man("Placer sous le deck", () => {
           move(u, "deck", "bottom");
           done(`place ${name(c)} sous son deck.`)();
         });
-        act("Ajouter sur la Vie", () => {
+        man("Ajouter sur la Vie", () => {
           move(u, "life", "top");
           done(`ajoute ${name(c)} \xE0 sa Vie.`)();
         });
@@ -22525,39 +23588,49 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     } else {
       const src = zoneName(zone);
       const hidden = zone !== "trash";
-      act("Ajouter \xE0 la main", () => {
+      man("Ajouter \xE0 la main", () => {
         move(u, "hand");
         done(hidden ? `ajoute une carte de ${src} \xE0 sa main.` : `ajoute ${name(c)} de la d\xE9fausse \xE0 sa main.`)();
       }, { cls: "hl" });
-      if (hidden) act("Ajouter \xE0 la main en la r\xE9v\xE9lant", () => {
+      if (hidden) man("Ajouter \xE0 la main en la r\xE9v\xE9lant", () => {
         reveal(inst, `Ajout\xE9e depuis ${src}`);
         move(u, "hand");
         done(`r\xE9v\xE8le ${name(c)} et l'ajoute \xE0 sa main.`)();
       });
-      if (playable) act("Jouer sans payer le co\xFBt", () => playCard(u, true));
-      if (zone !== "trash") act("D\xE9fausser", () => {
+      if (playable) man("Jouer sans payer le co\xFBt", () => playCard(u, true));
+      if (zone !== "trash") man("D\xE9fausser", () => {
         move(u, "trash");
         done(`d\xE9fausse ${name(c)} depuis ${src}.`)();
       });
-      act("Placer sur le dessus du deck", () => {
+      man("Placer sur le dessus du deck", () => {
         move(u, "deck", "top");
         done(`place une carte de ${src} sur son deck.`)();
       });
-      act("Placer sous le deck", () => {
+      man("Placer sous le deck", () => {
         move(u, "deck", "bottom");
         done(`place une carte de ${src} sous son deck.`)();
       });
-      if (zone !== "life") act("Ajouter sur la Vie", () => {
+      if (zone !== "life") man("Ajouter sur la Vie", () => {
         move(u, "life", "top");
         done(`ajoute une carte de ${src} \xE0 sa Vie.`)();
       });
     }
+    if (!it.length) it.push({ label: "Aucune action possible (actions libres : bouton \xAB Effet manuel \xBB)", fn: () => {
+    }, disabled: true });
     return it;
   }
   function menuForPile(pile2) {
     const me = G.me;
     const it = [];
     const act = (label, fn, opt = {}) => it.push({ label, fn, ...opt });
+    if (pile2 === "trash") {
+      openViewer("trash");
+      return null;
+    }
+    if (!G.manual) {
+      return [{ label: "Actions libres verrouill\xE9es : utilisez \xAB Effet manuel \xBB pour un effet en texte libre", fn: () => {
+      }, disabled: true }];
+    }
     if (pile2 === "deck") {
       act("Piocher 1 carte", () => {
         if (me.deck.length) {
@@ -22567,14 +23640,14 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         commit();
       }, { cls: "hl" });
       act("Regarder les cartes du dessus\u2026", async () => {
-        const n = await ask(
+        const n2 = await ask(
           "Regarder le dessus du deck",
           "<p>Combien de cartes ?</p>",
           [1, 2, 3, 4, 5, 6, 7].map((v) => ({ label: String(v), value: v })).concat({ label: "Annuler", value: null, cls: "ghost" })
         );
-        if (!n) return;
-        log(`regarde les ${n} cartes du dessus de son deck.`);
-        openViewer("deck", n);
+        if (!n2) return;
+        log(`regarde les ${n2} cartes du dessus de son deck.`);
+        openViewer("deck", n2);
       });
       act("Chercher dans tout le deck", () => {
         log("cherche dans son deck.");
@@ -22742,6 +23815,44 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       });
     });
   }
+  function pickMany(title, insts, getCard, opts = {}) {
+    const { min = 0, max = 1, selectable = () => true, cancel = true } = opts;
+    return new Promise((resolve) => {
+      const chosen = /* @__PURE__ */ new Set();
+      const o = document.createElement("div");
+      o.className = "overlay";
+      const draw = () => {
+        o.innerHTML = `<div class="dialog wide" role="dialog" aria-label="${esc(title)}"><h3>${esc(title)}</h3>
+        <p class="muted small">${max > 1 ? `Choisissez ${min === max ? max : `jusqu'\xE0 ${max}`} carte(s).` : "Choisissez une carte."} ${insts.length ? "" : "Aucune carte possible."}</p>
+        <div class="card-grid">${insts.map((i, k) => `<button class="grid-card pick ${chosen.has(k) ? "on" : ""} ${selectable(i) ? "" : "off"}" data-k="${k}" ${selectable(i) ? "" : "disabled"}>${cardHTML(getCard(i))}</button>`).join("")}</div>
+        <div class="row-btns"><button class="btn primary" data-ok ${chosen.size >= Math.min(min, insts.length) ? "" : "disabled"}>Valider (${chosen.size})</button>
+        ${cancel ? '<button class="btn ghost" data-cancel>Annuler</button>' : ""}</div></div>`;
+      };
+      draw();
+      document.body.append(o);
+      o.addEventListener("click", (e) => {
+        if (e.target.closest("[data-ok]")) {
+          o.remove();
+          resolve([...chosen].map((k2) => insts[k2]));
+          return;
+        }
+        if (e.target.closest("[data-cancel]")) {
+          o.remove();
+          resolve(null);
+          return;
+        }
+        const k = e.target.closest("[data-k]")?.dataset.k;
+        if (k === void 0) return;
+        const n2 = +k;
+        if (chosen.has(n2)) chosen.delete(n2);
+        else if (max === 1) {
+          chosen.clear();
+          chosen.add(n2);
+        } else if (chosen.size < max) chosen.add(n2);
+        draw();
+      });
+    });
+  }
   function openViewer(zone, count = null, side = "me") {
     G.viewer = { zone, count, side };
     render();
@@ -22766,10 +23877,10 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     return `<div class="${cls.join(" ")}" data-u="${inst.u}" data-side="${side}" data-zone="${zone}" data-cid="${inst.c}" tabindex="0">
     ${cardHTML(c, { power: pw })}${inst.d ? `<span class="don-badge" title="DON!! attach\xE9s">+${inst.d} DON</span>` : ""}</div>`;
   }
-  function pile(kind, side, n, label, top) {
-    const face = top ? cardHTML(top) : n ? cardHTML(null) : '<div class="card empty-pile"></div>';
-    return `<div class="pile p-${kind}" data-pile="${kind}" data-side="${side}" ${top ? `data-cid="${top.c || ""}"` : ""} tabindex="0" role="button" aria-label="${label} (${n})">
-    ${face}<span class="count">${n}</span><span class="lbl">${label}</span></div>`;
+  function pile(kind, side, n2, label, top) {
+    const face = top ? cardHTML(top) : n2 ? cardHTML(null) : '<div class="card empty-pile"></div>';
+    return `<div class="pile p-${kind}" data-pile="${kind}" data-side="${side}" ${top ? `data-cid="${top.c || ""}"` : ""} tabindex="0" role="button" aria-label="${label} (${n2})">
+    ${face}<span class="count">${n2}</span><span class="lbl">${label}</span></div>`;
   }
   function donArea(side, d) {
     const tokens = Array.from({ length: d.donActive }, () => '<span class="don"></span>').join("") + Array.from({ length: d.donRested }, () => '<span class="don rested"></span>').join("");
@@ -22782,13 +23893,13 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     const mine = side === "me";
     const d = mine ? G.me : G.opp;
     if (!d || !d.leader) return `<div class="side ${side} empty"><p class="muted">${mine ? "" : "En attente de l'adversaire\u2026"}</p></div>`;
-    const n = (x) => mine ? x.length : x;
+    const n2 = (x) => mine ? x.length : x;
     const chars = Array.from({ length: 5 }, (_, i) => d.chars[i] ? slot(d.chars[i], side, "chars") : '<div class="slot free"></div>').join("");
     const base = `<div class="row base">
-      ${pile("life", side, n(d.life), "Vie")}
+      ${pile("life", side, n2(d.life), "Vie")}
       <div class="leader-zone">${slot(d.leader, side, "leader")}</div>
       <div class="stage-zone">${d.stage ? slot(d.stage, side, "stage") : '<div class="slot free stage-free"><span>Lieu</span></div>'}</div>
-      ${pile("deck", side, n(d.deck), "Deck")}
+      ${pile("deck", side, n2(d.deck), "Deck")}
       ${pile("trash", side, d.trash.length, "D\xE9fausse", d.trash.at(-1) ? { ...mine ? myCard(d.trash.at(-1)) : oppCard(d.trash.at(-1)), c: d.trash.at(-1).c } : null)}
       ${donArea(side, d)}
     </div>`;
@@ -22846,7 +23957,18 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       ${G.select?.kind === "attack" ? '<p class="small hl-t">Choisissez la cible : le Leader adverse ou un Personnage adverse <b>repos\xE9</b>. (\xC9chap pour annuler)</p>' : ""}
       ${mt ? '<div class="row-btns"><button class="btn primary" data-do="end">Fin du tour</button></div>' : ""}`;
     }
-    return `<div class="center">${G.disconnected ? '<p class="msg err">Adversaire d\xE9connect\xE9.</p>' : ""}${inner}
+    let manual = "";
+    if (G.phase === "play" && G.manual) {
+      manual = `<div class="manual-bar"><b>\u270B Mode manuel</b> : effet de \xAB ${esc(G.myCards[G.manual.c]?.name)} \xBB. Vos actions sont visibles en rouge par l'adversaire.
+      <button class="btn small primary" data-do="manual-end">Terminer</button></div>`;
+    } else if (G.phase === "play" && (myTurn() || G.battle?.role === "def")) {
+      manual = '<div class="row-btns"><button class="btn small ghost" data-do="manual-start" title="Pour une carte avec un effet en texte libre">\u270B Effet manuel</button></div>';
+    }
+    if (G.phase === "play" && G.oppManual) {
+      manual += `<div class="manual-bar opp"><b>${esc(G.oppName)}</b> r\xE9sout \xE0 la main l'effet de \xAB ${esc(G.oppCards[G.oppManual]?.name)} \xBB.
+      <button class="btn small danger" data-do="contest">Contester</button></div>`;
+    }
+    return `<div class="center">${G.disconnected ? '<p class="msg err">Adversaire d\xE9connect\xE9.</p>' : ""}${inner}${manual}
     ${G.phase === "play" ? '<button class="btn ghost small concede" data-do="concede">Abandonner</button>' : ""}</div>`;
   }
   function findOpp(u) {
@@ -22885,14 +24007,16 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       if (inst.m) parts.push(`effets ${inst.m > 0 ? "+" : ""}${inst.m}`);
       extra = `<p class="small">Puissance : <b>${power(inst, c, ownerTurn)}</b> (${parts.join(", ")})</p>`;
     }
+    const auto = effectsText(c);
     return `<div class="big-card">${cardHTML(c)}</div>${extra}
     <div class="pv-text"><b>${esc(c.name)}</b> <span class="muted">${TYPES[c.type]}</span>
-    ${c.effect ? `<p>${fmtEffect(c.effect)}</p>` : ""}${c.trigger ? `<p><span class="kw trig">D\xE9clenchement</span> ${fmtEffect(c.trigger)}</p>` : ""}</div>`;
+    ${auto.main ? `<p>${fmtEffect(auto.main)}</p>` : ""}${c.effect ? `<p class="free">\u270B ${fmtEffect(c.effect)}</p>` : ""}
+    ${auto.trigger || c.trigger ? `<p><span class="kw trig">D\xE9clenchement</span> ${fmtEffect([auto.trigger, c.trigger].filter(Boolean).join(" "))}</p>` : ""}</div>`;
   }
   function logHTML() {
     return G.log.slice(-200).map((l) => {
       const who = l.who === "me" ? G.name : l.who === "opp" ? G.oppName : "";
-      return `<li class="lg-${l.who}${l.chat ? " chat" : ""}">${who ? `<b>${esc(who)}</b> ` : ""}${l.chat ? "\u{1F4AC} " : ""}${esc(l.text)}</li>`;
+      return `<li class="lg-${l.who}${l.chat ? " chat" : ""}${l.manual ? " manual" : ""}">${who ? `<b>${esc(who)}</b> ` : ""}${l.chat ? "\u{1F4AC} " : ""}${esc(l.text)}</li>`;
     }).join("");
   }
   function revealsHTML() {
@@ -23028,6 +24152,15 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       case "concede":
         if (confirm("Abandonner la partie ?")) lose("Abandon.");
         return void 0;
+      case "manual-start":
+        return chooseManualCard();
+      case "manual-end":
+        return endManual();
+      case "contest":
+        if (!confirm(`Contester l'effet manuel de ${G.oppName} ? Tout ce qu'il a fait depuis le d\xE9but de cet effet sera annul\xE9.`)) return void 0;
+        send({ t: "contest" });
+        G.log.push({ who: "me", text: "conteste l'effet manuel." });
+        return render();
       case "rematch":
         send({ t: "rematch" });
         return resetMatch();
@@ -23073,7 +24206,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     </section>
     <section class="bs-stage"></section>
     <details class="panel small bs-rates"><summary>Contenu d'un booster</summary>
-      <ul>${RATES.map(([n, r]) => `<li><b>${n}</b> : ${r}</li>`).join("")}</ul>
+      <ul>${RATES.map(([n2, r]) => `<li><b>${n2}</b> : ${r}</li>`).join("")}</ul>
       <p class="muted">Une carte <b>1on1</b> n'existe qu'en un seul exemplaire dans tout le jeu : le premier qui la tire est le seul \xE0 l'avoir.</p>
       <p class="muted">1 booster gratuit toutes les 10 minutes (6 en r\xE9serve au maximum), plus les boosters offerts par les admins.</p>
     </details>
@@ -23193,10 +24326,10 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       }).join("");
       const list = S.cards.filter((c) => (!filter2.rarity || c.rarity === filter2.rarity) && (!filter2.type || c.type === filter2.type) && (filter2.own !== "yes" || S.collection[c.id]) && (filter2.own !== "no" || !S.collection[c.id]) && (!filter2.q || `${c.name} ${c.code} ${c.traits} ${c.effect}`.toLowerCase().includes(filter2.q))).sort((a, b) => RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity));
       q(".cl-grid").innerHTML = list.map((c) => {
-        const n = S.collection[c.id] || 0;
+        const n2 = S.collection[c.id] || 0;
         const owner = c.rarity === "S" ? S.oneOfOne[c.id] : null;
         const tag = c.rarity === "S" ? `<span class="one-owner">${owner ? `Poss\xE9d\xE9e par ${esc(owner)}` : "Encore \xE0 prendre !"}</span>` : "";
-        return `<div class="grid-card ${n ? "" : "missing"}" title="${esc(c.name)}">${cardHTML(c)}${n ? `<span class="qty">\xD7${n}</span>` : ""}${tag}</div>`;
+        return `<div class="grid-card ${n2 ? "" : "missing"}" title="${esc(c.name)}">${cardHTML(c)}${n2 ? `<span class="qty">\xD7${n2}</span>` : ""}${tag}</div>`;
       }).join("") || '<p class="muted">Aucune carte.</p>';
     }
   }
@@ -23244,10 +24377,10 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     q(".ad-give").addEventListener("submit", async (e) => {
       e.preventDefault();
       const target = q(".ad-target").value;
-      const n = +q(".ad-n").value;
+      const n2 = +q(".ad-n").value;
       try {
-        const count = await giveBoosters(target === "*" ? null : target, n);
-        msg2(`${n} booster${n > 1 ? "s" : ""} donn\xE9${n > 1 ? "s" : ""} \xE0 ${target === "*" ? `${count} joueur${count > 1 ? "s" : ""}` : target}.`);
+        const count = await giveBoosters(target === "*" ? null : target, n2);
+        msg2(`${n2} booster${n2 > 1 ? "s" : ""} donn\xE9${n2 > 1 ? "s" : ""} \xE0 ${target === "*" ? `${count} joueur${count > 1 ? "s" : ""}` : target}.`);
         refresh();
       } catch (err) {
         msg2(err.message, true);

@@ -3,8 +3,9 @@
 // une vue publique (main, deck et vie cachés) après chaque action.
 import { S, validateDeck, onChange } from './store.js';
 import {
-  cardHTML, esc, uid, fmtEffect, TYPES, isBlocker, hasRush, hasDoubleAttack, hasBanish,
+  cardHTML, esc, uid, fmtEffect, TYPES, isBlocker, hasRush, hasDoubleAttack, hasBanish, isUnblockable, attributesOf,
 } from './cards.js';
+import { WHEN, effectText, effectsText } from './effects.js';
 import * as net from './net.js';
 
 const root = () => document.getElementById('tab-play');
@@ -26,9 +27,11 @@ const myTurn = () => G?.phase === 'play' && G.turn.player === G.role;
 const oppTurn = () => G?.phase === 'play' && G.turn.player === other(G.role);
 const myCard = (inst) => G.myCards[inst.c];
 const oppCard = (inst) => G.oppCards[inst.c];
-const power = (inst, card, ownerTurn) => (Number(card?.power) || 0) + (inst.m || 0) + (ownerTurn ? (inst.d || 0) * 1000 : 0);
-const myPower = (inst) => power(inst, myCard(inst), myTurn());
-const oppPower = (inst) => power(inst, oppCard(inst), oppTurn());
+const power = (inst, card, ownerTurn) => (Number(card?.power) || 0) + (inst.m || 0) + (inst.bm || 0) + (inst.pm || 0)
+  + (ownerTurn ? (inst.d || 0) * 1000 : 0);
+const myPower = (inst) => power(inst, myCard(inst), myTurn()) + staticSum(inst, 'power');
+// L'adversaire envoie la puissance actuelle de ses cartes (p), effets permanents compris.
+const oppPower = (inst) => inst.p ?? power(inst, oppCard(inst), oppTurn());
 const name = (c) => `« ${c?.name || '?'} »`;
 
 const emptySide = () => ({
@@ -172,13 +175,16 @@ function onMsg(m) {
     case 'view': G.opp = m.v; break;
     case 'ready': G.oppReady = true; maybeStart(); break;
     case 'turn': G.turn = { player: m.player, count: m.count }; break;
-    case 'endTurn': beginTurn(m.count + 1); return;
-    case 'log': G.log.push({ who: 'opp', text: m.text }); break;
+    case 'endTurn': oppTurnEnded(m.count); return;
+    case 'log': G.log.push({ who: 'opp', text: m.text, manual: m.manual }); break;
+    case 'fx': applyFx(m); return;
+    case 'manual': G.oppManual = m.on ? m.c : null; break;
+    case 'contest': contested(); return;
     case 'chat': G.log.push({ who: 'opp', text: m.text, chat: true }); break;
     case 'reveal': G.reveals.push({ id: uid(), c: m.c, why: m.why }); break;
-    case 'attack': G.battle = { ...m.b, role: 'def' }; break;
+    case 'attack': G.battle = { ...m.b, role: 'def' }; render(); fireAll('onOppAttack'); return;
     case 'battleUpd': if (G.battle) Object.assign(G.battle, m.b); break;
-    case 'battleEnd': G.battle = null; G.select = null; break;
+    case 'battleEnd': G.battle = null; G.select = null; endBattleMods(); break;
     case 'gameover': G.phase = 'over'; G.winner = m.winner; G.overReason = m.reason; break;
     case 'rematch': resetMatch(); return;
     default: break;
@@ -186,16 +192,19 @@ function onMsg(m) {
   render();
 }
 
-function log(text) {
-  G.log.push({ who: 'me', text });
-  send({ t: 'log', text });
+// manual : action faite à la main (affichée en rouge chez l'adversaire).
+function log(text, manual = Boolean(G?.manual)) {
+  G.log.push({ who: 'me', text, manual });
+  send({ t: 'log', text, manual });
 }
 function sys(text) { G?.log.push({ who: 'sys', text }); }
 
 function pub() {
   const m = G.me;
+  // Puissance et coût actuels calculés ici (l'adversaire ne connaît pas mes effets permanents).
+  const deco = (i) => i && { ...i, p: myPower(i), cc: curCost(i, myCard(i)) };
   return {
-    leader: m.leader, chars: m.chars, stage: m.stage, trash: m.trash,
+    leader: deco(m.leader), chars: m.chars.map(deco), stage: m.stage, trash: m.trash,
     hand: m.hand.length, deck: m.deck.length, life: m.life.length,
     donDeck: m.donDeck, donActive: m.donActive, donRested: m.donRested,
     phase: G.phase,
@@ -204,6 +213,13 @@ function pub() {
 
 function commit() {
   if (G.phase === 'play' && G.me.deck.length === 0) { lose('Son deck est vide.'); return; }
+  // Si la puissance de mon attaquant change pendant le combat, l'adversaire doit le savoir.
+  const b = G.battle;
+  if (b?.role === 'atk' && b.step === 'defense') {
+    const atk = locate(b.attacker)?.inst;
+    const pw = atk ? myPower(atk) : b.atkPower;
+    if (pw !== b.atkPower) { b.atkPower = pw; send({ t: 'battleUpd', b: { atkPower: pw } }); }
+  }
   send({ t: 'view', v: pub() });
   render();
 }
@@ -264,7 +280,7 @@ function maybeStart() {
 // ---------- tours ----------
 function fieldInsts() { return [G.me.leader, ...G.me.chars, G.me.stage].filter(Boolean); }
 
-function beginTurn(count) {
+async function beginTurn(count) {
   const me = G.me;
   G.turn = { player: G.role, count };
   G.battle = null;
@@ -272,7 +288,11 @@ function beginTurn(count) {
   const first = count === 1;
   // Phase de rafraîchissement
   let back = 0;
-  for (const i of fieldInsts()) { back += i.d || 0; i.d = 0; i.r = false; }
+  for (const i of fieldInsts()) {
+    back += i.d || 0;
+    i.d = 0;
+    if (i.frozen) i.frozen = false; else i.r = false; // « ne se redresse pas » : reste reposé ce tour-ci
+  }
   me.donActive += me.donRested + back;
   me.donRested = 0;
   log(`— Tour ${count} : ${G.name} —`);
@@ -287,11 +307,21 @@ function beginTurn(count) {
   me.donActive += n;
   log(`${first ? 'ne pioche pas (1er tour)' : 'pioche 1 carte'} et reçoit ${n} DON!!.`);
   commit();
+  await fireAll('startOfTurn');
 }
 
-function endTurn() {
+// Le tour adverse se termine : ses effets « jusqu'à la fin du tour » sur mes cartes s'arrêtent.
+async function oppTurnEnded(count) {
+  endTurnMods();
+  await fireAll('endOfOppTurn');
+  beginTurn(count + 1);
+}
+
+async function endTurn() {
   if (G.battle) return toast('Terminez le combat en cours d\'abord.');
-  for (const i of fieldInsts()) i.m = 0;
+  if (G.manual) endManual();
+  await fireAll('endOfTurn');
+  endTurnMods();
   log('termine son tour.');
   G.turn = { player: other(G.role), count: G.turn.count };
   G.select = null;
@@ -314,7 +344,7 @@ function lose(reason) {
 function resetMatch() {
   Object.assign(G, {
     phase: 'hello', coinWinner: null, first: null, turn: { player: null, count: 0 }, me: emptySide(), opp: null,
-    meReady: false, oppReady: false, battle: null, select: null, winner: null, reveals: [],
+    meReady: false, oppReady: false, battle: null, select: null, winner: null, reveals: [], manual: null, oppManual: null,
   });
   sys('Nouvelle partie !');
   if (G.role === 'host') coinFlip();
@@ -342,7 +372,8 @@ function move(u, to, pos = 'top') {
   if (loc.zone === 'stage') me.stage = null; else me[loc.zone].splice(loc.idx, 1);
   if (loc.zone === 'chars' || loc.zone === 'stage') {
     me.donRested += inst.d || 0; // les DON!! attachés retournent dans la zone de coût, reposés
-    Object.assign(inst, { d: 0, r: false, m: 0 });
+    for (const k of ['m', 'bm', 'pm', 'cm', 'cmt', 'kw', 'prot', 'frozen', 'noAtk', 'neg', 'used']) delete inst[k];
+    Object.assign(inst, { d: 0, r: false });
   }
   if (to === 'stage') {
     if (me.stage) move(me.stage.u, 'trash');
@@ -367,7 +398,7 @@ async function playCard(u, free = false) {
   const loc = locate(u);
   if (!loc) return;
   const c = myCard(loc.inst);
-  const cost = free ? 0 : Number(c.cost) || 0;
+  const cost = free ? 0 : Math.max(0, curCost(loc.inst, c));
   if (cost > G.me.donActive) return toast(`Pas assez de DON!! actifs : il en faut ${cost}.`);
   if (c.type === 'character' && G.me.chars.length >= 5) {
     const victim = await pickCard('Zone pleine (5 Personnages) : choisissez celui à défausser', G.me.chars, myCard);
@@ -378,14 +409,25 @@ async function playCard(u, free = false) {
   G.me.donActive -= cost;
   G.me.donRested += cost;
   const from = loc.zone === 'hand' ? '' : ` depuis ${zoneName(loc.zone)}`;
+  const inst = loc.inst;
   if (c.type === 'character') { move(u, 'chars'); log(`joue ${name(c)}${from}${cost ? ` (coût ${cost})` : ''}.`); }
   else if (c.type === 'stage') { move(u, 'stage'); log(`joue le Lieu ${name(c)}${from}${cost ? ` (coût ${cost})` : ''}.`); }
   else if (c.type === 'event') {
     move(u, 'trash');
-    reveal(loc.inst, 'Événement activé');
+    reveal(inst, 'Événement activé');
     log(`active l'Événement ${name(c)}${cost ? ` (coût ${cost})` : ''}.`);
   }
   commit();
+  if (c.type === 'event') await fireCard(inst, 'main');
+  else {
+    await fireCard(inst, 'onPlay');
+    if (c.type === 'character') await fireAll('onPlayChar', inst.u);
+  }
+  if (hasFreeText(c) && String(c.effect || '').trim() && !G.manual) {
+    const go = await ask('Effet en texte libre', `<div class="ask-card">${cardHTML(c)}</div><p>Cette carte a un effet que le jeu ne fait pas automatiquement. Le résoudre à la main maintenant ?</p>`,
+      [{ label: 'Résoudre à la main', value: true, cls: 'primary' }, { label: 'Non', value: false, cls: 'ghost' }]);
+    if (go) startManual(inst);
+  }
 }
 
 const zoneName = (z) => ({
@@ -396,13 +438,15 @@ const zoneName = (z) => ({
 function startAttack(inst) {
   if (G.turn.count <= 2) return toast('Personne ne peut attaquer pendant son premier tour.');
   const c = myCard(inst);
-  if (c.type === 'character' && inst.t === G.turn.count && !hasRush(c)
-    && !confirm(`${c.name} a été joué ce tour et n'a pas [Initiative]. Attaquer quand même ?`)) return;
+  if ((inst.noAtk || 0) >= G.turn.count) return toast(`${c.name} ne peut pas attaquer ce tour-ci.`);
+  if (c.type === 'character' && inst.t === G.turn.count && !hasKw(inst, 'rush')) {
+    return toast(`${c.name} a été joué ce tour : il lui faut [Initiative] pour attaquer.`);
+  }
   G.select = { kind: 'attack', attacker: inst.u };
   render();
 }
 
-function declareAttack(targetInst, isLeader) {
+async function declareAttack(targetInst, isLeader) {
   const atk = locate(G.select.attacker)?.inst;
   G.select = null;
   if (!atk) return;
@@ -410,10 +454,12 @@ function declareAttack(targetInst, isLeader) {
   atk.r = true;
   G.battle = {
     role: 'atk', step: 'attack', attacker: atk.u, attackerCard: atk.c, target: targetInst.u, targetCard: targetInst.c,
-    targetIsLeader: isLeader, counter: 0, blocker: null, double: hasDoubleAttack(c), banish: hasBanish(c),
+    targetIsLeader: isLeader, counter: 0, blocker: null, double: hasKw(atk, 'double'), banish: hasKw(atk, 'banish'),
+    noBlock: hasKw(atk, 'unblockable'),
   };
   log(`attaque ${name(oppCard(targetInst))} avec ${name(c)}.`);
   commit();
+  await fireCard(atk, 'onAttack');
 }
 
 function sendAttack() {
@@ -432,6 +478,7 @@ function cancelAttack() {
   const atk = locate(G.battle.attacker)?.inst;
   if (atk) atk.r = false;
   G.battle = null;
+  endBattleMods();
   log('annule son attaque.');
   commit();
 }
@@ -442,13 +489,15 @@ function battleUpd() {
   commit();
 }
 
-function block(inst) {
+async function block(inst) {
   const c = myCard(inst);
-  if (!isBlocker(c) && !confirm(`${c.name} n'a pas [Bloqueur]. Bloquer quand même ?`)) return;
+  if (G.battle.noBlock) return toast('Cette attaque ne peut pas être bloquée.');
+  if (!hasKw(inst, 'blocker')) return toast(`${c.name} n'a pas [Bloqueur].`);
   inst.r = true;
   Object.assign(G.battle, { blocker: inst.u, target: inst.u, targetCard: inst.c, targetIsLeader: false });
   log(`bloque avec ${name(c)}.`);
   battleUpd();
+  await fireCard(inst, 'onBlock');
 }
 
 function counterChar(inst) {
@@ -462,8 +511,19 @@ function counterChar(inst) {
 
 async function counterEvent(inst) {
   const c = myCard(inst);
-  const cost = Number(c.cost) || 0;
+  const cost = Math.max(0, curCost(inst, c));
   if (cost > G.me.donActive) return toast(`Pas assez de DON!! actifs : il en faut ${cost}.`);
+  if (hasEffect(inst, 'counter')) {
+    G.me.donActive -= cost;
+    G.me.donRested += cost;
+    move(inst.u, 'trash');
+    reveal(inst, 'Événement [Contre]');
+    log(`active ${name(c)} en Contre.`);
+    commit();
+    await fireCard(inst, 'counter');
+    if (G.battle) battleUpd();
+    return;
+  }
   const bonus = await ask(`Contre : ${c.name}`, `<div class="ask-card">${cardHTML(c)}</div><p>Quel bonus de puissance donne cet Événement ? (0 si l'effet est autre)</p>`,
     [0, 1000, 2000, 3000, 4000, 5000, 6000].map((v) => ({ label: v ? `+${v}` : '0', value: v })).concat({ label: 'Annuler', value: null, cls: 'ghost' }));
   if (bonus === null || !G.battle) return;
@@ -490,13 +550,15 @@ async function resolveBattle() {
         log(`subit l'attaque sur son Leader (${b.atkPower} contre ${def}).`);
         const lost = await takeDamage(b.double ? 2 : 1, b.banish);
         if (lost) return;
+      } else if (isProtected(tgt, 'battle')) {
+        log(`${name(tc)} ne peut pas être mis KO en combat (${b.atkPower} contre ${def}).`);
       } else {
-        move(tgt.u, 'trash');
-        log(`voit ${name(tc)} mis KO (${b.atkPower} contre ${def}).`);
+        await koMine(tgt, ` (${b.atkPower} contre ${def})`);
       }
     } else log(`repousse l'attaque (${b.atkPower} contre ${def}).`);
   } else log('constate que l\'attaque n\'a plus de cible.');
   G.battle = null;
+  endBattleMods();
   send({ t: 'battleEnd' });
   commit();
 }
@@ -514,12 +576,22 @@ async function takeDamage(n, banish) {
       reveal(inst, 'Vie exilée');
       continue;
     }
-    if (c.trigger) {
+    if (c.trigger || hasEffect(inst, 'trigger')) {
       commit();
       const choice = await ask('Déclenchement !', `<div class="ask-card">${cardHTML(c)}</div><p>Cette carte Vie a un effet <b>Déclenchement</b>.</p>`, [
         { label: 'Activer le Déclenchement', value: 'trig', cls: 'primary' },
         { label: 'Ajouter à la main', value: 'hand' },
       ]);
+      if (choice === 'trig' && hasEffect(inst, 'trigger')) {
+        reveal(inst, 'Déclenchement');
+        log(`révèle ${name(c)} et active son Déclenchement.`);
+        me.hand.push(inst); // la carte attend en main pendant son effet
+        const ctx = await fireCard(inst, 'trigger');
+        if (ctx?.played && locate(inst.u)?.zone === 'hand') await playCard(inst.u, true);
+        else if (locate(inst.u)?.zone === 'hand') move(inst.u, 'trash');
+        await fireAll('onLifeLost');
+        continue;
+      }
       if (choice === 'trig') {
         reveal(inst, 'Déclenchement');
         log(`révèle ${name(c)} et active son Déclenchement : ${c.trigger}`);
@@ -537,8 +609,485 @@ async function takeDamage(n, banish) {
     }
     me.hand.push(inst);
     log('perd 1 Vie (ajoutée à la main).');
+    await fireAll('onLifeLost');
   }
   return false;
+}
+
+// ---------- effets automatiques ----------
+// Modificateurs portés par une carte en jeu (inst) :
+//   m / bm / pm : puissance (tour / combat / permanent) ; cmt / cm : coût (tour / permanent)
+//   kw : { motClé: durée } ; prot : { battle|effect: durée } ; frozen ; noAtk (n° de tour) ; neg ; used
+const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+const hasNum = (v) => v !== undefined && v !== '' && v !== null;
+const curCost = (inst, c) => (Number(c?.cost) || 0) + (inst?.cm || 0) + (inst?.cmt || 0);
+const effectsOf = (inst) => (inst?.neg ? [] : myCard(inst)?.effects || []);
+const donTotal = () => G.me.donActive + G.me.donRested + fieldInsts().reduce((s, i) => s + (i.d || 0), 0);
+
+function condOK(c, src) {
+  const me = G.me;
+  const L = myCard(me.leader);
+  switch (c.k) {
+    case 'donAttached': return (src?.d || 0) >= c.n;
+    case 'donField': return donTotal() >= c.n;
+    case 'leaderType': return norm(L.traits).includes(norm(c.v));
+    case 'leaderColor': return (L.colors || []).includes(c.v);
+    case 'leaderAttr': return attributesOf(L).map(norm).includes(norm(c.v));
+    case 'lifeLE': return me.life.length <= c.n;
+    case 'lifeGE': return me.life.length >= c.n;
+    case 'oppLifeLE': return (G.opp?.life ?? 99) <= c.n;
+    case 'handLE': return me.hand.length <= c.n;
+    case 'charsGE': return me.chars.filter((i) => !c.type || norm(myCard(i).traits).includes(norm(c.type))).length >= c.n;
+    case 'trashGE': return me.trash.length >= c.n;
+    case 'myTurn': return myTurn();
+    case 'oppTurn': return oppTurn();
+    default: return true;
+  }
+}
+const condsOK = (e, src) => (e.conds || []).every((c) => condOK(c, src));
+
+// Une carte correspond-elle au filtre ? side : 'me' ou 'opp' (pour la puissance / le coût actuels).
+function matches(c, f = {}, inst = null, side = 'me') {
+  if (!c) return false;
+  if (f.type && !norm(c.traits).includes(norm(f.type))) return false;
+  if (f.color && !(c.colors || []).includes(f.color)) return false;
+  if (f.attr && !attributesOf(c).map(norm).includes(norm(f.attr))) return false;
+  if (f.name && !norm(c.name).includes(norm(f.name))) return false;
+  if (f.cardType && c.type !== f.cardType) return false;
+  const cost = inst ? (side === 'opp' ? (inst.cc ?? curCost(inst, c)) : curCost(inst, c)) : Number(c.cost) || 0;
+  if (hasNum(f.maxCost) && cost > f.maxCost) return false;
+  if (hasNum(f.minCost) && cost < f.minCost) return false;
+  if (hasNum(f.maxPower)) {
+    const pw = inst ? (side === 'opp' ? oppPower(inst) : myPower(inst)) : Number(c.power) || 0;
+    if (pw > f.maxPower) return false;
+  }
+  if (f.rested === 'yes' && !inst?.r) return false;
+  if (f.rested === 'no' && inst?.r) return false;
+  return true;
+}
+
+// Cartes visées possibles (sans choix du joueur).
+function candidates(t, src) {
+  if (t.who === 'self') return src ? [src] : [];
+  const opp = t.side === 'opp';
+  const S = opp ? G.opp : G.me;
+  if (!S) return [];
+  const getC = opp ? oppCard : myCard;
+  const out = [];
+  if (['leader', 'leaderOrChar', 'leaderAndAll'].includes(t.who) && S.leader) out.push(S.leader);
+  if (t.who !== 'leader') out.push(...S.chars.filter((i) => matches(getC(i), t.f, i, opp ? 'opp' : 'me')));
+  return out;
+}
+
+async function chooseTargets(t, src, title) {
+  const list = candidates(t, src);
+  if (['self', 'leader', 'allChars', 'leaderAndAll'].includes(t.who)) return list;
+  if (!list.length) return [];
+  return (await pickMany(title, list, t.side === 'opp' ? oppCard : myCard, { max: t.n || 1 })) || [];
+}
+
+// ---------- mots-clés et effets permanents ----------
+function staticEffects() {
+  const out = [];
+  for (const src of fieldInsts()) {
+    for (const e of effectsOf(src)) {
+      const w = WHEN[e.when];
+      if (!w?.continuous) continue;
+      if (e.when === 'yourTurn' && !myTurn()) continue;
+      if (e.when === 'oppTurn' && !oppTurn()) continue;
+      if (!condsOK(e, src)) continue;
+      out.push({ src, e });
+    }
+  }
+  return out;
+}
+function staticTargets(a, src) {
+  const t = { ...(a.t || {}), side: 'mine' };
+  if (a.t?.side === 'opp') return [];
+  if (t.who === 'self') return [src];
+  if (t.who === 'leader') return [G.me.leader];
+  const chars = G.me.chars.filter((i) => matches(myCard(i), t.f, i, 'me'));
+  return ['leaderOrChar', 'leaderAndAll'].includes(t.who) ? [G.me.leader, ...chars] : chars;
+}
+let inStatic = false; // évite les boucles (un filtre de puissance qui dépend d'un effet permanent)
+function staticSum(inst, kind) {
+  if (inStatic || !G?.me?.leader) return 0;
+  inStatic = true;
+  let s = 0;
+  try {
+    for (const { src, e } of staticEffects()) {
+      for (const a of e.actions || []) {
+        if (a.k !== kind) continue;
+        if (staticTargets(a, src).some((x) => x?.u === inst.u)) s += Number(a.amount) || 0;
+      }
+    }
+  } finally { inStatic = false; }
+  return s;
+}
+function staticFlag(inst, kind, test) {
+  if (inStatic || !G?.me?.leader) return false;
+  inStatic = true;
+  try {
+    return staticEffects().some(({ src, e }) => (e.actions || []).some((a) => a.k === kind && test(a)
+      && staticTargets(a, src).some((x) => x?.u === inst.u)));
+  } finally { inStatic = false; }
+}
+// Mot-clé d'une de mes cartes en jeu (carte, effet temporaire ou effet permanent).
+function hasKw(inst, k) {
+  const c = myCard(inst);
+  if (!inst.neg && ({ blocker: isBlocker, rush: hasRush, double: hasDoubleAttack, banish: hasBanish, unblockable: isUnblockable }[k])?.(c)) return true;
+  if (inst.kw?.[k]) return true;
+  return staticFlag(inst, 'grantKw', (a) => a.kw === k);
+}
+function isProtected(inst, kind) {
+  if (inst.prot?.[kind] || inst.prot?.both) return true;
+  return staticFlag(inst, 'protect', (a) => a.by === kind || a.by === 'both');
+}
+
+// Applique un modificateur à une de MES cartes (effet de moi ou reçu de l'adversaire).
+function applyMod(inst, a) {
+  const dur = a.dur || 'turn';
+  if (a.k === 'power') {
+    const key = dur === 'battle' ? 'bm' : dur === 'perm' ? 'pm' : 'm';
+    inst[key] = (inst[key] || 0) + (Number(a.amount) || 0);
+  } else if (a.k === 'cost') {
+    const key = dur === 'perm' ? 'cm' : 'cmt';
+    inst[key] = (inst[key] || 0) + (Number(a.amount) || 0);
+  } else if (a.k === 'grantKw') {
+    inst.kw = { ...(inst.kw || {}), [a.kw]: dur };
+  } else if (a.k === 'protect') {
+    inst.prot = { ...(inst.prot || {}), [a.by || 'both']: dur };
+  } else if (a.k === 'rest') inst.r = true;
+  else if (a.k === 'untap') inst.r = false;
+  else if (a.k === 'freeze') inst.frozen = true;
+  else if (a.k === 'cannotAttack') inst.noAtk = G.turn.count + 1;
+  else if (a.k === 'negate') inst.neg = true;
+}
+function clearDur(inst, dur) {
+  for (const key of ['kw', 'prot']) {
+    if (!inst[key]) continue;
+    for (const [k, v] of Object.entries(inst[key])) if (v === dur) delete inst[key][k];
+  }
+}
+// Fin de combat : les bonus « pendant ce combat » disparaissent.
+function endBattleMods() {
+  for (const i of fieldInsts()) { i.bm = 0; clearDur(i, 'battle'); }
+}
+// Fin d'un tour (le mien ou celui de l'adversaire) : les effets « jusqu'à la fin du tour » disparaissent.
+function endTurnMods() {
+  for (const i of fieldInsts()) {
+    Object.assign(i, { m: 0, cmt: 0, neg: false });
+    clearDur(i, 'turn');
+    clearDur(i, 'battle');
+    i.bm = 0;
+  }
+}
+
+// Met KO une de mes cartes en jeu et déclenche ses effets [KO].
+async function koMine(inst, why = '') {
+  const loc = locate(inst.u);
+  if (!loc || !['chars', 'stage'].includes(loc.zone)) return;
+  const c = myCard(inst);
+  move(inst.u, 'trash');
+  log(`voit ${name(c)} mis KO${why}.`);
+  await fireCard(inst, 'onKO');
+  if (c.type === 'character') await fireAll('onOwnKO');
+}
+
+// ---------- coûts ----------
+function canPay(costs, src) {
+  const me = G.me;
+  for (const c of costs || []) {
+    if (c.k === 'restDon' && me.donActive < c.n) return `Il faut ${c.n} DON!! actif(s).`;
+    if (c.k === 'donReturn' && donTotal() < c.n) return `Il faut ${c.n} DON!! sur le terrain.`;
+    if (c.k === 'discard' && me.hand.length < c.n) return `Il faut ${c.n} carte(s) en main.`;
+    if (c.k === 'restSelf' && src?.r) return 'Cette carte est déjà reposée.';
+    if (c.k === 'koOwn' && !me.chars.length) return 'Il faut un Personnage à mettre KO.';
+    if (c.k === 'trashToDeck' && me.trash.length < c.n) return `Il faut ${c.n} carte(s) en défausse.`;
+    if (c.k === 'lifeToHand' && !me.life.length) return 'Il faut une Vie.';
+  }
+  return '';
+}
+async function payCosts(costs, src) {
+  const me = G.me;
+  for (const c of costs || []) {
+    if (c.k === 'restDon') { me.donActive -= c.n; me.donRested += c.n; }
+    else if (c.k === 'donReturn') {
+      let n = c.n;
+      const take = (k) => { const x = Math.min(n, me[k]); me[k] -= x; n -= x; };
+      take('donActive'); take('donRested');
+      for (const i of fieldInsts()) { const x = Math.min(n, i.d || 0); i.d -= x; n -= x; }
+      me.donDeck += c.n - n;
+    } else if (c.k === 'discard') {
+      const picked = await pickMany(`Coût : défaussez ${c.n} carte(s)`, me.hand, myCard, { min: c.n, max: c.n, cancel: false });
+      for (const i of picked) move(i.u, 'trash');
+    } else if (c.k === 'restSelf') src.r = true;
+    else if (c.k === 'koOwn') {
+      const [v] = await pickMany('Coût : mettez KO un de vos Personnages', me.chars, myCard, { min: 1, max: 1, cancel: false });
+      if (v) await koMine(v, ' (coût)');
+    } else if (c.k === 'trashToDeck') {
+      const picked = await pickMany(`Coût : ${c.n} carte(s) de la défausse sous le deck`, me.trash, myCard, { min: c.n, max: c.n, cancel: false });
+      for (const i of picked) move(i.u, 'deck', 'bottom');
+    } else if (c.k === 'lifeToHand') { const i = me.life.at(-1); if (i) move(i.u, 'hand'); }
+  }
+}
+
+// ---------- exécution ----------
+// ctx : { src, eff, played (Déclenchement : la carte a été jouée) }
+async function runEffect(src, eff, { optional = false, idx = 0 } = {}) {
+  const c = myCard(src);
+  if (!condsOK(eff, src)) return false;
+  const usedKey = `${src.c}:${idx}`;
+  if (eff.once && src.used?.[usedKey] === G.turn.count) { toast('Cet effet a déjà été utilisé ce tour.'); return false; }
+  const why = canPay(eff.costs, src);
+  if (why) { if (!optional) toast(why); return false; }
+  const txt = effectText(eff);
+  if (optional || (eff.costs || []).length) {
+    const go = await ask(`Effet de ${c.name}`, `<div class="ask-card">${cardHTML(c)}</div><p class="fx-ask">${fmtEffect(txt)}</p><p>Activer cet effet ?</p>`,
+      [{ label: 'Activer', value: true, cls: 'primary' }, { label: 'Ne pas activer', value: false, cls: 'ghost' }]);
+    if (!go) return false;
+  }
+  await payCosts(eff.costs, src);
+  src.used = { ...(src.used || {}), [usedKey]: G.turn.count };
+  log(`active l'effet de ${name(c)} : ${txt}`);
+  const ctx = { src, eff };
+  for (const a of eff.actions || []) {
+    try { await doFx(a, ctx); } catch (err) { console.error(err); }
+  }
+  commit();
+  return ctx;
+}
+
+// Effets d'une carte pour un déclencheur donné.
+async function fireCard(inst, when, opts = {}) {
+  const list = effectsOf(inst);
+  let ctx = null;
+  for (let idx = 0; idx < list.length; idx++) {
+    if (list[idx].when !== when) continue;
+    ctx = (await runEffect(inst, list[idx], { ...opts, idx })) || ctx;
+  }
+  return ctx;
+}
+// Effets de toutes mes cartes en jeu pour un déclencheur donné.
+async function fireAll(when, except = null) {
+  for (const inst of fieldInsts()) {
+    if (inst.u === except) continue;
+    if (effectsOf(inst).some((e) => e.when === when)) await fireCard(inst, when);
+  }
+}
+const hasEffect = (inst, when) => effectsOf(inst).some((e) => e.when === when);
+
+// Envoie une action qui touche les cartes de l'adversaire : c'est son navigateur qui l'applique.
+function sendFx(op, data, src) {
+  send({ t: 'fx', op, by: myCard(src)?.name || '', ...data });
+}
+
+async function doFx(a, ctx) {
+  const me = G.me;
+  const { src } = ctx;
+  const srcName = myCard(src)?.name || '';
+  const t = a.t || {};
+  const opp = t.side === 'opp';
+  const title = (verb) => `${srcName} : ${verb}`;
+  switch (a.k) {
+    case 'draw': {
+      for (let i = 0; i < a.n && me.deck.length; i++) me.hand.push(me.deck.shift());
+      log(`pioche ${a.n} carte(s).`);
+      break;
+    }
+    case 'discard': {
+      const n = Math.min(a.n, me.hand.length);
+      const picked = a.random === 'yes' ? shuffle([...me.hand]).slice(0, n)
+        : await pickMany(title(`défaussez ${n} carte(s)`), me.hand, myCard, { min: n, max: n, cancel: false });
+      for (const i of picked) { move(i.u, 'trash'); reveal(i, 'Défaussée'); }
+      log(`défausse ${picked.map((i) => name(myCard(i))).join(', ')}.`);
+      break;
+    }
+    case 'oppDiscard': sendFx('discard', { n: a.n }, src); break;
+    case 'look': {
+      const top = me.deck.slice(0, a.n);
+      const ok = (i) => matches(myCard(i), a.f || {});
+      const picked = (await pickMany(title(`prenez jusqu'à ${a.take} carte(s)`), top, myCard, { max: a.take, selectable: ok })) || [];
+      for (const i of picked) { move(i.u, 'hand'); reveal(i, 'Ajoutée à la main'); }
+      for (const i of top.filter((x) => !picked.includes(x))) move(i.u, a.rest === 'trash' ? 'trash' : 'deck', 'bottom');
+      log(`regarde ${top.length} carte(s) du dessus de son deck${picked.length ? ` et prend ${picked.map((i) => name(myCard(i))).join(', ')}` : ''}.`);
+      break;
+    }
+    case 'search': {
+      const list = me.deck.filter((i) => matches(myCard(i), a.f || {}));
+      const [i] = (await pickMany(title('choisissez une carte de votre deck'), list, myCard, { max: 1 })) || [];
+      if (i) { move(i.u, 'hand'); reveal(i, 'Ajoutée depuis le deck'); }
+      shuffle(me.deck);
+      log(`cherche dans son deck${i ? ` et prend ${name(myCard(i))}` : ''}, puis le mélange.`);
+      break;
+    }
+    case 'mill': {
+      const top = me.deck.slice(0, a.n);
+      for (const i of top) move(i.u, 'trash');
+      log(`place ${top.length} carte(s) du dessus de son deck dans sa défausse.`);
+      break;
+    }
+    case 'playFree': {
+      const zone = a.from || 'hand';
+      const list = me[zone].filter((i) => myCard(i).type === 'character' && curCost(i, myCard(i)) <= a.max && matches(myCard(i), a.f || {}));
+      const [i] = (await pickMany(title(`jouez un Personnage de coût ${a.max} ou moins`), list, myCard, { max: 1 })) || [];
+      if (i) await playCard(i.u, true);
+      break;
+    }
+    case 'ko': case 'bounce': case 'toBottom': case 'rest': case 'untap': case 'freeze':
+    case 'power': case 'cost': case 'grantKw': case 'protect': case 'cannotAttack': case 'negate': {
+      const verbs = { ko: 'mettre KO', bounce: 'renvoyer en main', toBottom: 'placer sous le deck', rest: 'reposer', untap: 'redresser', freeze: 'bloquer', power: 'modifier la puissance', cost: 'modifier le coût', grantKw: 'donner un mot-clé', protect: 'protéger', cannotAttack: 'empêcher d\'attaquer', negate: 'annuler les effets' };
+      const targets = await chooseTargets(t, src, title(`choisissez la cible (${verbs[a.k]})`));
+      if (!targets.length) break;
+      if (opp) {
+        sendFx(a.k, { us: targets.map((x) => x.u), amount: a.amount, dur: a.dur, kw: a.kw, by2: a.by }, src);
+        log(`cible ${targets.map((x) => name(oppCard(x))).join(', ')} (${verbs[a.k]}).`);
+        break;
+      }
+      for (const x of targets) {
+        if (a.k === 'ko') {
+          if (isProtected(x, 'effect')) { log(`${name(myCard(x))} ne peut pas être mis KO.`); continue; }
+          await koMine(x);
+        } else if (a.k === 'bounce') { move(x.u, 'hand'); log(`renvoie ${name(myCard(x))} en main.`); }
+        else if (a.k === 'toBottom') { move(x.u, 'deck', 'bottom'); log(`place ${name(myCard(x))} sous son deck.`); }
+        else applyMod(x, a);
+      }
+      break;
+    }
+    case 'playSelf': ctx.played = true; break;
+    case 'donAdd': {
+      const n = Math.min(a.n, me.donDeck);
+      me.donDeck -= n;
+      if (a.state === 'active') me.donActive += n; else me.donRested += n;
+      log(`ajoute ${n} DON!! ${a.state === 'active' ? 'actif(s)' : 'reposé(s)'}.`);
+      break;
+    }
+    case 'donAttach': {
+      const [x] = await chooseTargets({ ...t, n: 1 }, src, title('à qui attacher les DON!!'));
+      if (!x) break;
+      const n = Math.min(a.n, me.donRested);
+      me.donRested -= n;
+      x.d = (x.d || 0) + n;
+      log(`attache ${n} DON!! reposé(s) à ${name(myCard(x))}.`);
+      break;
+    }
+    case 'donUntap': { const n = Math.min(a.n, me.donRested); me.donRested -= n; me.donActive += n; log(`redresse ${n} DON!!.`); break; }
+    case 'donOppReturn': sendFx('donReturn', { n: a.n }, src); break;
+    case 'restOppDon': sendFx('restDon', { n: a.n }, src); break;
+    case 'lifeFromDeck': {
+      for (let k = 0; k < a.n && me.deck.length; k++) move(me.deck[0].u, 'life', 'top');
+      log(`ajoute ${a.n} carte(s) du deck à sa Vie.`);
+      break;
+    }
+    case 'lifeFromHand': {
+      const picked = (await pickMany(title(`ajoutez jusqu'à ${a.n} carte(s) à votre Vie`), me.hand, myCard, { max: a.n })) || [];
+      for (const i of picked) move(i.u, 'life', 'top');
+      if (picked.length) log(`ajoute ${picked.length} carte(s) de sa main à sa Vie.`);
+      break;
+    }
+    case 'lifeToHand': {
+      for (let k = 0; k < a.n && me.life.length; k++) move(me.life.at(-1).u, 'hand');
+      log(`ajoute ${a.n} de ses Vies à sa main.`);
+      break;
+    }
+    case 'oppLifeRemove': sendFx('lifeRemove', { n: a.n, to: a.to }, src); break;
+    case 'lifeLook': openViewer('life'); break;
+    case 'redirect': {
+      const b = G.battle;
+      if (b?.role !== 'def') break;
+      const list = [G.me.leader, ...G.me.chars].filter((i) => i.u !== b.target);
+      const [x] = (await pickMany(title('nouvelle cible de l\'attaque'), list, myCard, { max: 1 })) || [];
+      if (x) {
+        Object.assign(b, { target: x.u, targetCard: x.c, targetIsLeader: x.u === G.me.leader.u });
+        log(`change la cible de l'attaque : ${name(myCard(x))}.`);
+        battleUpd();
+      }
+      break;
+    }
+    case 'noBlockers': if (G.battle?.role === 'atk') G.battle.noBlock = true; break;
+    default: break;
+  }
+  commit();
+}
+
+// Action reçue de l'adversaire sur mes cartes.
+async function applyFx(m) {
+  const me = G.me;
+  const by = m.by ? ` (effet de « ${m.by} »)` : '';
+  const insts = (m.us || []).map((u) => locate(u)?.inst).filter(Boolean);
+  switch (m.op) {
+    case 'ko':
+      for (const x of insts) {
+        if (isProtected(x, 'effect')) { log(`${name(myCard(x))} ne peut pas être mis KO${by}.`); continue; }
+        await koMine(x, by);
+      }
+      break;
+    case 'bounce': for (const x of insts) { move(x.u, 'hand'); log(`reprend ${name(myCard(x))} en main${by}.`); } break;
+    case 'toBottom': for (const x of insts) { move(x.u, 'deck', 'bottom'); log(`place ${name(myCard(x))} sous son deck${by}.`); } break;
+    case 'rest': case 'untap': case 'freeze': case 'power': case 'cost': case 'grantKw': case 'protect': case 'cannotAttack': case 'negate':
+      for (const x of insts) applyMod(x, { k: m.op, amount: m.amount, dur: m.dur, kw: m.kw, by: m.by2 });
+      break;
+    case 'discard': {
+      const n = Math.min(m.n, me.hand.length);
+      if (!n) break;
+      const picked = await pickMany(`Votre adversaire vous fait défausser ${n} carte(s)${by}`, me.hand, myCard, { min: n, max: n, cancel: false });
+      for (const i of picked) { move(i.u, 'trash'); reveal(i, 'Défaussée'); }
+      log(`défausse ${picked.map((i) => name(myCard(i))).join(', ')}${by}.`);
+      break;
+    }
+    case 'donReturn': {
+      let n = m.n;
+      const take = (k) => { const x = Math.min(n, me[k]); me[k] -= x; me.donDeck += x; n -= x; };
+      take('donActive'); take('donRested');
+      log(`renvoie ${m.n - n} DON!! dans son deck DON!!${by}.`);
+      break;
+    }
+    case 'restDon': { const x = Math.min(m.n, me.donActive); me.donActive -= x; me.donRested += x; log(`voit ${x} DON!! reposé(s)${by}.`); break; }
+    case 'lifeRemove': {
+      for (let k = 0; k < m.n && me.life.length; k++) {
+        const i = me.life.pop();
+        me[m.to === 'hand' ? 'hand' : 'trash'].push(i);
+      }
+      log(`perd ${m.n} Vie(s) vers sa ${m.to === 'hand' ? 'main' : 'défausse'}${by}.`);
+      break;
+    }
+    default: break;
+  }
+  commit();
+}
+
+// ---------- mode manuel (effets en texte libre) ----------
+const hasFreeText = (c) => Boolean(String(c?.effect || '').trim() || String(c?.trigger || '').trim());
+function startManual(inst) {
+  const c = myCard(inst);
+  G.manual = { c: inst.c, snapshot: structuredClone(G.me) };
+  reveal(inst, 'Effet résolu à la main');
+  log(`résout à la main l'effet de ${name(c)} : « ${[c.effect, c.trigger].filter(Boolean).join(' / ')} »`, true);
+  send({ t: 'manual', on: true, c: inst.c });
+  commit();
+}
+function endManual() {
+  if (!G.manual) return;
+  G.manual = null;
+  log('termine la résolution manuelle.', true);
+  send({ t: 'manual', on: false });
+  commit();
+}
+// L'adversaire conteste : on revient à l'état d'avant le mode manuel.
+function contested() {
+  if (!G.manual) return;
+  G.me = G.manual.snapshot;
+  G.manual = null;
+  log('annule sa résolution manuelle (contestée par l\'adversaire).', true);
+  send({ t: 'manual', on: false });
+  commit();
+}
+async function chooseManualCard() {
+  const me = G.me;
+  const list = [me.leader, ...me.chars, me.stage, ...me.trash.slice(-3)].filter((i) => i && hasFreeText(myCard(i)));
+  if (!list.length) return toast('Aucune de vos cartes visibles n\'a d\'effet en texte libre.');
+  const [i] = (await pickMany('Quelle carte a un effet à résoudre à la main ?', list, myCard, { max: 1 })) || [];
+  if (i) startManual(i);
 }
 
 // ---------- menus d'actions ----------
@@ -551,56 +1100,72 @@ function menuForCard(u) {
   const defending = b?.role === 'def';
   const it = [];
   const act = (label, fn, opt = {}) => it.push({ label, fn, ...opt });
+  // Actions libres : seulement pendant la résolution manuelle d'un effet en texte libre.
+  const man = (label, fn, opt = {}) => { if (G.manual) act(`✋ ${label}`, fn, opt); };
   const done = (msg) => () => { if (msg) log(msg); commit(); };
   const playable = c.type !== 'leader';
+  const field = ['leader', 'chars', 'stage'].includes(zone);
+
+  if (field && myTurn() && !b && G.phase === 'play') {
+    effectsOf(inst).forEach((e, idx) => {
+      if (e.when !== 'activateMain') return;
+      const txt = effectText(e);
+      act(`✨ ${txt.length > 70 ? `${txt.slice(0, 70)}…` : txt}`, () => runEffect(inst, e, { idx }), { cls: 'hl' });
+    });
+  }
+  if (field && hasFreeText(c) && !G.manual && (myTurn() || defending)) {
+    act('✋ Résoudre son effet à la main', () => startManual(inst));
+  }
 
   if (zone === 'hand') {
     if (defending && c.type === 'character' && Number(c.counter) > 0) act(`🛡 Contre +${c.counter}`, () => counterChar(inst), { cls: 'hl' });
     if (defending && c.type === 'event') act('🛡 Jouer en Contre (Événement)', () => counterEvent(inst), { cls: 'hl' });
-    if (myTurn() && !b) act(`▶ Jouer (coût ${c.cost || 0})`, () => playCard(u), { cls: 'hl' });
-    act('Jouer sans payer le coût', () => playCard(u, true));
-    act('Défausser', () => { move(u, 'trash'); done(`défausse ${name(c)} de sa main.`)(); });
+    if (myTurn() && !b && c.type !== 'leader') act(`▶ Jouer (coût ${Math.max(0, curCost(inst, c))})`, () => playCard(u), { cls: 'hl' });
     act('Révéler à l\'adversaire', () => { reveal(inst, 'Carte révélée'); log(`révèle ${name(c)}.`); commit(); });
-    act('Placer sur le dessus du deck', () => { move(u, 'deck', 'top'); done('place une carte de sa main sur son deck.')(); });
-    act('Placer sous le deck', () => { move(u, 'deck', 'bottom'); done('place une carte de sa main sous son deck.')(); });
-    act('Ajouter sur la Vie (face cachée)', () => { move(u, 'life', 'top'); done('ajoute une carte de sa main à sa Vie.')(); });
+    man('Jouer sans payer le coût', () => playCard(u, true));
+    man('Défausser', () => { move(u, 'trash'); done(`défausse ${name(c)} de sa main.`)(); });
+    man('Placer sur le dessus du deck', () => { move(u, 'deck', 'top'); done('place une carte de sa main sur son deck.')(); });
+    man('Placer sous le deck', () => { move(u, 'deck', 'bottom'); done('place une carte de sa main sous son deck.')(); });
+    man('Ajouter sur la Vie (face cachée)', () => { move(u, 'life', 'top'); done('ajoute une carte de sa main à sa Vie.')(); });
   } else if (zone === 'leader' || zone === 'chars' || zone === 'stage') {
     if (zone !== 'stage' && myTurn() && !b && !inst.r) act('⚔ Attaquer', () => startAttack(inst), { cls: 'hl' });
-    if (defending && zone === 'chars' && !inst.r && !b.blocker && b.target !== inst.u) {
-      act(`🛡 Bloquer${isBlocker(c) ? '' : ' (sans [Bloqueur])'}`, () => block(inst), { cls: isBlocker(c) ? 'hl' : '' });
+    if (defending && zone === 'chars' && !inst.r && !b.blocker && !b.noBlock && b.target !== inst.u && hasKw(inst, 'blocker')) {
+      act('🛡 Bloquer', () => block(inst), { cls: 'hl' });
     }
-    act(inst.r ? 'Redresser (actif)' : 'Reposer', () => { inst.r = !inst.r; done(`${inst.r ? 'repose' : 'redresse'} ${name(c)}.`)(); });
-    if (zone !== 'stage') {
+    if (zone !== 'stage' && myTurn() && !b) {
       act(`Attacher 1 DON!! (${G.me.donActive} actif${G.me.donActive > 1 ? 's' : ''})`, () => {
         G.me.donActive--; inst.d = (inst.d || 0) + 1; done(`attache 1 DON!! à ${name(c)}.`)();
       }, { disabled: !G.me.donActive });
+    }
+    man(inst.r ? 'Redresser (actif)' : 'Reposer', () => { inst.r = !inst.r; done(`${inst.r ? 'repose' : 'redresse'} ${name(c)}.`)(); });
+    if (zone !== 'stage') {
       if (inst.d) {
-        act('Détacher 1 DON!! (→ zone de coût, reposé)', () => { inst.d--; G.me.donRested++; done(`détache 1 DON!! de ${name(c)}.`)(); });
-        act('Renvoyer 1 DON!! attaché au deck DON!!', () => { inst.d--; G.me.donDeck++; done(`renvoie 1 DON!! de ${name(c)} au deck DON!!.`)(); });
+        man('Détacher 1 DON!! (→ zone de coût, reposé)', () => { inst.d--; G.me.donRested++; done(`détache 1 DON!! de ${name(c)}.`)(); });
+        man('Renvoyer 1 DON!! attaché au deck DON!!', () => { inst.d--; G.me.donDeck++; done(`renvoie 1 DON!! de ${name(c)} au deck DON!!.`)(); });
       }
-      act('+1000 puissance (jusqu\'à la fin du tour)', () => { inst.m = (inst.m || 0) + 1000; done(`${name(c)} gagne +1000.`)(); });
-      act('−1000 puissance (jusqu\'à la fin du tour)', () => { inst.m = (inst.m || 0) - 1000; done(`${name(c)} perd 1000.`)(); });
-      if (inst.m) act('Annuler les modifs de puissance', () => { inst.m = 0; done(`${name(c)} revient à sa puissance normale.`)(); });
+      man('+1000 puissance (jusqu\'à la fin du tour)', () => { inst.m = (inst.m || 0) + 1000; done(`${name(c)} gagne +1000.`)(); });
+      man('−1000 puissance (jusqu\'à la fin du tour)', () => { inst.m = (inst.m || 0) - 1000; done(`${name(c)} perd 1000.`)(); });
     }
     if (zone !== 'leader') {
-      act('KO / Défausser', () => { move(u, 'trash'); done(`${name(c)} va à la défausse.`)(); }, { sep: true });
-      act('Renvoyer en main', () => { move(u, 'hand'); done(`renvoie ${name(c)} en main.`)(); });
-      act('Placer sur le dessus du deck', () => { move(u, 'deck', 'top'); done(`place ${name(c)} sur son deck.`)(); });
-      act('Placer sous le deck', () => { move(u, 'deck', 'bottom'); done(`place ${name(c)} sous son deck.`)(); });
-      act('Ajouter sur la Vie', () => { move(u, 'life', 'top'); done(`ajoute ${name(c)} à sa Vie.`)(); });
+      man('KO', () => koMine(inst), { sep: true });
+      man('Renvoyer en main', () => { move(u, 'hand'); done(`renvoie ${name(c)} en main.`)(); });
+      man('Placer sur le dessus du deck', () => { move(u, 'deck', 'top'); done(`place ${name(c)} sur son deck.`)(); });
+      man('Placer sous le deck', () => { move(u, 'deck', 'bottom'); done(`place ${name(c)} sous son deck.`)(); });
+      man('Ajouter sur la Vie', () => { move(u, 'life', 'top'); done(`ajoute ${name(c)} à sa Vie.`)(); });
     }
   } else {
     // carte vue dans le deck, la défausse ou la Vie
     const src = zoneName(zone);
     const hidden = zone !== 'trash';
-    act('Ajouter à la main', () => { move(u, 'hand'); done(hidden ? `ajoute une carte de ${src} à sa main.` : `ajoute ${name(c)} de la défausse à sa main.`)(); }, { cls: 'hl' });
-    if (hidden) act('Ajouter à la main en la révélant', () => { reveal(inst, `Ajoutée depuis ${src}`); move(u, 'hand'); done(`révèle ${name(c)} et l'ajoute à sa main.`)(); });
-    if (playable) act('Jouer sans payer le coût', () => playCard(u, true));
-    if (zone !== 'trash') act('Défausser', () => { move(u, 'trash'); done(`défausse ${name(c)} depuis ${src}.`)(); });
-    act('Placer sur le dessus du deck', () => { move(u, 'deck', 'top'); done(`place une carte de ${src} sur son deck.`)(); });
-    act('Placer sous le deck', () => { move(u, 'deck', 'bottom'); done(`place une carte de ${src} sous son deck.`)(); });
-    if (zone !== 'life') act('Ajouter sur la Vie', () => { move(u, 'life', 'top'); done(`ajoute une carte de ${src} à sa Vie.`)(); });
+    man('Ajouter à la main', () => { move(u, 'hand'); done(hidden ? `ajoute une carte de ${src} à sa main.` : `ajoute ${name(c)} de la défausse à sa main.`)(); }, { cls: 'hl' });
+    if (hidden) man('Ajouter à la main en la révélant', () => { reveal(inst, `Ajoutée depuis ${src}`); move(u, 'hand'); done(`révèle ${name(c)} et l'ajoute à sa main.`)(); });
+    if (playable) man('Jouer sans payer le coût', () => playCard(u, true));
+    if (zone !== 'trash') man('Défausser', () => { move(u, 'trash'); done(`défausse ${name(c)} depuis ${src}.`)(); });
+    man('Placer sur le dessus du deck', () => { move(u, 'deck', 'top'); done(`place une carte de ${src} sur son deck.`)(); });
+    man('Placer sous le deck', () => { move(u, 'deck', 'bottom'); done(`place une carte de ${src} sous son deck.`)(); });
+    if (zone !== 'life') man('Ajouter sur la Vie', () => { move(u, 'life', 'top'); done(`ajoute une carte de ${src} à sa Vie.`)(); });
   }
+  if (!it.length) it.push({ label: 'Aucune action possible (actions libres : bouton « Effet manuel »)', fn: () => {}, disabled: true });
   return it;
 }
 
@@ -608,6 +1173,10 @@ function menuForPile(pile) {
   const me = G.me;
   const it = [];
   const act = (label, fn, opt = {}) => it.push({ label, fn, ...opt });
+  if (pile === 'trash') { openViewer('trash'); return null; }
+  if (!G.manual) {
+    return [{ label: 'Actions libres verrouillées : utilisez « Effet manuel » pour un effet en texte libre', fn: () => {}, disabled: true }];
+  }
   if (pile === 'deck') {
     act('Piocher 1 carte', () => { if (me.deck.length) { me.hand.push(me.deck.shift()); log('pioche 1 carte.'); } commit(); }, { cls: 'hl' });
     act('Regarder les cartes du dessus…', async () => {
@@ -707,6 +1276,36 @@ function pickCard(title, insts, getCard) {
       if (k === undefined) return;
       o.remove();
       resolve(k === '-1' ? null : insts[+k]);
+    });
+  });
+}
+
+// Choix de plusieurs cartes. opts : { min, max, selectable(inst), cancel } → tableau, ou null si annulé.
+function pickMany(title, insts, getCard, opts = {}) {
+  const { min = 0, max = 1, selectable = () => true, cancel = true } = opts;
+  return new Promise((resolve) => {
+    const chosen = new Set();
+    const o = document.createElement('div');
+    o.className = 'overlay';
+    const draw = () => {
+      o.innerHTML = `<div class="dialog wide" role="dialog" aria-label="${esc(title)}"><h3>${esc(title)}</h3>
+        <p class="muted small">${max > 1 ? `Choisissez ${min === max ? max : `jusqu'à ${max}`} carte(s).` : 'Choisissez une carte.'} ${insts.length ? '' : 'Aucune carte possible.'}</p>
+        <div class="card-grid">${insts.map((i, k) => `<button class="grid-card pick ${chosen.has(k) ? 'on' : ''} ${selectable(i) ? '' : 'off'}" data-k="${k}" ${selectable(i) ? '' : 'disabled'}>${cardHTML(getCard(i))}</button>`).join('')}</div>
+        <div class="row-btns"><button class="btn primary" data-ok ${chosen.size >= Math.min(min, insts.length) ? '' : 'disabled'}>Valider (${chosen.size})</button>
+        ${cancel ? '<button class="btn ghost" data-cancel>Annuler</button>' : ''}</div></div>`;
+    };
+    draw();
+    document.body.append(o);
+    o.addEventListener('click', (e) => {
+      if (e.target.closest('[data-ok]')) { o.remove(); resolve([...chosen].map((k) => insts[k])); return; }
+      if (e.target.closest('[data-cancel]')) { o.remove(); resolve(null); return; }
+      const k = e.target.closest('[data-k]')?.dataset.k;
+      if (k === undefined) return;
+      const n = +k;
+      if (chosen.has(n)) chosen.delete(n);
+      else if (max === 1) { chosen.clear(); chosen.add(n); }
+      else if (chosen.size < max) chosen.add(n);
+      draw();
     });
   });
 }
@@ -824,7 +1423,18 @@ function centerHTML() {
       ${G.select?.kind === 'attack' ? '<p class="small hl-t">Choisissez la cible : le Leader adverse ou un Personnage adverse <b>reposé</b>. (Échap pour annuler)</p>' : ''}
       ${mt ? '<div class="row-btns"><button class="btn primary" data-do="end">Fin du tour</button></div>' : ''}`;
   }
-  return `<div class="center">${G.disconnected ? '<p class="msg err">Adversaire déconnecté.</p>' : ''}${inner}
+  let manual = '';
+  if (G.phase === 'play' && G.manual) {
+    manual = `<div class="manual-bar"><b>✋ Mode manuel</b> : effet de « ${esc(G.myCards[G.manual.c]?.name)} ». Vos actions sont visibles en rouge par l'adversaire.
+      <button class="btn small primary" data-do="manual-end">Terminer</button></div>`;
+  } else if (G.phase === 'play' && (myTurn() || G.battle?.role === 'def')) {
+    manual = '<div class="row-btns"><button class="btn small ghost" data-do="manual-start" title="Pour une carte avec un effet en texte libre">✋ Effet manuel</button></div>';
+  }
+  if (G.phase === 'play' && G.oppManual) {
+    manual += `<div class="manual-bar opp"><b>${esc(G.oppName)}</b> résout à la main l'effet de « ${esc(G.oppCards[G.oppManual]?.name)} ».
+      <button class="btn small danger" data-do="contest">Contester</button></div>`;
+  }
+  return `<div class="center">${G.disconnected ? '<p class="msg err">Adversaire déconnecté.</p>' : ''}${inner}${manual}
     ${G.phase === 'play' ? '<button class="btn ghost small concede" data-do="concede">Abandonner</button>' : ''}</div>`;
 }
 
@@ -866,15 +1476,17 @@ function previewHTML() {
     if (inst.m) parts.push(`effets ${inst.m > 0 ? '+' : ''}${inst.m}`);
     extra = `<p class="small">Puissance : <b>${power(inst, c, ownerTurn)}</b> (${parts.join(', ')})</p>`;
   }
+  const auto = effectsText(c);
   return `<div class="big-card">${cardHTML(c)}</div>${extra}
     <div class="pv-text"><b>${esc(c.name)}</b> <span class="muted">${TYPES[c.type]}</span>
-    ${c.effect ? `<p>${fmtEffect(c.effect)}</p>` : ''}${c.trigger ? `<p><span class="kw trig">Déclenchement</span> ${fmtEffect(c.trigger)}</p>` : ''}</div>`;
+    ${auto.main ? `<p>${fmtEffect(auto.main)}</p>` : ''}${c.effect ? `<p class="free">✋ ${fmtEffect(c.effect)}</p>` : ''}
+    ${auto.trigger || c.trigger ? `<p><span class="kw trig">Déclenchement</span> ${fmtEffect([auto.trigger, c.trigger].filter(Boolean).join(' '))}</p>` : ''}</div>`;
 }
 
 function logHTML() {
   return G.log.slice(-200).map((l) => {
     const who = l.who === 'me' ? G.name : l.who === 'opp' ? G.oppName : '';
-    return `<li class="lg-${l.who}${l.chat ? ' chat' : ''}">${who ? `<b>${esc(who)}</b> ` : ''}${l.chat ? '💬 ' : ''}${esc(l.text)}</li>`;
+    return `<li class="lg-${l.who}${l.chat ? ' chat' : ''}${l.manual ? ' manual' : ''}">${who ? `<b>${esc(who)}</b> ` : ''}${l.chat ? '💬 ' : ''}${esc(l.text)}</li>`;
   }).join('');
 }
 
@@ -991,6 +1603,13 @@ function doAction(a, el) {
     case 'ctr-plus': G.battle.counter += 1000; log('ajoute +1000 en défense (effet).'); return battleUpd();
     case 'ctr-minus': G.battle.counter -= 1000; log('retire 1000 en défense (effet).'); return battleUpd();
     case 'concede': if (confirm('Abandonner la partie ?')) lose('Abandon.'); return undefined;
+    case 'manual-start': return chooseManualCard();
+    case 'manual-end': return endManual();
+    case 'contest':
+      if (!confirm(`Contester l'effet manuel de ${G.oppName} ? Tout ce qu'il a fait depuis le début de cet effet sera annulé.`)) return undefined;
+      send({ t: 'contest' });
+      G.log.push({ who: 'me', text: 'conteste l\'effet manuel.' });
+      return render();
     case 'rematch': send({ t: 'rematch' }); return resetMatch();
     case 'quit':
       link?.close(); link = null; G = null;
