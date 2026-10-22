@@ -1113,7 +1113,14 @@ async function doFx(a, ctx) {
       }
       break;
     }
-    case 'playSelf': ctx.played = true; break;
+    case 'playSelf': {
+      // Déclenchement : la carte révélée depuis la Vie sera jouée ensuite (voir takeDamage).
+      if (a.from === 'life' || ctx.eff.when === 'trigger' || !a.from) { ctx.played = true; break; }
+      // Sinon : jouer la carte gratuitement depuis la défausse ou la main (ex. « [KO] Jouez cette carte depuis votre défausse »).
+      const zone = locate(src.u)?.zone;
+      if (zone === (a.from === 'hand' ? 'hand' : 'trash')) await playCard(src.u, true);
+      break;
+    }
     case 'donAdd': {
       const n = Math.min(a.n, me.donDeck);
       me.donDeck -= n;

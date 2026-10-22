@@ -20850,8 +20850,8 @@ ${suffix}`;
   var ACTION_GROUPS = {
     "Pioche et main": ["draw", "discard", "oppDiscard"],
     Deck: ["look", "search", "mill"],
-    Terrain: ["playFree", "ko", "bounce", "toBottom", "rest", "untap", "freeze", "playSelf"],
-    Puissance: ["power", "cost", "grantKw"],
+    Terrain: ["playSelf", "playFree", "ko", "bounce", "toBottom", "rest", "untap", "freeze"],
+    "Puissance et mots-cl\xE9s": ["grantKw", "power", "cost"],
     "DON!!": ["donAdd", "donAttach", "donUntap", "donOppReturn", "restOppDon"],
     Vie: ["lifeFromDeck", "lifeFromHand", "lifeToHand", "oppLifeRemove", "lifeLook"],
     Combat: ["protect", "cannotAttack", "redirect", "noBlockers", "negate"]
@@ -20892,7 +20892,11 @@ ${suffix}`;
     rest: { label: "Reposer", params: [TARGET({ side: "opp", who: "chars", n: 1 })], text: (p) => `reposez ${targetText(p.t)}` },
     untap: { label: "Redresser", params: [TARGET({ side: "mine", who: "leaderOrChar", n: 1 })], text: (p) => `redressez ${targetText(p.t)}` },
     freeze: { label: "Ne se redresse pas au prochain tour", params: [TARGET({ side: "opp", who: "chars", n: 1 })], text: (p) => `${targetText(p.t)} ne se redresse pas lors de la prochaine phase de rafra\xEEchissement de son propri\xE9taire` },
-    playSelf: { label: "Jouer cette carte (D\xE9clenchement)", params: [], text: () => "jouez cette carte" },
+    playSelf: {
+      label: "Jouer cette carte",
+      params: [{ k: "from", label: "Depuis", type: "sel", def: "trash", opts: { trash: "la d\xE9fausse", hand: "la main", life: "la Vie (D\xE9clenchement)" } }],
+      text: (p) => p.from === "hand" ? "jouez cette carte depuis votre main" : p.from === "life" ? "jouez cette carte" : "jouez cette carte depuis votre d\xE9fausse"
+    },
     power: {
       label: "Puissance + / \u2212",
       params: [TARGET({ side: "mine", who: "leaderOrChar", n: 1 }), n("amount", "Puissance (+ ou \u2212)", 1e3), DUR],
@@ -20904,7 +20908,7 @@ ${suffix}`;
       text: (p) => `${targetText(p.t)} ${p.amount >= 0 ? "gagne" : "perd"} ${Math.abs(p.amount)} de co\xFBt ${DUR.opts[p.dur]}`
     },
     grantKw: {
-      label: "Donner un mot-cl\xE9",
+      label: "Donner un mot-cl\xE9 (Initiative, Bloqueur\u2026)",
       params: [
         TARGET({ side: "mine", who: "chars", n: 1 }),
         { k: "kw", label: "Mot-cl\xE9", type: "sel", def: "blocker", opts: Object.fromEntries(Object.entries(KEYWORDS_AUTO).filter(([k]) => k !== "unlimited")) },
@@ -23719,9 +23723,15 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         }
         break;
       }
-      case "playSelf":
-        ctx.played = true;
+      case "playSelf": {
+        if (a.from === "life" || ctx.eff.when === "trigger" || !a.from) {
+          ctx.played = true;
+          break;
+        }
+        const zone = locate(src.u)?.zone;
+        if (zone === (a.from === "hand" ? "hand" : "trash")) await playCard(src.u, true);
         break;
+      }
       case "donAdd": {
         const n2 = Math.min(a.n, me.donDeck);
         me.donDeck -= n2;

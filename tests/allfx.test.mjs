@@ -14,7 +14,10 @@ C('TKO', { type: 'character', cost: 1, power: 1000, effects: [{ when: 'onKO', co
 C('TEnd', { type: 'character', cost: 1, power: 1000, effects: [{ when: 'endOfTurn', conds: [], costs: [], actions: draw1 }] });
 C('TStart', { type: 'character', cost: 1, power: 1000, effects: [{ when: 'startOfTurn', conds: [], costs: [], actions: draw1 }] });
 C('TPC', { type: 'character', cost: 1, power: 1000, effects: [{ when: 'onPlayChar', conds: [], costs: [], actions: draw1 }] });
-const deck = {}; for (let i = 0; i < 12; i++) deck['P' + i] = 4; deck.Fort = 1; deck.Aura = 1; deck.P11 = 0; delete deck.P11; deck.TKO = 1; deck.TEnd = 1; deck.TStart = 1; deck.TPC = 1;
+C('Phoenix', { type: 'character', cost: 3, power: 4000, effects: [{ when: 'onKO', conds: [], costs: [], actions: [{ k: 'playSelf', from: 'trash' }] }] });
+C('Gros', { type: 'character', cost: 8, power: 9000 });
+C('Moyen', { type: 'character', cost: 5, power: 6000 });
+const deck = {}; for (let i = 0; i < 12; i++) deck['P' + i] = 4; deck.Fort = 1; deck.Aura = 1; deck.Phoenix = 1; deck.Gros = 1; deck.Moyen = 1; deck.P10 = 1; deck.P11 = 0; delete deck.P11; deck.TKO = 1; deck.TEnd = 1; deck.TStart = 1; deck.TPC = 1;
 mock.st.starters.s1 = { id: 's1', name: 'Test', leader: 'Leader', cards: deck };
 const b = await chromium.launch(); const ctx = await b.newContext({ viewport: { width: 1400, height: 900 } });
 await ctx.route(/supabase\.co/, mock.handle); await ctx.route(/unpkg\.com/, (r) => r.abort());
@@ -143,6 +146,21 @@ await placeA('Aura'); await W(1200);
 const fp1 = await g(B, () => __optcg.power(__optcg.G().me.chars[0].u));
 const seenByA = await g(A, () => __optcg.G().opp.chars[0].p);
 check('aura −1000 sur les persos adverses', fp1 === fp0 - 1000 && seenByA === fp1, `${fp0}->${fp1}, vu par A : ${seenByA}`);
+// « [KO] Jouez cette carte depuis votre défausse »
+await g(A, () => { const m = __optcg.G().me; m.chars = []; __optcg.commit(); }); await W(300);
+await placeA('Phoenix'); await W(300);
+await run(B, E([{ k: 'ko', t: { side: 'opp', who: 'chars', n: 1 } }])); await W(1500);
+const phx = await g(A, () => [__optcg.G().me.chars.map((x) => x.c), __optcg.G().me.trash.filter((x) => x.c === 'Phoenix').length]);
+check('[KO] jouez cette carte depuis la défausse', phx[0].includes('Phoenix') && phx[1] === 0, JSON.stringify(phx));
+// « Donnez [Initiative] à un de vos Personnages de coût 6 ou moins »
+await g(A, () => { const m = __optcg.G().me; m.chars = []; __optcg.commit(); }); await W(300);
+const gros = await placeA('Gros', { t: 1 }); const moyen = await placeA('Moyen', { t: 1 }); await W(300);
+await run(A, E([{ k: 'grantKw', t: { side: 'mine', who: 'chars', n: 1, f: { maxCost: 6 } }, kw: 'rush', dur: 'turn' }])); await W(800);
+const kwM = await g(A, (u) => __optcg.kw(u, 'rush'), moyen);
+const kwG = await g(A, (u) => __optcg.kw(u, 'rush'), gros);
+check('Initiative donnée au coût 5, pas au coût 8', kwM === true && kwG === false, `coût 5 : ${kwM}, coût 8 : ${kwG}`);
+await g(A, () => { const m = __optcg.G().me; m.chars = []; __optcg.commit(); }); await W(300);
+
 // Déclencheurs automatiques
 await g(A, () => { const m = __optcg.G().me; m.chars = []; __optcg.commit(); }); await W(300);
 await placeA('TKO'); await W(300);

@@ -80,8 +80,8 @@ export const COSTS = {
 export const ACTION_GROUPS = {
   'Pioche et main': ['draw', 'discard', 'oppDiscard'],
   Deck: ['look', 'search', 'mill'],
-  Terrain: ['playFree', 'ko', 'bounce', 'toBottom', 'rest', 'untap', 'freeze', 'playSelf'],
-  Puissance: ['power', 'cost', 'grantKw'],
+  Terrain: ['playSelf', 'playFree', 'ko', 'bounce', 'toBottom', 'rest', 'untap', 'freeze'],
+  'Puissance et mots-clés': ['grantKw', 'power', 'cost'],
   'DON!!': ['donAdd', 'donAttach', 'donUntap', 'donOppReturn', 'restOppDon'],
   Vie: ['lifeFromDeck', 'lifeFromHand', 'lifeToHand', 'oppLifeRemove', 'lifeLook'],
   Combat: ['protect', 'cannotAttack', 'redirect', 'noBlockers', 'negate'],
@@ -113,7 +113,10 @@ export const ACTIONS = {
   rest: { label: 'Reposer', params: [TARGET({ side: 'opp', who: 'chars', n: 1 })], text: (p) => `reposez ${targetText(p.t)}` },
   untap: { label: 'Redresser', params: [TARGET({ side: 'mine', who: 'leaderOrChar', n: 1 })], text: (p) => `redressez ${targetText(p.t)}` },
   freeze: { label: 'Ne se redresse pas au prochain tour', params: [TARGET({ side: 'opp', who: 'chars', n: 1 })], text: (p) => `${targetText(p.t)} ne se redresse pas lors de la prochaine phase de rafraîchissement de son propriétaire` },
-  playSelf: { label: 'Jouer cette carte (Déclenchement)', params: [], text: () => 'jouez cette carte' },
+  playSelf: {
+    label: 'Jouer cette carte', params: [{ k: 'from', label: 'Depuis', type: 'sel', def: 'trash', opts: { trash: 'la défausse', hand: 'la main', life: 'la Vie (Déclenchement)' } }],
+    text: (p) => (p.from === 'hand' ? 'jouez cette carte depuis votre main' : p.from === 'life' ? 'jouez cette carte' : 'jouez cette carte depuis votre défausse'),
+  },
   power: {
     label: 'Puissance + / −', params: [TARGET({ side: 'mine', who: 'leaderOrChar', n: 1 }), n('amount', 'Puissance (+ ou −)', 1000), DUR],
     text: (p) => `${targetText(p.t)} ${p.amount >= 0 ? `gagne +${p.amount}` : `perd ${-p.amount}`} de puissance ${DUR.opts[p.dur]}`,
@@ -123,7 +126,7 @@ export const ACTIONS = {
     text: (p) => `${targetText(p.t)} ${p.amount >= 0 ? 'gagne' : 'perd'} ${Math.abs(p.amount)} de coût ${DUR.opts[p.dur]}`,
   },
   grantKw: {
-    label: 'Donner un mot-clé', params: [TARGET({ side: 'mine', who: 'chars', n: 1 }),
+    label: 'Donner un mot-clé (Initiative, Bloqueur…)', params: [TARGET({ side: 'mine', who: 'chars', n: 1 }),
       { k: 'kw', label: 'Mot-clé', type: 'sel', def: 'blocker', opts: Object.fromEntries(Object.entries(KEYWORDS_AUTO).filter(([k]) => k !== 'unlimited')) }, DUR],
     text: (p) => `${targetText(p.t)} gagne [${KEYWORDS_AUTO[p.kw]}] ${DUR.opts[p.dur]}`,
   },
