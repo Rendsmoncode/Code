@@ -16,8 +16,12 @@ C('TStart', { type: 'character', cost: 1, power: 1000, effects: [{ when: 'startO
 C('TPC', { type: 'character', cost: 1, power: 1000, effects: [{ when: 'onPlayChar', conds: [], costs: [], actions: draw1 }] });
 C('Phoenix', { type: 'character', cost: 3, power: 4000, effects: [{ when: 'onKO', conds: [], costs: [], actions: [{ k: 'playSelf', from: 'trash' }] }] });
 C('Gros', { type: 'character', cost: 8, power: 9000 });
+C('SaboFx', { type: 'character', cost: 1, power: 5000, effects: [
+  { when: 'static', conds: [{ k: 'lifeGE', n: 4 }], costs: [], actions: [{ k: 'power', t: { side: 'mine', who: 'self', n: 1 }, amount: -1000, dur: 'turn' }] },
+  { when: 'static', conds: [{ k: 'donAttached', n: 1 }, { k: 'charsGE', n: 1, f: { minCost: 8 } }], costs: [], actions: [{ k: 'power', t: { side: 'mine', who: 'leaderAndAll', n: 1 }, amount: 1000, dur: 'turn' }] },
+] });
 C('Moyen', { type: 'character', cost: 5, power: 6000 });
-const deck = {}; for (let i = 0; i < 12; i++) deck['P' + i] = 4; deck.Fort = 1; deck.Aura = 1; deck.Phoenix = 1; deck.Gros = 1; deck.Moyen = 1; deck.P10 = 1; deck.P11 = 0; delete deck.P11; deck.TKO = 1; deck.TEnd = 1; deck.TStart = 1; deck.TPC = 1;
+const deck = {}; for (let i = 0; i < 12; i++) deck['P' + i] = 4; deck.Fort = 1; deck.Aura = 1; deck.Phoenix = 1; deck.Gros = 1; deck.Moyen = 1; delete deck.P10; delete deck.P11; deck.SaboFx = 1; deck.TKO = 1; deck.TEnd = 1; deck.TStart = 1; deck.TPC = 1;
 mock.st.starters.s1 = { id: 's1', name: 'Test', leader: 'Leader', cards: deck };
 const b = await chromium.launch(); const ctx = await b.newContext({ viewport: { width: 1400, height: 900 } });
 await ctx.route(/supabase\.co/, mock.handle); await ctx.route(/unpkg\.com/, (r) => r.abort());
@@ -163,6 +167,17 @@ await run(A, E([{ k: 'grantKw', t: { side: 'mine', who: 'chars', n: 1, f: { maxC
 const kwM = await g(A, (u) => __optcg.kw(u, 'rush'), moyen);
 const kwG = await g(A, (u) => __optcg.kw(u, 'rush'), gros);
 check('Initiative donnée au coût 5, pas au coût 8', kwM === true && kwG === false, `coût 5 : ${kwM}, coût 8 : ${kwG}`);
+// Sabo : permanent « 4 Vies ou plus : −1000 » et « [DON!! x1] si un Perso de coût 8+ : Leader et Persos +1000 »
+await g(A, () => { const m = __optcg.G().me; m.chars = []; while (m.life.length < 4) m.life.push(m.deck.pop()); __optcg.commit(); }); await W(300);
+const sabo = await placeA('SaboFx', { d: 1 }); await W(300);
+const pw = () => g(A, (u) => [__optcg.power(u), __optcg.power(__optcg.G().me.leader.u)], sabo);
+const pw0 = await pw();
+await placeA('Gros'); await W(300);
+const pw1 = await pw();
+await g(A, () => { const m = __optcg.G().me; while (m.life.length > 3) m.deck.push(m.life.pop()); __optcg.commit(); }); await W(300);
+const pw2 = await pw();
+check('Sabo : −1000 avec 4 Vies, +1000 avec un coût 8', pw1[0] === pw0[0] + 1000 && pw1[1] === pw0[1] + 1000 && pw2[0] === pw1[0] + 1000 && pw2[1] === pw1[1],
+  JSON.stringify([pw0, pw1, pw2]));
 await g(A, () => { const m = __optcg.G().me; m.chars = []; __optcg.commit(); }); await W(300);
 
 // Déclencheurs automatiques

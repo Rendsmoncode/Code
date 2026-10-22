@@ -61,7 +61,7 @@ export function mountEffectsEditor(el, getCard, onChange) {
       const item = eff[row.dataset.sec][+row.dataset.j];
       setPath(item, t.dataset.p, t.type === 'number' ? (t.value === '' ? '' : Number(t.value)) : t.value);
     }
-    if (structural) render(); else block.querySelector('.fxe-text').textContent = effectText(eff);
+    if (structural) render(); else block.querySelector('.fxe-text').textContent = effectText(eff, card);
     onChange();
   }
 
@@ -99,7 +99,7 @@ function blockHTML(eff, i, card) {
     ${sectionHTML(eff, 'conds')}
     ${w.continuous ? '' : sectionHTML(eff, 'costs')}
     ${sectionHTML(eff, 'actions', w.continuous)}
-    <p class="fxe-text">${esc(effectText(eff))}</p>
+    <p class="fxe-text">${esc(effectText(eff, card))}</p>
   </div>`;
 }
 
@@ -156,6 +156,7 @@ function filterHTML(path, f, attr = 'data-p') {
     <label>Genre ${sel('cardType', { '': '—', character: 'Personnage', stage: 'Lieu', event: 'Événement' })}</label>
     <label>Couleur ${sel('color', { '': '—', ...COLORS_FR })}</label>
     <label>Attribut ${sel('attr', { '': '—', ...Object.fromEntries(ATTRIBUTES.map((a) => [a, a])) })}</label>
+    <label>Coût min <input type="number" ${attr}="${path}.minCost" value="${esc(f.minCost ?? '')}"></label>
     <label>Coût max <input type="number" ${attr}="${path}.maxCost" value="${esc(f.maxCost ?? '')}"></label>
     <label>Puissance max <input type="number" step="1000" ${attr}="${path}.maxPower" value="${esc(f.maxPower ?? '')}"></label>
     <label>Puissance de base max <input type="number" step="1000" ${attr}="${path}.maxBasePower" value="${esc(f.maxBasePower ?? '')}"></label>

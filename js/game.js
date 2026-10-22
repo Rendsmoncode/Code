@@ -726,7 +726,10 @@ function condOK(c, src) {
     case 'lifeGE': return me.life.length >= c.n;
     case 'oppLifeLE': return (G.opp?.life ?? 99) <= c.n;
     case 'handLE': return me.hand.length <= c.n;
-    case 'charsGE': return me.chars.filter((i) => !c.type || norm(myCard(i).traits).includes(norm(c.type))).length >= c.n;
+    case 'charsGE': {
+      const f = { ...(c.f || {}), ...(c.type ? { type: c.type } : {}) };
+      return me.chars.filter((i) => matches(myCard(i), f, i, 'me')).length >= c.n;
+    }
     case 'noTypeField': return !fieldInsts().some((i) => (c.self === 'count' || i.u !== src?.u) && norm(myCard(i).traits).includes(norm(c.type)));
     case 'trashGE': return me.trash.length >= c.n;
     case 'myTurn': return myTurn();
@@ -998,7 +1001,7 @@ async function runEffectNow(src, eff, { optional = false, idx = 0 } = {}) {
   if (eff.once && src.used?.[usedKey] === G.turn.count) { toast('Cet effet a déjà été utilisé ce tour.'); return false; }
   const why = canPay(eff.costs, src);
   if (why) { if (!optional) toast(why); return false; }
-  const txt = effectText(eff);
+  const txt = effectText(eff, myCard(src));
   if (optional || (eff.costs || []).length) {
     const go = await ask(`Effet de ${c.name}`, `<div class="ask-card">${cardHTML(c)}</div><p class="fx-ask">${fmtEffect(txt)}</p><p>Activer cet effet ?</p>`,
       [{ label: 'Activer', value: true, cls: 'primary' }, { label: 'Ne pas activer', value: false, cls: 'ghost' }]);
@@ -1289,7 +1292,7 @@ function menuForCard(u) {
   if (field && myTurn() && !b && G.phase === 'play') {
     effectsOf(inst).forEach((e, idx) => {
       if (e.when !== 'activateMain') return;
-      const txt = effectText(e);
+      const txt = effectText(e, myCard(inst));
       act(`✨ ${txt.length > 70 ? `${txt.slice(0, 70)}…` : txt}`, () => runEffect(inst, e, { idx }), { cls: 'hl' });
     });
   }

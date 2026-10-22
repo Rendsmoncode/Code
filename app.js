@@ -20808,6 +20808,8 @@ ${suffix}`;
   };
   var TARGET = (def = {}) => ({ k: "t", label: "Cible", type: "target", def: { side: "mine", who: "self", n: 1, ...def } });
   var FILTER = { k: "f", label: "Filtre", type: "filter", def: {} };
+  var durText = (d) => d ? ` ${DUR.opts[d]}` : "";
+  var verb = (t = {}, one, many) => ["allChars", "leaderAndAll"].includes(t.who) || t.who === "chars" && t.n > 1 ? many : one;
   var UNLIMITED_TEXT = "Selon les r\xE8gles du jeu, vous pouvez avoir autant d'exemplaires de cette carte que vous le souhaitez dans votre deck.";
   var KEYWORDS_AUTO = {
     blocker: "Bloqueur",
@@ -20828,9 +20830,13 @@ ${suffix}`;
     oppLifeLE: { label: "L'adversaire a X Vies ou moins", params: [n("n", "Vies", 2)], text: (p) => `Si votre adversaire a ${p.n} Vie${p.n > 1 ? "s" : ""} ou moins,` },
     handLE: { label: "Vous avez X cartes ou moins en main", params: [n("n", "Cartes", 3)], text: (p) => `Si vous avez ${p.n} carte${p.n > 1 ? "s" : ""} ou moins en main,` },
     charsGE: {
-      label: "Vous avez X Personnages ou plus",
-      params: [n("n", "Personnages", 2), { k: "type", label: "Type (facultatif)", type: "text", def: "" }],
-      text: (p) => `Si vous avez ${p.n} Personnages${p.type ? ` de type {${p.type}}` : ""} ou plus,`
+      label: "Vous avez X Personnages ou plus (type, co\xFBt\u2026)",
+      params: [n("n", "Personnages", 2), FILTER],
+      // p.type : ancien format (avant le filtre complet), encore lu.
+      text: (p) => {
+        const f = { ...p.f || {}, ...p.type ? { type: p.type } : {} };
+        return `Si vous avez ${p.n > 1 ? `${p.n} Personnages` : "un Personnage"}${filterText(f)}${p.n > 1 ? " ou plus" : ""},`;
+      }
     },
     noTypeField: {
       label: "Vous n'avez aucune carte de type\u2026 sur votre terrain",
@@ -20906,12 +20912,12 @@ ${suffix}`;
     power: {
       label: "Puissance + / \u2212",
       params: [TARGET({ side: "mine", who: "leaderOrChar", n: 1 }), n("amount", "Puissance (+ ou \u2212)", 1e3), DUR],
-      text: (p) => `${targetText(p.t)} ${p.amount >= 0 ? `gagne +${p.amount}` : `perd ${-p.amount}`} de puissance ${DUR.opts[p.dur]}`
+      text: (p) => `${targetText(p.t)} ${p.amount >= 0 ? `${verb(p.t, "gagne", "gagnent")} +${p.amount}` : `${verb(p.t, "perd", "perdent")} \u2212${-p.amount}`} de puissance${durText(p.dur)}`
     },
     cost: {
       label: "Co\xFBt + / \u2212",
       params: [TARGET({ side: "opp", who: "chars", n: 1 }), n("amount", "Co\xFBt (+ ou \u2212)", -2), DUR],
-      text: (p) => `${targetText(p.t)} ${p.amount >= 0 ? "gagne" : "perd"} ${Math.abs(p.amount)} de co\xFBt ${DUR.opts[p.dur]}`
+      text: (p) => `${targetText(p.t)} ${p.amount >= 0 ? verb(p.t, "gagne", "gagnent") : verb(p.t, "perd", "perdent")} ${Math.abs(p.amount)} de co\xFBt${durText(p.dur)}`
     },
     grantKw: {
       label: "Donner un mot-cl\xE9 (Initiative, Bloqueur\u2026)",
@@ -20920,7 +20926,7 @@ ${suffix}`;
         { k: "kw", label: "Mot-cl\xE9", type: "sel", def: "blocker", opts: Object.fromEntries(Object.entries(KEYWORDS_AUTO).filter(([k]) => k !== "unlimited")) },
         DUR
       ],
-      text: (p) => `${targetText(p.t)} gagne [${KEYWORDS_AUTO[p.kw]}] ${DUR.opts[p.dur]}`
+      text: (p) => `${targetText(p.t)} ${verb(p.t, "gagne", "gagnent")} [${KEYWORDS_AUTO[p.kw]}]${durText(p.dur)}`
     },
     donAdd: {
       label: "Ajouter des DON!!",
@@ -20947,7 +20953,7 @@ ${suffix}`;
         { k: "by", label: "Par", type: "sel", def: "both", opts: { battle: "en combat", effect: "par effet", both: "en combat ni par effet" } },
         DUR
       ],
-      text: (p) => `${targetText(p.t)} ne peut pas \xEAtre mis KO ${p.by === "battle" ? "en combat" : p.by === "effect" ? "par des effets" : "en combat ni par des effets"} ${DUR.opts[p.dur]}`
+      text: (p) => `${targetText(p.t)} ${verb(p.t, "ne peut", "ne peuvent")} pas \xEAtre mis KO ${p.by === "battle" ? "en combat" : p.by === "effect" ? "par des effets" : "en combat ni par des effets"}${durText(p.dur)}`
     },
     cannotAttack: { label: "Ne peut pas attaquer", params: [TARGET({ side: "opp", who: "chars", n: 1 })], text: (p) => `${targetText(p.t)} ne peut pas attaquer jusqu'\xE0 la fin du prochain tour adverse` },
     redirect: { label: "Changer la cible de l'attaque", params: [], text: () => "choisissez votre Leader ou un de vos Personnages : il devient la cible de l'attaque" },
@@ -20986,6 +20992,8 @@ ${suffix}`;
     switch (t.who) {
       case "self":
         return "cette carte";
+      case "selfLeader":
+        return "ce Leader";
       case "leader":
         return opp ? "le Leader adverse" : "votre Leader";
       case "allChars":
@@ -20999,14 +21007,18 @@ ${suffix}`;
     }
   }
   var cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
-  function effectText(e) {
+  function effectText(e, card) {
     const w = WHEN[e.when] || {};
     const tag = w.subject ? `[${w.phrase(e.wf || {})}]` : w.tag;
     const head2 = [tag, e.once ? "[Une fois par tour]" : ""].filter(Boolean);
     const donCond = (e.conds || []).filter((c) => c.k === "donAttached").map((c) => CONDS.donAttached.text(c));
     const otherConds = (e.conds || []).filter((c) => c.k !== "donAttached" && CONDS[c.k]).map((c) => CONDS[c.k].text(c));
     const costs = (e.costs || []).filter((c) => COSTS[c.k]).map((c) => COSTS[c.k].text(c));
-    const acts = (e.actions || []).filter((a) => ACTIONS[a.k]).map((a) => ACTIONS[a.k].text(a));
+    const acts = (e.actions || []).filter((a) => ACTIONS[a.k]).map((a) => {
+      let x = w.continuous && "dur" in a ? { ...a, dur: null } : a;
+      if (card?.type === "leader" && x.t?.who === "self") x = { ...x, t: { ...x.t, who: "selfLeader" } };
+      return ACTIONS[a.k].text(x);
+    });
     let body = acts.join(", puis ");
     if (otherConds.length) body = `${otherConds.join(" ")} ${body}`;
     body = cap(body.trim());
@@ -21018,8 +21030,8 @@ ${suffix}`;
     const list = card?.effects || [];
     const kws = (card?.keywords || []).filter((k) => k !== "unlimited").map((k) => `[${KEYWORDS_AUTO[k]}]`).join(" ");
     const unlimited = card?.keywords?.includes("unlimited") ? UNLIMITED_TEXT : "";
-    const main = list.filter((e) => e.when !== "trigger").map(effectText);
-    const trig = list.filter((e) => e.when === "trigger").map(effectText);
+    const main = list.filter((e) => e.when !== "trigger").map((e) => effectText(e, card));
+    const trig = list.filter((e) => e.when === "trigger").map((e) => effectText(e, card));
     return { main: [unlimited, kws, ...main].filter(Boolean).join("\n"), trigger: trig.join(" ") };
   }
   function defaults(params) {
@@ -21600,7 +21612,7 @@ ${suffix}`;
         setPath(item, t.dataset.p, t.type === "number" ? t.value === "" ? "" : Number(t.value) : t.value);
       }
       if (structural) render2();
-      else block2.querySelector(".fxe-text").textContent = effectText(eff);
+      else block2.querySelector(".fxe-text").textContent = effectText(eff, card);
       onChange2();
     }
     function render2() {
@@ -21635,7 +21647,7 @@ ${suffix}`;
     ${sectionHTML(eff, "conds")}
     ${w.continuous ? "" : sectionHTML(eff, "costs")}
     ${sectionHTML(eff, "actions", w.continuous)}
-    <p class="fxe-text">${esc(effectText(eff))}</p>
+    <p class="fxe-text">${esc(effectText(eff, card))}</p>
   </div>`;
   }
   function sectionHTML(eff, sec, continuous = false) {
@@ -21688,6 +21700,7 @@ ${suffix}`;
     <label>Genre ${sel("cardType", { "": "\u2014", character: "Personnage", stage: "Lieu", event: "\xC9v\xE9nement" })}</label>
     <label>Couleur ${sel("color", { "": "\u2014", ...COLORS_FR })}</label>
     <label>Attribut ${sel("attr", { "": "\u2014", ...Object.fromEntries(ATTRIBUTES.map((a) => [a, a])) })}</label>
+    <label>Co\xFBt min <input type="number" ${attr}="${path}.minCost" value="${esc(f.minCost ?? "")}"></label>
     <label>Co\xFBt max <input type="number" ${attr}="${path}.maxCost" value="${esc(f.maxCost ?? "")}"></label>
     <label>Puissance max <input type="number" step="1000" ${attr}="${path}.maxPower" value="${esc(f.maxPower ?? "")}"></label>
     <label>Puissance de base max <input type="number" step="1000" ${attr}="${path}.maxBasePower" value="${esc(f.maxBasePower ?? "")}"></label>
@@ -23297,8 +23310,10 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         return (G.opp?.life ?? 99) <= c.n;
       case "handLE":
         return me.hand.length <= c.n;
-      case "charsGE":
-        return me.chars.filter((i) => !c.type || norm(myCard(i).traits).includes(norm(c.type))).length >= c.n;
+      case "charsGE": {
+        const f = { ...c.f || {}, ...c.type ? { type: c.type } : {} };
+        return me.chars.filter((i) => matches(myCard(i), f, i, "me")).length >= c.n;
+      }
       case "noTypeField":
         return !fieldInsts().some((i) => (c.self === "count" || i.u !== src?.u) && norm(myCard(i).traits).includes(norm(c.type)));
       case "trashGE":
@@ -23589,7 +23604,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       if (!optional) toast(why);
       return false;
     }
-    const txt = effectText(eff);
+    const txt = effectText(eff, myCard(src));
     if (optional || (eff.costs || []).length) {
       const go = await ask(
         `Effet de ${c.name}`,
@@ -23640,7 +23655,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     const srcName = myCard(src)?.name || "";
     const t = a.t || {};
     const opp = t.side === "opp";
-    const title = (verb) => `${srcName} : ${verb}`;
+    const title = (verb2) => `${srcName} : ${verb2}`;
     switch (a.k) {
       case "draw": {
         for (let i = 0; i < a.n && me.deck.length; i++) me.hand.push(me.deck.shift());
@@ -23960,7 +23975,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     if (field && myTurn() && !b && G.phase === "play") {
       effectsOf(inst).forEach((e, idx) => {
         if (e.when !== "activateMain") return;
-        const txt = effectText(e);
+        const txt = effectText(e, myCard(inst));
         act(`\u2728 ${txt.length > 70 ? `${txt.slice(0, 70)}\u2026` : txt}`, () => runEffect(inst, e, { idx }), { cls: "hl" });
       });
     }

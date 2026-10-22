@@ -37,6 +37,10 @@ const DUR = {
 };
 const TARGET = (def = {}) => ({ k: 't', label: 'Cible', type: 'target', def: { side: 'mine', who: 'self', n: 1, ...def } });
 const FILTER = { k: 'f', label: 'Filtre', type: 'filter', def: {} };
+// Durée écrite sur la carte (rien pour un effet permanent, où dur vaut null).
+const durText = (d) => (d ? ` ${DUR.opts[d]}` : '');
+// « gagne » ou « gagnent » selon la cible.
+const verb = (t = {}, one, many) => (['allChars', 'leaderAndAll'].includes(t.who) || (t.who === 'chars' && t.n > 1) ? many : one);
 export const UNLIMITED_TEXT = 'Selon les règles du jeu, vous pouvez avoir autant d\'exemplaires de cette carte que vous le souhaitez dans votre deck.';
 export const KEYWORDS_AUTO = {
   blocker: 'Bloqueur', rush: 'Initiative', double: 'Double attaque', banish: 'Exil', unblockable: 'Imblocable',
@@ -55,8 +59,12 @@ export const CONDS = {
   oppLifeLE: { label: 'L\'adversaire a X Vies ou moins', params: [n('n', 'Vies', 2)], text: (p) => `Si votre adversaire a ${p.n} Vie${p.n > 1 ? 's' : ''} ou moins,` },
   handLE: { label: 'Vous avez X cartes ou moins en main', params: [n('n', 'Cartes', 3)], text: (p) => `Si vous avez ${p.n} carte${p.n > 1 ? 's' : ''} ou moins en main,` },
   charsGE: {
-    label: 'Vous avez X Personnages ou plus', params: [n('n', 'Personnages', 2), { k: 'type', label: 'Type (facultatif)', type: 'text', def: '' }],
-    text: (p) => `Si vous avez ${p.n} Personnages${p.type ? ` de type {${p.type}}` : ''} ou plus,`,
+    label: 'Vous avez X Personnages ou plus (type, coût…)', params: [n('n', 'Personnages', 2), FILTER],
+    // p.type : ancien format (avant le filtre complet), encore lu.
+    text: (p) => {
+      const f = { ...(p.f || {}), ...(p.type ? { type: p.type } : {}) };
+      return `Si vous avez ${p.n > 1 ? `${p.n} Personnages` : 'un Personnage'}${filterText(f)}${p.n > 1 ? ' ou plus' : ''},`;
+    },
   },
   noTypeField: {
     label: 'Vous n\'avez aucune carte de type… sur votre terrain',
@@ -125,16 +133,16 @@ export const ACTIONS = {
   },
   power: {
     label: 'Puissance + / −', params: [TARGET({ side: 'mine', who: 'leaderOrChar', n: 1 }), n('amount', 'Puissance (+ ou −)', 1000), DUR],
-    text: (p) => `${targetText(p.t)} ${p.amount >= 0 ? `gagne +${p.amount}` : `perd ${-p.amount}`} de puissance ${DUR.opts[p.dur]}`,
+    text: (p) => `${targetText(p.t)} ${p.amount >= 0 ? `${verb(p.t, 'gagne', 'gagnent')} +${p.amount}` : `${verb(p.t, 'perd', 'perdent')} −${-p.amount}`} de puissance${durText(p.dur)}`,
   },
   cost: {
     label: 'Coût + / −', params: [TARGET({ side: 'opp', who: 'chars', n: 1 }), n('amount', 'Coût (+ ou −)', -2), DUR],
-    text: (p) => `${targetText(p.t)} ${p.amount >= 0 ? 'gagne' : 'perd'} ${Math.abs(p.amount)} de coût ${DUR.opts[p.dur]}`,
+    text: (p) => `${targetText(p.t)} ${p.amount >= 0 ? verb(p.t, 'gagne', 'gagnent') : verb(p.t, 'perd', 'perdent')} ${Math.abs(p.amount)} de coût${durText(p.dur)}`,
   },
   grantKw: {
     label: 'Donner un mot-clé (Initiative, Bloqueur…)', params: [TARGET({ side: 'mine', who: 'chars', n: 1 }),
       { k: 'kw', label: 'Mot-clé', type: 'sel', def: 'blocker', opts: Object.fromEntries(Object.entries(KEYWORDS_AUTO).filter(([k]) => k !== 'unlimited')) }, DUR],
-    text: (p) => `${targetText(p.t)} gagne [${KEYWORDS_AUTO[p.kw]}] ${DUR.opts[p.dur]}`,
+    text: (p) => `${targetText(p.t)} ${verb(p.t, 'gagne', 'gagnent')} [${KEYWORDS_AUTO[p.kw]}]${durText(p.dur)}`,
   },
   donAdd: {
     label: 'Ajouter des DON!!', params: [n('n', 'DON!!'), { k: 'state', label: 'État', type: 'sel', def: 'rested', opts: { rested: 'reposé(s)', active: 'actif(s)' } }],
@@ -155,7 +163,7 @@ export const ACTIONS = {
   protect: {
     label: 'Ne peut pas être mis KO', params: [TARGET({ side: 'mine', who: 'self', n: 1 }),
       { k: 'by', label: 'Par', type: 'sel', def: 'both', opts: { battle: 'en combat', effect: 'par effet', both: 'en combat ni par effet' } }, DUR],
-    text: (p) => `${targetText(p.t)} ne peut pas être mis KO ${p.by === 'battle' ? 'en combat' : p.by === 'effect' ? 'par des effets' : 'en combat ni par des effets'} ${DUR.opts[p.dur]}`,
+    text: (p) => `${targetText(p.t)} ${verb(p.t, 'ne peut', 'ne peuvent')} pas être mis KO ${p.by === 'battle' ? 'en combat' : p.by === 'effect' ? 'par des effets' : 'en combat ni par des effets'}${durText(p.dur)}`,
   },
   cannotAttack: { label: 'Ne peut pas attaquer', params: [TARGET({ side: 'opp', who: 'chars', n: 1 })], text: (p) => `${targetText(p.t)} ne peut pas attaquer jusqu'à la fin du prochain tour adverse` },
   redirect: { label: 'Changer la cible de l\'attaque', params: [], text: () => 'choisissez votre Leader ou un de vos Personnages : il devient la cible de l\'attaque' },
@@ -195,6 +203,7 @@ export function targetText(t = {}) {
   const f = filterText(t.f);
   switch (t.who) {
     case 'self': return 'cette carte';
+    case 'selfLeader': return 'ce Leader';
     case 'leader': return opp ? 'le Leader adverse' : 'votre Leader';
     case 'allChars': return opp ? `tous les Personnages adverses${f}` : `tous vos Personnages${f}`;
     case 'leaderAndAll': return opp ? 'le Leader adverse et tous ses Personnages' : 'votre Leader et tous vos Personnages';
@@ -207,14 +216,20 @@ export function targetText(t = {}) {
 // ---------- Texte d'une carte ----------
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
-export function effectText(e) {
+// card (facultatif) : la carte qui porte l'effet, pour écrire « ce Leader ».
+export function effectText(e, card) {
   const w = WHEN[e.when] || {};
   const tag = w.subject ? `[${w.phrase(e.wf || {})}]` : w.tag;
   const head = [tag, e.once ? '[Une fois par tour]' : ''].filter(Boolean);
   const donCond = (e.conds || []).filter((c) => c.k === 'donAttached').map((c) => CONDS.donAttached.text(c));
   const otherConds = (e.conds || []).filter((c) => c.k !== 'donAttached' && CONDS[c.k]).map((c) => CONDS[c.k].text(c));
   const costs = (e.costs || []).filter((c) => COSTS[c.k]).map((c) => COSTS[c.k].text(c));
-  const acts = (e.actions || []).filter((a) => ACTIONS[a.k]).map((a) => ACTIONS[a.k].text(a));
+  // Un effet permanent n'a pas de durée à écrire.
+  const acts = (e.actions || []).filter((a) => ACTIONS[a.k]).map((a) => {
+    let x = w.continuous && 'dur' in a ? { ...a, dur: null } : a;
+    if (card?.type === 'leader' && x.t?.who === 'self') x = { ...x, t: { ...x.t, who: 'selfLeader' } };
+    return ACTIONS[a.k].text(x);
+  });
   let body = acts.join(', puis ');
   if (otherConds.length) body = `${otherConds.join(' ')} ${body}`;
   body = cap(body.trim());
@@ -229,8 +244,8 @@ export function effectsText(card) {
   const kws = (card?.keywords || []).filter((k) => k !== 'unlimited').map((k) => `[${KEYWORDS_AUTO[k]}]`).join(' ');
   // Règle de construction de deck, écrite comme sur la carte officielle.
   const unlimited = card?.keywords?.includes('unlimited') ? UNLIMITED_TEXT : '';
-  const main = list.filter((e) => e.when !== 'trigger').map(effectText);
-  const trig = list.filter((e) => e.when === 'trigger').map(effectText);
+  const main = list.filter((e) => e.when !== 'trigger').map((e) => effectText(e, card));
+  const trig = list.filter((e) => e.when === 'trigger').map((e) => effectText(e, card));
   return { main: [unlimited, kws, ...main].filter(Boolean).join('\n'), trigger: trig.join(' ') };
 }
 
