@@ -52,9 +52,10 @@ export function createDeckBuilder(opts) {
     const { act, id } = t.dataset;
     if (act === 'add') {
       const c = S.byId[id];
-      const max = Math.min(4, owned ? S.collection[id] || 0 : 4);
+      const limit = c.keywords?.includes('unlimited') ? Infinity : 4; // « autant d'exemplaires que vous le souhaitez »
+      const max = Math.min(limit, owned ? S.collection[id] || 0 : limit);
       if (c.type === 'leader') d.leader = id;
-      else if ((d.cards[id] || 0) >= max) return msg(owned && max < 4 ? `Vous ne possédez que ${max} exemplaire(s) de « ${c.name} ».` : '4 exemplaires maximum.');
+      else if ((d.cards[id] || 0) >= max) return msg(owned && max < limit ? `Vous ne possédez que ${max} exemplaire(s) de « ${c.name} ».` : '4 exemplaires maximum.');
       else d.cards[id] = (d.cards[id] || 0) + 1;
     } else if (act === 'rm') {
       d.cards[id] = (d.cards[id] || 0) - 1;

@@ -173,7 +173,7 @@ export function validateDeck(deck, { owned = true } = {}) {
     total += n;
     const key = c.code || c.id;
     perCode[key] = (perCode[key] || 0) + n;
-    if (perCode[key] > 4) errs.push(`« ${c.name} » : 4 exemplaires maximum.`);
+    if (perCode[key] > 4 && !c.keywords?.includes('unlimited')) errs.push(`« ${c.name} » : 4 exemplaires maximum.`);
     if (owned && n > (S.collection[id] || 0)) errs.push(`« ${c.name} » : vous n'en possédez que ${S.collection[id] || 0}.`);
     if (c.type === 'leader') errs.push(`« ${c.name} » est un Leader : il ne va pas dans le deck.`);
     if (!owned && c.rarity === 'S') errs.push(`« ${c.name} » est une 1on1 : interdite dans un deck préconstruit.`);

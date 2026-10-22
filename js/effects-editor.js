@@ -6,7 +6,7 @@ import {
 import { esc, ATTRIBUTES } from './cards.js';
 
 const SECTIONS = { conds: ['Conditions', CONDS], costs: ['Coûts', COSTS], actions: ['Actions', ACTIONS] };
-const KW_SHOWN = ['blocker', 'rush', 'double', 'banish', 'unblockable'];
+const KW_SHOWN = ['blocker', 'rush', 'double', 'banish', 'unblockable', 'unlimited'];
 
 // card est modifié directement ; onChange() est appelé après chaque modification.
 export function mountEffectsEditor(el, getCard, onChange) {

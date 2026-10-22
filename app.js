@@ -20933,7 +20933,7 @@ ${suffix}`;
       total += n2;
       const key = c.code || c.id;
       perCode[key] = (perCode[key] || 0) + n2;
-      if (perCode[key] > 4) errs.push(`\xAB ${c.name} \xBB : 4 exemplaires maximum.`);
+      if (perCode[key] > 4 && !c.keywords?.includes("unlimited")) errs.push(`\xAB ${c.name} \xBB : 4 exemplaires maximum.`);
       if (owned && n2 > (S.collection[id] || 0)) errs.push(`\xAB ${c.name} \xBB : vous n'en poss\xE9dez que ${S.collection[id] || 0}.`);
       if (c.type === "leader") errs.push(`\xAB ${c.name} \xBB est un Leader : il ne va pas dans le deck.`);
       if (!owned && c.rarity === "S") errs.push(`\xAB ${c.name} \xBB est une 1on1 : interdite dans un deck pr\xE9construit.`);
@@ -21003,12 +21003,14 @@ ${suffix}`;
   };
   var TARGET = (def = {}) => ({ k: "t", label: "Cible", type: "target", def: { side: "mine", who: "self", n: 1, ...def } });
   var FILTER = { k: "f", label: "Filtre", type: "filter", def: {} };
+  var UNLIMITED_TEXT = "Selon les r\xE8gles du jeu, vous pouvez avoir autant d'exemplaires de cette carte que vous le souhaitez dans votre deck.";
   var KEYWORDS_AUTO = {
     blocker: "Bloqueur",
     rush: "Initiative",
     double: "Double attaque",
     banish: "Exil",
-    unblockable: "Imblocable"
+    unblockable: "Imblocable",
+    unlimited: "Exemplaires illimit\xE9s"
   };
   var CONDS = {
     donAttached: { label: "DON!! attach\xE9s \xE0 cette carte (min.)", params: [n("n", "DON!!")], text: (p) => `[DON!! x${p.n}]` },
@@ -21100,7 +21102,7 @@ ${suffix}`;
       label: "Donner un mot-cl\xE9",
       params: [
         TARGET({ side: "mine", who: "chars", n: 1 }),
-        { k: "kw", label: "Mot-cl\xE9", type: "sel", def: "blocker", opts: KEYWORDS_AUTO },
+        { k: "kw", label: "Mot-cl\xE9", type: "sel", def: "blocker", opts: Object.fromEntries(Object.entries(KEYWORDS_AUTO).filter(([k]) => k !== "unlimited")) },
         DUR
       ],
       text: (p) => `${targetText(p.t)} gagne [${KEYWORDS_AUTO[p.kw]}] ${DUR.opts[p.dur]}`
@@ -21199,10 +21201,11 @@ ${suffix}`;
   }
   function effectsText(card) {
     const list = card?.effects || [];
-    const kws = (card?.keywords || []).map((k) => `[${KEYWORDS_AUTO[k]}]`).join(" ");
+    const kws = (card?.keywords || []).filter((k) => k !== "unlimited").map((k) => `[${KEYWORDS_AUTO[k]}]`).join(" ");
+    const unlimited = card?.keywords?.includes("unlimited") ? UNLIMITED_TEXT : "";
     const main = list.filter((e) => e.when !== "trigger").map(effectText);
     const trig = list.filter((e) => e.when === "trigger").map(effectText);
-    return { main: [kws, ...main].filter(Boolean).join("\n"), trigger: trig.join(" ") };
+    return { main: [unlimited, kws, ...main].filter(Boolean).join("\n"), trigger: trig.join(" ") };
   }
   function defaults(params) {
     const o = {};
@@ -21459,7 +21462,7 @@ ${suffix}`;
 
   // js/effects-editor.js
   var SECTIONS = { conds: ["Conditions", CONDS], costs: ["Co\xFBts", COSTS], actions: ["Actions", ACTIONS] };
-  var KW_SHOWN = ["blocker", "rush", "double", "banish", "unblockable"];
+  var KW_SHOWN = ["blocker", "rush", "double", "banish", "unblockable", "unlimited"];
   function mountEffectsEditor(el, getCard, onChange2) {
     el.addEventListener("change", (e) => handle(e, true));
     el.addEventListener("input", (e) => {
@@ -22095,9 +22098,10 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       const { act, id } = t.dataset;
       if (act === "add") {
         const c = S.byId[id];
-        const max = Math.min(4, owned ? S.collection[id] || 0 : 4);
+        const limit = c.keywords?.includes("unlimited") ? Infinity : 4;
+        const max = Math.min(limit, owned ? S.collection[id] || 0 : limit);
         if (c.type === "leader") d.leader = id;
-        else if ((d.cards[id] || 0) >= max) return msg2(owned && max < 4 ? `Vous ne poss\xE9dez que ${max} exemplaire(s) de \xAB ${c.name} \xBB.` : "4 exemplaires maximum.");
+        else if ((d.cards[id] || 0) >= max) return msg2(owned && max < limit ? `Vous ne poss\xE9dez que ${max} exemplaire(s) de \xAB ${c.name} \xBB.` : "4 exemplaires maximum.");
         else d.cards[id] = (d.cards[id] || 0) + 1;
       } else if (act === "rm") {
         d.cards[id] = (d.cards[id] || 0) - 1;

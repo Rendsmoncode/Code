@@ -37,8 +37,10 @@ const DUR = {
 };
 const TARGET = (def = {}) => ({ k: 't', label: 'Cible', type: 'target', def: { side: 'mine', who: 'self', n: 1, ...def } });
 const FILTER = { k: 'f', label: 'Filtre', type: 'filter', def: {} };
+export const UNLIMITED_TEXT = 'Selon les règles du jeu, vous pouvez avoir autant d\'exemplaires de cette carte que vous le souhaitez dans votre deck.';
 export const KEYWORDS_AUTO = {
   blocker: 'Bloqueur', rush: 'Initiative', double: 'Double attaque', banish: 'Exil', unblockable: 'Imblocable',
+  unlimited: 'Exemplaires illimités',
 };
 
 // ---------- Conditions ----------
@@ -122,7 +124,7 @@ export const ACTIONS = {
   },
   grantKw: {
     label: 'Donner un mot-clé', params: [TARGET({ side: 'mine', who: 'chars', n: 1 }),
-      { k: 'kw', label: 'Mot-clé', type: 'sel', def: 'blocker', opts: KEYWORDS_AUTO }, DUR],
+      { k: 'kw', label: 'Mot-clé', type: 'sel', def: 'blocker', opts: Object.fromEntries(Object.entries(KEYWORDS_AUTO).filter(([k]) => k !== 'unlimited')) }, DUR],
     text: (p) => `${targetText(p.t)} gagne [${KEYWORDS_AUTO[p.kw]}] ${DUR.opts[p.dur]}`,
   },
   donAdd: {
@@ -215,10 +217,12 @@ export function effectText(e) {
 // { main, trigger } : texte généré depuis les effets structurés.
 export function effectsText(card) {
   const list = card?.effects || [];
-  const kws = (card?.keywords || []).map((k) => `[${KEYWORDS_AUTO[k]}]`).join(' ');
+  const kws = (card?.keywords || []).filter((k) => k !== 'unlimited').map((k) => `[${KEYWORDS_AUTO[k]}]`).join(' ');
+  // Règle de construction de deck, écrite comme sur la carte officielle.
+  const unlimited = card?.keywords?.includes('unlimited') ? UNLIMITED_TEXT : '';
   const main = list.filter((e) => e.when !== 'trigger').map(effectText);
   const trig = list.filter((e) => e.when === 'trigger').map(effectText);
-  return { main: [kws, ...main].filter(Boolean).join('\n'), trigger: trig.join(' ') };
+  return { main: [unlimited, kws, ...main].filter(Boolean).join('\n'), trigger: trig.join(' ') };
 }
 
 // Valeurs par défaut d'un bloc (pour l'éditeur).
