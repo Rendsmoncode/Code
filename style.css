@@ -393,3 +393,10 @@ details { margin-top: 12px; }
 .chip button:hover { color: var(--err); }
 .traits-ed .row-btns { margin-top: 0; }
 #ed-traits-sel { min-width: 230px; }
+
+/* ---------- invitations ---------- */
+.iv-form .iv-name { min-width: 180px; }
+.iv-form .iv-n { width: 80px; margin-left: 6px; }
+.iv-link input { flex: 1; min-width: 260px; }
+.invite-hello { background: #1d2a1a; border: 1px solid var(--ok); border-radius: 8px; padding: 10px 12px; margin: 0; line-height: 1.45; }
+.badge:not(.ok):not(.ko) { background: var(--panel-2); color: var(--muted); }

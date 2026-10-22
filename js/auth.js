@@ -1,9 +1,12 @@
 // Écran de connexion / création de compte, et choix du deck préconstruit.
-import { S, signIn, signUp, claimStarter, validateDeck } from './store.js';
+import { S, signIn, signUp, claimStarter, validateDeck, inviteInfo } from './store.js';
 import { esc, cardHTML } from './cards.js';
 
-export function showAuth() {
+export async function showAuth() {
   let mode = 'in';
+  const token = new URLSearchParams(location.search).get('invite');
+  const invite = token ? await inviteInfo(token) : null;
+  if (invite) mode = 'up';
   const el = document.createElement('div');
   el.className = 'auth';
   document.body.append(el);
@@ -17,13 +20,16 @@ export function showAuth() {
         <button type="button" data-mode="in" class="${mode === 'in' ? 'on' : ''}">Se connecter</button>
         <button type="button" data-mode="up" class="${mode === 'up' ? 'on' : ''}">Créer un compte</button>
       </div>
+      ${token && !invite ? '<p class="msg err">Ce lien d\'invitation n\'est plus valable (il a peut-être déjà servi). Connectez-vous, ou demandez un nouveau lien.</p>' : ''}
+      ${invite && mode === 'up' ? `<p class="invite-hello">Bienvenue <b>${esc(invite.username)}</b> ! ${invite.starter ? `Votre deck « ${esc(invite.starter)} »` : 'Votre compte'}${invite.boosters ? ` et ${invite.boosters} booster${invite.boosters > 1 ? 's' : ''}` : ''} vous attend${invite.starter && invite.boosters ? 'ent' : ''}. Choisissez simplement votre mot de passe.</p>` : ''}
       <div class="field"><label for="au-user">Pseudo</label>
-        <input id="au-user" name="username" autocomplete="username" required maxlength="20" placeholder="ex. : ayoub"></div>
+        <input id="au-user" name="username" autocomplete="username" required maxlength="20" placeholder="ex. : ayoub"
+          ${invite && mode === 'up' ? `value="${esc(invite.username)}" readonly` : ''}></div>
       <div class="field"><label for="au-pass">Mot de passe</label>
         <input id="au-pass" name="password" type="password" required minlength="6" autocomplete="${mode === 'in' ? 'current-password' : 'new-password'}"></div>
       ${mode === 'up' ? `<div class="field"><label for="au-pass2">Confirmer le mot de passe</label>
         <input id="au-pass2" type="password" required minlength="6" autocomplete="new-password"></div>
-        <p class="muted small">Pseudo : 3 à 20 caractères (lettres, chiffres, - ou _). Pas besoin d'adresse e-mail.</p>` : ''}
+        ${invite ? '' : '<p class="muted small">L\'inscription se fait avec le lien d\'invitation personnel envoyé par l\'organisateur.</p>'}` : ''}
       <button class="btn primary big">${mode === 'in' ? 'Se connecter' : 'Créer mon compte'}</button>
       <p class="msg err au-msg" role="alert"></p>
     </form>`;
@@ -42,8 +48,11 @@ export function showAuth() {
     out.textContent = '';
     el.querySelector('.btn.primary').disabled = true;
     try {
-      if (mode === 'in') await signIn(u, p); else await signUp(u, p);
-      location.reload();
+      if (mode === 'in') await signIn(u, p); else await signUp(u, p, invite ? token : null);
+      // On retire le jeton d'invitation de l'adresse avant de recharger.
+      const url = new URL(location.href);
+      url.searchParams.delete('invite');
+      location.replace(url.href);
     } catch (err) {
       out.textContent = err.message;
       el.querySelector('.btn.primary').disabled = false;

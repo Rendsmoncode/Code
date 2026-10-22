@@ -1,5 +1,6 @@
 // Données du jeu, stockées sur Supabase (cartes, collections, decks, boosters), avec cache en mémoire.
 import { createClient } from '@supabase/supabase-js';
+import { setImageResolver } from './cards.js';
 
 export const SUPABASE_URL = 'https://bhhakcbodwtmopstgetu.supabase.co';
 export const SUPABASE_KEY = 'sb_publishable_sJAG-LMddGRv-6KU2rij_Q_QPPX50U_';
@@ -27,7 +28,7 @@ function friendly(m = '') {
   if (/already registered|already exists/i.test(m)) return 'Ce pseudo est déjà pris.';
   if (/Password should be/i.test(m)) return 'Le mot de passe doit faire au moins 6 caractères.';
   if (/Failed to fetch|NetworkError/i.test(m)) return 'Impossible de joindre le serveur. Vérifiez votre connexion Internet.';
-  if (/Database error saving new user/i.test(m)) return 'Pseudo invalide (3 à 20 caractères : lettres, chiffres, - ou _).';
+  if (/Database error saving new user/i.test(m)) return 'Inscription impossible : il faut le lien d\'invitation personnel reçu, avec le pseudo prévu.';
   return m;
 }
 
@@ -38,10 +39,12 @@ export async function signIn(username, password) {
   check(await sb.auth.signInWithPassword({ email: emailOf(username), password }));
 }
 
-export async function signUp(username, password) {
+// invite : jeton du lien d'invitation personnel (obligatoire, sauf pour le tout premier compte).
+export async function signUp(username, password, invite = null) {
   const u = username.trim().toLowerCase();
   if (!/^[a-z0-9_-]{3,20}$/.test(u)) throw new Error('Pseudo invalide (3 à 20 caractères : lettres, chiffres, - ou _).');
-  const data = check(await sb.auth.signUp({ email: emailOf(u), password, options: { data: { username: u } } }));
+  const meta = invite ? { username: u, invite } : { username: u };
+  const data = check(await sb.auth.signUp({ email: emailOf(u), password, options: { data: meta } }));
   if (!data.session) throw new Error('Compte créé, mais la confirmation par e-mail est activée sur Supabase : le propriétaire doit la désactiver.');
 }
 
@@ -79,6 +82,27 @@ function refreshTraitsList() {
 }
 listeners.add(refreshTraitsList);
 
+// ---------- images privées : adresses temporaires (« signées ») ----------
+// Gardées 7 jours, et mémorisées dans le navigateur pour ne pas retélécharger les images à chaque visite.
+const SIGN_SECONDS = 7 * 24 * 3600;
+const SIGN_KEY = 'optcgm-signed';
+let signed = {};
+try { signed = JSON.parse(localStorage.getItem(SIGN_KEY) || '{}'); } catch { signed = {}; }
+setImageResolver((url) => {
+  const p = oldImagePath(url);
+  return (p && signed[p]?.url) || url;
+});
+async function signImages(paths) {
+  const soon = Date.now() + 24 * 3600e3; // renouveler quand il reste moins d'un jour
+  const todo = [...new Set(paths.filter(Boolean))].filter((p) => !(signed[p]?.exp > soon));
+  for (let i = 0; i < todo.length; i += 100) {
+    const { data, error } = await sb.storage.from('cards').createSignedUrls(todo.slice(i, i + 100), SIGN_SECONDS);
+    if (error) { console.warn(error); return; }
+    for (const r of data || []) if (r.signedUrl) signed[r.path] = { url: r.signedUrl, exp: Date.now() + SIGN_SECONDS * 1000 };
+  }
+  try { localStorage.setItem(SIGN_KEY, JSON.stringify(signed)); } catch { /* stockage plein : tant pis */ }
+}
+
 export async function load() {
   const [status, cards, coll, decks, starters, owners] = await Promise.all([
     sb.rpc('booster_status'),
@@ -95,6 +119,7 @@ export async function load() {
   S.starters = check(starters);
   // Tolérant : la fonction n'existe pas tant que le script SQL n'a pas été relancé.
   S.oneOfOne = Object.fromEntries((owners.error ? [] : owners.data || []).map((r) => [r.card_id, r.username]));
+  await signImages(S.cards.map((c) => oldImagePath(c.image)));
   reindex();
   emit();
 }
@@ -133,6 +158,7 @@ export async function saveCards(cards) {
       id, data, rarity: rarity || 'C', in_boosters: inBoosters !== false, updated_at: new Date().toISOString(),
     }));
     c.image = image;
+    await signImages([oldImagePath(image)]);
     const old = prev !== image && oldImagePath(prev);
     if (old) await sb.storage.from('cards').remove([old]);
     const i = S.cards.findIndex((x) => x.id === c.id);
@@ -225,6 +251,22 @@ export async function giveBoosters(target, amount) {
   const n = check(await sb.rpc('admin_give_boosters', { target: target || null, amount }));
   await refreshStatus();
   return n;
+}
+
+// ---------- invitations ----------
+export const inviteLink = (token) => `${location.origin}${location.pathname}?invite=${token}`;
+export async function inviteInfo(token) {
+  const { data, error } = await sb.rpc('invite_info', { t: token });
+  return error ? null : data;
+}
+export async function listInvites() {
+  return check(await sb.from('invites').select('*').order('created_at', { ascending: false }));
+}
+export async function createInvite(username, starterId, boosters) {
+  return check(await sb.rpc('admin_create_invite', { uname: username, starter: starterId || '', nb: boosters }));
+}
+export async function deleteInvite(token) {
+  check(await sb.from('invites').delete().eq('token', token));
 }
 
 export async function setRole(target, role) {

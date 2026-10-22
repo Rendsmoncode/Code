@@ -52,6 +52,17 @@ create table if not exists public.decks (
   updated_at timestamptz not null default now()
 );
 
+-- Invitations personnelles : un lien unique par ami, avec pseudo réservé, deck de départ et boosters offerts.
+create table if not exists public.invites (
+  token uuid primary key default gen_random_uuid(),
+  username text not null check (username ~ '^[a-z0-9_-]{3,20}$'),
+  starter_id text references public.starter_decks on delete set null,
+  boosters int not null default 10 check (boosters >= 0 and boosters <= 10000),
+  created_at timestamptz not null default now(),
+  used_by uuid references public.profiles on delete set null,
+  used_at timestamptz
+);
+
 -- ---------- Fonctions utilitaires ----------
 
 create or replace function public.is_admin() returns boolean
@@ -59,13 +70,31 @@ language sql stable security definer set search_path = public as $$
   select exists (select 1 from public.profiles where id = auth.uid() and role in ('admin', 'owner'));
 $$;
 
--- Création automatique du profil à l'inscription. Le tout premier inscrit devient propriétaire.
+-- Création automatique du profil à l'inscription. Le tout premier inscrit devient propriétaire ;
+-- ensuite, on ne peut s'inscrire qu'avec une invitation valide, au pseudo prévu.
 create or replace function public.handle_new_user() returns trigger
 language plpgsql security definer set search_path = public as $$
+declare
+  uname text := lower(new.raw_user_meta_data ->> 'username');
+  tok text := new.raw_user_meta_data ->> 'invite';
+  first_user boolean := not exists (select 1 from public.profiles);
+  inv public.invites;
 begin
-  insert into public.profiles (id, username, role)
-  values (new.id, lower(new.raw_user_meta_data ->> 'username'),
-          case when exists (select 1 from public.profiles) then 'player' else 'owner' end);
+  if first_user then
+    insert into public.profiles (id, username, role) values (new.id, uname, 'owner');
+    return new;
+  end if;
+  if tok is null or tok !~ '^[0-9a-f-]{36}$' then raise exception 'Inscription sur invitation uniquement.'; end if;
+  select * into inv from public.invites where token = tok::uuid and used_by is null for update;
+  if not found then raise exception 'Invitation invalide ou déjà utilisée.'; end if;
+  if inv.username <> uname then raise exception 'Cette invitation est réservée à un autre pseudo.'; end if;
+  -- Boosters offerts ; la réserve de boosters gratuits démarre à zéro.
+  insert into public.profiles (id, username, role, boosters, free_anchor)
+    values (new.id, uname, 'player', inv.boosters, now());
+  update public.invites set used_by = new.id, used_at = now() where token = inv.token;
+  if inv.starter_id is not null and exists (select 1 from public.starter_decks where id = inv.starter_id) then
+    perform public.grant_starter(new.id, inv.starter_id);
+  end if;
   return new;
 end $$;
 
@@ -81,7 +110,8 @@ declare
   v int;
   owned int;
 begin
-  new.user_id := coalesce(auth.uid(), new.user_id);
+  -- Le joueur concerné (les règles d'accès empêchent déjà d'écrire dans les decks d'un autre).
+  new.user_id := coalesce(new.user_id, auth.uid());
   new.updated_at := now();
   if coalesce(new.leader, '') <> '' and not exists (
     select 1 from public.collection where user_id = new.user_id and card_id = new.leader) then
@@ -204,6 +234,13 @@ $$;
 
 create or replace function public.claim_starter(starter_id text) returns text
 language plpgsql security definer set search_path = public as $$
+begin
+  return public.grant_starter(auth.uid(), starter_id);
+end $$;
+
+-- Donne à un joueur un deck préconstruit : ses cartes vont dans la collection et le deck est créé.
+create or replace function public.grant_starter(uid uuid, starter_id text) returns text
+language plpgsql security definer set search_path = public as $$
 declare
   p public.profiles;
   s public.starter_decks;
@@ -211,7 +248,7 @@ declare
   v int;
   deck_id text := gen_random_uuid()::text;
 begin
-  select * into p from public.profiles where id = auth.uid() for update;
+  select * into p from public.profiles where id = uid for update;
   if not found then raise exception 'Profil introuvable.'; end if;
   if p.starter_claimed then raise exception 'Vous avez déjà reçu votre deck préconstruit.'; end if;
   select * into s from public.starter_decks where id = starter_id;
@@ -260,6 +297,36 @@ begin
   if not found then raise exception 'Joueur introuvable (ou c''est le propriétaire).'; end if;
 end $$;
 
+-- Crée une invitation et renvoie son jeton (pour construire le lien).
+create or replace function public.admin_create_invite(uname text, starter text, nb int) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare
+  u text := lower(trim(uname));
+  t uuid;
+begin
+  if not public.is_admin() then raise exception 'Réservé aux admins.'; end if;
+  if u !~ '^[a-z0-9_-]{3,20}$' then raise exception 'Pseudo invalide (3 à 20 caractères : lettres, chiffres, - ou _).'; end if;
+  if exists (select 1 from public.profiles where username = u) then raise exception 'Ce pseudo est déjà pris par un joueur.'; end if;
+  if exists (select 1 from public.invites where username = u and used_by is null) then
+    raise exception 'Une invitation attend déjà ce pseudo.';
+  end if;
+  insert into public.invites (username, starter_id, boosters) values (u, nullif(starter, ''), coalesce(nb, 10)) returning token into t;
+  return t;
+end $$;
+
+-- Ce que voit la personne invitée avant de créer son compte (accessible sans être connecté).
+create or replace function public.invite_info(t text) returns json
+language plpgsql stable security definer set search_path = public as $$
+declare
+  inv public.invites;
+begin
+  if t is null or t !~ '^[0-9a-f-]{36}$' then return null; end if;
+  select * into inv from public.invites where token = t::uuid and used_by is null;
+  if not found then return null; end if;
+  return json_build_object('username', inv.username, 'boosters', inv.boosters,
+    'starter', (select name from public.starter_decks where id = inv.starter_id));
+end $$;
+
 -- ---------- Sécurité : RLS ----------
 
 alter table public.profiles enable row level security;
@@ -267,6 +334,11 @@ alter table public.cards enable row level security;
 alter table public.starter_decks enable row level security;
 alter table public.collection enable row level security;
 alter table public.decks enable row level security;
+alter table public.invites enable row level security;
+
+drop policy if exists "invitations admin" on public.invites;
+create policy "invitations admin" on public.invites for all to authenticated
+  using (public.is_admin()) with check (public.is_admin());
 
 drop policy if exists "profils visibles" on public.profiles;
 create policy "profils visibles" on public.profiles for select to authenticated using (true);
@@ -296,15 +368,25 @@ revoke all on all tables in schema public from anon;
 grant usage on schema public to authenticated;
 grant select on public.profiles, public.collection to authenticated;
 grant select, insert, update, delete on public.cards, public.starter_decks, public.decks to authenticated;
+grant select, delete on public.invites to authenticated;
 
 revoke execute on all functions in schema public from public, anon, authenticated;
 grant execute on function public.is_admin(), public.booster_status(), public.open_booster(), public.one_of_one_owners(),
-  public.claim_starter(text), public.admin_give_boosters(text, int), public.admin_set_role(text, text)
+  public.claim_starter(text), public.admin_give_boosters(text, int), public.admin_set_role(text, text),
+  public.admin_create_invite(text, text, int)
   to authenticated;
+grant usage on schema public to anon;
+grant execute on function public.invite_info(text) to anon, authenticated;
 
--- ---------- Images des cartes (stockage public, écriture réservée aux admins) ----------
+-- ---------- Images des cartes (stockage PRIVÉ : visibles seulement par les joueurs connectés) ----------
+-- Le site demande des adresses temporaires (« signées ») pour afficher les images.
 
-insert into storage.buckets (id, name, public) values ('cards', 'cards', true) on conflict (id) do nothing;
+insert into storage.buckets (id, name, public) values ('cards', 'cards', false) on conflict (id) do nothing;
+update storage.buckets set public = false where id = 'cards';
+
+drop policy if exists "images cartes lecture joueurs" on storage.objects;
+create policy "images cartes lecture joueurs" on storage.objects for select to authenticated
+  using (bucket_id = 'cards');
 
 drop policy if exists "images cartes admin ajout" on storage.objects;
 create policy "images cartes admin ajout" on storage.objects for insert to authenticated

@@ -20774,216 +20774,6 @@ ${suffix}`;
   }
   if (shouldShowDeprecationWarning()) console.warn("\u26A0\uFE0F  Node.js 20 and below are deprecated and will no longer be supported in future versions of @supabase/supabase-js. Please upgrade to Node.js 22 or later. For more information, visit: https://github.com/orgs/supabase/discussions/45715");
 
-  // js/store.js
-  var SUPABASE_URL = "https://bhhakcbodwtmopstgetu.supabase.co";
-  var SUPABASE_KEY = "sb_publishable_sJAG-LMddGRv-6KU2rij_Q_QPPX50U_";
-  var EMAIL_DOMAIN = "joueurs.optcg-maison.fr";
-  var sb = createClient(SUPABASE_URL, SUPABASE_KEY);
-  var S = {
-    user: null,
-    status: null,
-    cards: [],
-    byId: {},
-    collection: {},
-    decks: [],
-    starters: [],
-    oneOfOne: {}
-  };
-  var isAdmin = () => ["admin", "owner"].includes(S.status?.role);
-  var isOwner = () => S.status?.role === "owner";
-  var listeners = /* @__PURE__ */ new Set();
-  var onChange = (fn) => listeners.add(fn);
-  var emit = () => listeners.forEach((fn) => fn());
-  function check({ data, error }) {
-    if (error) throw new Error(friendly(error.message));
-    return data;
-  }
-  function friendly(m = "") {
-    if (/Invalid login credentials/i.test(m)) return "Pseudo ou mot de passe incorrect.";
-    if (/already registered|already exists/i.test(m)) return "Ce pseudo est d\xE9j\xE0 pris.";
-    if (/Password should be/i.test(m)) return "Le mot de passe doit faire au moins 6 caract\xE8res.";
-    if (/Failed to fetch|NetworkError/i.test(m)) return "Impossible de joindre le serveur. V\xE9rifiez votre connexion Internet.";
-    if (/Database error saving new user/i.test(m)) return "Pseudo invalide (3 \xE0 20 caract\xE8res : lettres, chiffres, - ou _).";
-    return m;
-  }
-  var emailOf = (username) => `${username.trim().toLowerCase()}@${EMAIL_DOMAIN}`;
-  async function signIn(username, password) {
-    check(await sb.auth.signInWithPassword({ email: emailOf(username), password }));
-  }
-  async function signUp(username, password) {
-    const u = username.trim().toLowerCase();
-    if (!/^[a-z0-9_-]{3,20}$/.test(u)) throw new Error("Pseudo invalide (3 \xE0 20 caract\xE8res : lettres, chiffres, - ou _).");
-    const data = check(await sb.auth.signUp({ email: emailOf(u), password, options: { data: { username: u } } }));
-    if (!data.session) throw new Error("Compte cr\xE9\xE9, mais la confirmation par e-mail est activ\xE9e sur Supabase : le propri\xE9taire doit la d\xE9sactiver.");
-  }
-  async function signOut() {
-    await sb.auth.signOut();
-    location.reload();
-  }
-  async function currentUser() {
-    const { data } = await sb.auth.getSession();
-    S.user = data.session?.user || null;
-    return S.user;
-  }
-  var fromRow = (r) => ({ ...r.data, id: r.id, rarity: r.rarity, inBoosters: r.in_boosters });
-  function reindex() {
-    S.cards.sort((a, b) => (a.code || "").localeCompare(b.code || "") || (a.name || "").localeCompare(b.name || ""));
-    S.byId = Object.fromEntries(S.cards.map((c) => [c.id, c]));
-  }
-  function allTraits() {
-    const set = /* @__PURE__ */ new Set();
-    for (const c of S.cards) String(c.traits || "").split("/").map((t) => t.trim()).filter(Boolean).forEach((t) => set.add(t));
-    return [...set].sort((a, b) => a.localeCompare(b, "fr"));
-  }
-  function refreshTraitsList() {
-    let dl = document.getElementById("all-traits");
-    if (!dl) {
-      dl = document.createElement("datalist");
-      dl.id = "all-traits";
-      document.body.append(dl);
-    }
-    dl.innerHTML = allTraits().map((t) => `<option value="${t.replace(/"/g, "&quot;")}">`).join("");
-  }
-  listeners.add(refreshTraitsList);
-  async function load() {
-    const [status, cards, coll, decks, starters, owners] = await Promise.all([
-      sb.rpc("booster_status"),
-      sb.from("cards").select("*"),
-      sb.from("collection").select("card_id, qty"),
-      sb.from("decks").select("*"),
-      sb.from("starter_decks").select("*"),
-      sb.rpc("one_of_one_owners")
-    ]);
-    S.status = check(status);
-    S.cards = check(cards).map(fromRow);
-    S.collection = Object.fromEntries(check(coll).map((r) => [r.card_id, r.qty]));
-    S.decks = check(decks);
-    S.starters = check(starters);
-    S.oneOfOne = Object.fromEntries((owners.error ? [] : owners.data || []).map((r) => [r.card_id, r.username]));
-    reindex();
-    emit();
-  }
-  async function refreshStatus() {
-    S.status = check(await sb.rpc("booster_status"));
-    S.status.offset = new Date(S.status.now).getTime() - Date.now();
-    emit();
-    return S.status;
-  }
-  async function refreshCollection() {
-    S.collection = Object.fromEntries(check(await sb.from("collection").select("card_id, qty")).map((r) => [r.card_id, r.qty]));
-  }
-  async function uploadImage(card) {
-    if (!card.image?.startsWith("data:")) return card.image;
-    const blob = await (await fetch(card.image)).blob();
-    const path = `${card.id}-${Date.now()}.jpg`;
-    check(await sb.storage.from("cards").upload(path, blob, { contentType: "image/jpeg", cacheControl: "31536000" }));
-    return sb.storage.from("cards").getPublicUrl(path).data.publicUrl;
-  }
-  function oldImagePath(url) {
-    const m = /\/object\/public\/cards\/(.+)$/.exec(url || "");
-    return m ? decodeURIComponent(m[1]) : null;
-  }
-  async function saveCards(cards) {
-    for (const c of cards) {
-      const prev = S.byId[c.id]?.image;
-      const image = await uploadImage(c);
-      const { id, rarity, inBoosters, ...data } = { ...c, image };
-      check(await sb.from("cards").upsert({
-        id,
-        data,
-        rarity: rarity || "C",
-        in_boosters: inBoosters !== false,
-        updated_at: (/* @__PURE__ */ new Date()).toISOString()
-      }));
-      c.image = image;
-      const old = prev !== image && oldImagePath(prev);
-      if (old) await sb.storage.from("cards").remove([old]);
-      const i = S.cards.findIndex((x) => x.id === c.id);
-      const saved = { ...c, image, rarity: rarity || "C", inBoosters: inBoosters !== false };
-      if (i >= 0) S.cards[i] = saved;
-      else S.cards.push(saved);
-    }
-    reindex();
-    emit();
-  }
-  var saveCard = (c) => saveCards([c]);
-  async function deleteCard(id) {
-    const old = oldImagePath(S.byId[id]?.image);
-    check(await sb.from("cards").delete().eq("id", id));
-    if (old) await sb.storage.from("cards").remove([old]);
-    S.cards = S.cards.filter((c) => c.id !== id);
-    reindex();
-    emit();
-  }
-  var listOf = (kind) => kind === "starter_decks" ? S.starters : S.decks;
-  async function saveDeck(d, kind = "decks") {
-    const row = { id: d.id, name: d.name, leader: d.leader || null, cards: d.cards, updated_at: (/* @__PURE__ */ new Date()).toISOString() };
-    const saved = check(await sb.from(kind).upsert(row).select().single());
-    const list = listOf(kind);
-    const i = list.findIndex((x) => x.id === d.id);
-    if (i >= 0) list[i] = saved;
-    else list.push(saved);
-    emit();
-  }
-  async function deleteDeck(id, kind = "decks") {
-    check(await sb.from(kind).delete().eq("id", id));
-    if (kind === "starter_decks") S.starters = S.starters.filter((d) => d.id !== id);
-    else S.decks = S.decks.filter((d) => d.id !== id);
-    emit();
-  }
-  function validateDeck(deck, { owned = true } = {}) {
-    const errs = [];
-    const leader = S.byId[deck.leader];
-    if (!leader) errs.push("Choisissez un Leader.");
-    else if (owned && !S.collection[leader.id]) errs.push(`Vous ne poss\xE9dez pas le Leader \xAB ${leader.name} \xBB.`);
-    else if (!owned && leader.rarity === "S") errs.push(`\xAB ${leader.name} \xBB est une 1on1 : interdite dans un deck pr\xE9construit.`);
-    let total = 0;
-    const perCode = {};
-    for (const [id, n2] of Object.entries(deck.cards || {})) {
-      const c = S.byId[id];
-      if (!c) {
-        errs.push("Une carte du deck n'existe plus.");
-        continue;
-      }
-      total += n2;
-      const key = c.code || c.id;
-      perCode[key] = (perCode[key] || 0) + n2;
-      if (perCode[key] > 4 && !c.keywords?.includes("unlimited")) errs.push(`\xAB ${c.name} \xBB : 4 exemplaires maximum.`);
-      if (owned && n2 > (S.collection[id] || 0)) errs.push(`\xAB ${c.name} \xBB : vous n'en poss\xE9dez que ${S.collection[id] || 0}.`);
-      if (c.type === "leader") errs.push(`\xAB ${c.name} \xBB est un Leader : il ne va pas dans le deck.`);
-      if (!owned && c.rarity === "S") errs.push(`\xAB ${c.name} \xBB est une 1on1 : interdite dans un deck pr\xE9construit.`);
-      if (leader && !c.colors.some((x) => leader.colors.includes(x))) {
-        errs.push(`\xAB ${c.name} \xBB n'a aucune couleur du Leader.`);
-      }
-    }
-    if (total !== 50) errs.push(`Le deck contient ${total} cartes : il en faut exactement 50.`);
-    return { ok: errs.length === 0, errs: [...new Set(errs)], total };
-  }
-  async function openBooster() {
-    const pulls = check(await sb.rpc("open_booster"));
-    await refreshCollection();
-    if (pulls.some((p) => S.byId[p.id]?.rarity === "S")) {
-      S.oneOfOne = Object.fromEntries((check(await sb.rpc("one_of_one_owners")) || []).map((r) => [r.card_id, r.username]));
-    }
-    await refreshStatus();
-    return pulls;
-  }
-  async function claimStarter(id) {
-    check(await sb.rpc("claim_starter", { starter_id: id }));
-    await load();
-  }
-  async function listPlayers() {
-    return check(await sb.from("profiles").select("username, role, boosters, created_at").order("username"));
-  }
-  async function giveBoosters(target, amount) {
-    const n2 = check(await sb.rpc("admin_give_boosters", { target: target || null, amount }));
-    await refreshStatus();
-    return n2;
-  }
-  async function setRole(target, role) {
-    check(await sb.rpc("admin_set_role", { target, new_role: role }));
-  }
-
   // js/effects.js
   var COLORS_FR = { rouge: "rouge", vert: "vert", bleu: "bleu", violet: "violet", noir: "noir", jaune: "jaune" };
   var WHEN = {
@@ -21321,6 +21111,10 @@ ${suffix}`;
     const ch = (v) => Math.round(amt > 0 ? v + (255 - v) * amt : v * (1 + amt));
     return `rgb(${ch(n2 >> 16)}, ${ch(n2 >> 8 & 255)}, ${ch(n2 & 255)})`;
   }
+  var imageResolver = (url) => url;
+  function setImageResolver(fn) {
+    imageResolver = fn;
+  }
   function cardHTML(card, o = {}) {
     if (!card) return `<div class="card back ${o.cls || ""}" ${o.attrs || ""}><div class="frame"><div class="back-logo">OPTCG<small>Maison</small></div></div></div>`;
     const t = card.type;
@@ -21344,7 +21138,7 @@ ${suffix}`;
     const hex = (card.colors?.length ? card.colors : ["noir"]).map((c) => COLORS[c]?.hex || "#555");
     const len = (card.name || "").length;
     const a = card.art || {};
-    const artImg = card.image ? `<img src="${esc(card.image)}" alt="" draggable="false" style="transform:translate(${Number(a.x) || 0}%, ${Number(a.y) || 0}%) scale(${Number(a.z) || 1})">` : "";
+    const artImg = card.image ? `<img src="${esc(imageResolver(card.image))}" alt="" draggable="false" style="transform:translate(${Number(a.x) || 0}%, ${Number(a.y) || 0}%) scale(${Number(a.z) || 1})">` : "";
     const c2 = hex[1] || hex[0];
     const bx = card.box;
     const boxVars = bx ? `;--info-l:${bx.l}cqw;--info-r:${100 - bx.l - bx.w}cqw;--info-b:${bx.b * 1.397}cqw;--info-fs:${bx.fs || 1}` : "";
@@ -21394,9 +21188,267 @@ ${suffix}`;
     return file.text().then((t) => JSON.parse(t));
   }
 
+  // js/store.js
+  var SUPABASE_URL = "https://bhhakcbodwtmopstgetu.supabase.co";
+  var SUPABASE_KEY = "sb_publishable_sJAG-LMddGRv-6KU2rij_Q_QPPX50U_";
+  var EMAIL_DOMAIN = "joueurs.optcg-maison.fr";
+  var sb = createClient(SUPABASE_URL, SUPABASE_KEY);
+  var S = {
+    user: null,
+    status: null,
+    cards: [],
+    byId: {},
+    collection: {},
+    decks: [],
+    starters: [],
+    oneOfOne: {}
+  };
+  var isAdmin = () => ["admin", "owner"].includes(S.status?.role);
+  var isOwner = () => S.status?.role === "owner";
+  var listeners = /* @__PURE__ */ new Set();
+  var onChange = (fn) => listeners.add(fn);
+  var emit = () => listeners.forEach((fn) => fn());
+  function check({ data, error }) {
+    if (error) throw new Error(friendly(error.message));
+    return data;
+  }
+  function friendly(m = "") {
+    if (/Invalid login credentials/i.test(m)) return "Pseudo ou mot de passe incorrect.";
+    if (/already registered|already exists/i.test(m)) return "Ce pseudo est d\xE9j\xE0 pris.";
+    if (/Password should be/i.test(m)) return "Le mot de passe doit faire au moins 6 caract\xE8res.";
+    if (/Failed to fetch|NetworkError/i.test(m)) return "Impossible de joindre le serveur. V\xE9rifiez votre connexion Internet.";
+    if (/Database error saving new user/i.test(m)) return "Inscription impossible : il faut le lien d'invitation personnel re\xE7u, avec le pseudo pr\xE9vu.";
+    return m;
+  }
+  var emailOf = (username) => `${username.trim().toLowerCase()}@${EMAIL_DOMAIN}`;
+  async function signIn(username, password) {
+    check(await sb.auth.signInWithPassword({ email: emailOf(username), password }));
+  }
+  async function signUp(username, password, invite = null) {
+    const u = username.trim().toLowerCase();
+    if (!/^[a-z0-9_-]{3,20}$/.test(u)) throw new Error("Pseudo invalide (3 \xE0 20 caract\xE8res : lettres, chiffres, - ou _).");
+    const meta = invite ? { username: u, invite } : { username: u };
+    const data = check(await sb.auth.signUp({ email: emailOf(u), password, options: { data: meta } }));
+    if (!data.session) throw new Error("Compte cr\xE9\xE9, mais la confirmation par e-mail est activ\xE9e sur Supabase : le propri\xE9taire doit la d\xE9sactiver.");
+  }
+  async function signOut() {
+    await sb.auth.signOut();
+    location.reload();
+  }
+  async function currentUser() {
+    const { data } = await sb.auth.getSession();
+    S.user = data.session?.user || null;
+    return S.user;
+  }
+  var fromRow = (r) => ({ ...r.data, id: r.id, rarity: r.rarity, inBoosters: r.in_boosters });
+  function reindex() {
+    S.cards.sort((a, b) => (a.code || "").localeCompare(b.code || "") || (a.name || "").localeCompare(b.name || ""));
+    S.byId = Object.fromEntries(S.cards.map((c) => [c.id, c]));
+  }
+  function allTraits() {
+    const set = /* @__PURE__ */ new Set();
+    for (const c of S.cards) String(c.traits || "").split("/").map((t) => t.trim()).filter(Boolean).forEach((t) => set.add(t));
+    return [...set].sort((a, b) => a.localeCompare(b, "fr"));
+  }
+  function refreshTraitsList() {
+    let dl = document.getElementById("all-traits");
+    if (!dl) {
+      dl = document.createElement("datalist");
+      dl.id = "all-traits";
+      document.body.append(dl);
+    }
+    dl.innerHTML = allTraits().map((t) => `<option value="${t.replace(/"/g, "&quot;")}">`).join("");
+  }
+  listeners.add(refreshTraitsList);
+  var SIGN_SECONDS = 7 * 24 * 3600;
+  var SIGN_KEY = "optcgm-signed";
+  var signed = {};
+  try {
+    signed = JSON.parse(localStorage.getItem(SIGN_KEY) || "{}");
+  } catch {
+    signed = {};
+  }
+  setImageResolver((url) => {
+    const p = oldImagePath(url);
+    return p && signed[p]?.url || url;
+  });
+  async function signImages(paths) {
+    const soon = Date.now() + 24 * 36e5;
+    const todo = [...new Set(paths.filter(Boolean))].filter((p) => !(signed[p]?.exp > soon));
+    for (let i = 0; i < todo.length; i += 100) {
+      const { data, error } = await sb.storage.from("cards").createSignedUrls(todo.slice(i, i + 100), SIGN_SECONDS);
+      if (error) {
+        console.warn(error);
+        return;
+      }
+      for (const r of data || []) if (r.signedUrl) signed[r.path] = { url: r.signedUrl, exp: Date.now() + SIGN_SECONDS * 1e3 };
+    }
+    try {
+      localStorage.setItem(SIGN_KEY, JSON.stringify(signed));
+    } catch {
+    }
+  }
+  async function load() {
+    const [status, cards, coll, decks, starters, owners] = await Promise.all([
+      sb.rpc("booster_status"),
+      sb.from("cards").select("*"),
+      sb.from("collection").select("card_id, qty"),
+      sb.from("decks").select("*"),
+      sb.from("starter_decks").select("*"),
+      sb.rpc("one_of_one_owners")
+    ]);
+    S.status = check(status);
+    S.cards = check(cards).map(fromRow);
+    S.collection = Object.fromEntries(check(coll).map((r) => [r.card_id, r.qty]));
+    S.decks = check(decks);
+    S.starters = check(starters);
+    S.oneOfOne = Object.fromEntries((owners.error ? [] : owners.data || []).map((r) => [r.card_id, r.username]));
+    await signImages(S.cards.map((c) => oldImagePath(c.image)));
+    reindex();
+    emit();
+  }
+  async function refreshStatus() {
+    S.status = check(await sb.rpc("booster_status"));
+    S.status.offset = new Date(S.status.now).getTime() - Date.now();
+    emit();
+    return S.status;
+  }
+  async function refreshCollection() {
+    S.collection = Object.fromEntries(check(await sb.from("collection").select("card_id, qty")).map((r) => [r.card_id, r.qty]));
+  }
+  async function uploadImage(card) {
+    if (!card.image?.startsWith("data:")) return card.image;
+    const blob = await (await fetch(card.image)).blob();
+    const path = `${card.id}-${Date.now()}.jpg`;
+    check(await sb.storage.from("cards").upload(path, blob, { contentType: "image/jpeg", cacheControl: "31536000" }));
+    return sb.storage.from("cards").getPublicUrl(path).data.publicUrl;
+  }
+  function oldImagePath(url) {
+    const m = /\/object\/public\/cards\/(.+)$/.exec(url || "");
+    return m ? decodeURIComponent(m[1]) : null;
+  }
+  async function saveCards(cards) {
+    for (const c of cards) {
+      const prev = S.byId[c.id]?.image;
+      const image = await uploadImage(c);
+      const { id, rarity, inBoosters, ...data } = { ...c, image };
+      check(await sb.from("cards").upsert({
+        id,
+        data,
+        rarity: rarity || "C",
+        in_boosters: inBoosters !== false,
+        updated_at: (/* @__PURE__ */ new Date()).toISOString()
+      }));
+      c.image = image;
+      await signImages([oldImagePath(image)]);
+      const old = prev !== image && oldImagePath(prev);
+      if (old) await sb.storage.from("cards").remove([old]);
+      const i = S.cards.findIndex((x) => x.id === c.id);
+      const saved = { ...c, image, rarity: rarity || "C", inBoosters: inBoosters !== false };
+      if (i >= 0) S.cards[i] = saved;
+      else S.cards.push(saved);
+    }
+    reindex();
+    emit();
+  }
+  var saveCard = (c) => saveCards([c]);
+  async function deleteCard(id) {
+    const old = oldImagePath(S.byId[id]?.image);
+    check(await sb.from("cards").delete().eq("id", id));
+    if (old) await sb.storage.from("cards").remove([old]);
+    S.cards = S.cards.filter((c) => c.id !== id);
+    reindex();
+    emit();
+  }
+  var listOf = (kind) => kind === "starter_decks" ? S.starters : S.decks;
+  async function saveDeck(d, kind = "decks") {
+    const row = { id: d.id, name: d.name, leader: d.leader || null, cards: d.cards, updated_at: (/* @__PURE__ */ new Date()).toISOString() };
+    const saved = check(await sb.from(kind).upsert(row).select().single());
+    const list = listOf(kind);
+    const i = list.findIndex((x) => x.id === d.id);
+    if (i >= 0) list[i] = saved;
+    else list.push(saved);
+    emit();
+  }
+  async function deleteDeck(id, kind = "decks") {
+    check(await sb.from(kind).delete().eq("id", id));
+    if (kind === "starter_decks") S.starters = S.starters.filter((d) => d.id !== id);
+    else S.decks = S.decks.filter((d) => d.id !== id);
+    emit();
+  }
+  function validateDeck(deck, { owned = true } = {}) {
+    const errs = [];
+    const leader = S.byId[deck.leader];
+    if (!leader) errs.push("Choisissez un Leader.");
+    else if (owned && !S.collection[leader.id]) errs.push(`Vous ne poss\xE9dez pas le Leader \xAB ${leader.name} \xBB.`);
+    else if (!owned && leader.rarity === "S") errs.push(`\xAB ${leader.name} \xBB est une 1on1 : interdite dans un deck pr\xE9construit.`);
+    let total = 0;
+    const perCode = {};
+    for (const [id, n2] of Object.entries(deck.cards || {})) {
+      const c = S.byId[id];
+      if (!c) {
+        errs.push("Une carte du deck n'existe plus.");
+        continue;
+      }
+      total += n2;
+      const key = c.code || c.id;
+      perCode[key] = (perCode[key] || 0) + n2;
+      if (perCode[key] > 4 && !c.keywords?.includes("unlimited")) errs.push(`\xAB ${c.name} \xBB : 4 exemplaires maximum.`);
+      if (owned && n2 > (S.collection[id] || 0)) errs.push(`\xAB ${c.name} \xBB : vous n'en poss\xE9dez que ${S.collection[id] || 0}.`);
+      if (c.type === "leader") errs.push(`\xAB ${c.name} \xBB est un Leader : il ne va pas dans le deck.`);
+      if (!owned && c.rarity === "S") errs.push(`\xAB ${c.name} \xBB est une 1on1 : interdite dans un deck pr\xE9construit.`);
+      if (leader && !c.colors.some((x) => leader.colors.includes(x))) {
+        errs.push(`\xAB ${c.name} \xBB n'a aucune couleur du Leader.`);
+      }
+    }
+    if (total !== 50) errs.push(`Le deck contient ${total} cartes : il en faut exactement 50.`);
+    return { ok: errs.length === 0, errs: [...new Set(errs)], total };
+  }
+  async function openBooster() {
+    const pulls = check(await sb.rpc("open_booster"));
+    await refreshCollection();
+    if (pulls.some((p) => S.byId[p.id]?.rarity === "S")) {
+      S.oneOfOne = Object.fromEntries((check(await sb.rpc("one_of_one_owners")) || []).map((r) => [r.card_id, r.username]));
+    }
+    await refreshStatus();
+    return pulls;
+  }
+  async function claimStarter(id) {
+    check(await sb.rpc("claim_starter", { starter_id: id }));
+    await load();
+  }
+  async function listPlayers() {
+    return check(await sb.from("profiles").select("username, role, boosters, created_at").order("username"));
+  }
+  async function giveBoosters(target, amount) {
+    const n2 = check(await sb.rpc("admin_give_boosters", { target: target || null, amount }));
+    await refreshStatus();
+    return n2;
+  }
+  var inviteLink = (token) => `${location.origin}${location.pathname}?invite=${token}`;
+  async function inviteInfo(token) {
+    const { data, error } = await sb.rpc("invite_info", { t: token });
+    return error ? null : data;
+  }
+  async function listInvites() {
+    return check(await sb.from("invites").select("*").order("created_at", { ascending: false }));
+  }
+  async function createInvite(username, starterId, boosters) {
+    return check(await sb.rpc("admin_create_invite", { uname: username, starter: starterId || "", nb: boosters }));
+  }
+  async function deleteInvite(token) {
+    check(await sb.from("invites").delete().eq("token", token));
+  }
+  async function setRole(target, role) {
+    check(await sb.rpc("admin_set_role", { target, new_role: role }));
+  }
+
   // js/auth.js
-  function showAuth() {
+  async function showAuth() {
     let mode = "in";
+    const token = new URLSearchParams(location.search).get("invite");
+    const invite = token ? await inviteInfo(token) : null;
+    if (invite) mode = "up";
     const el = document.createElement("div");
     el.className = "auth";
     document.body.append(el);
@@ -21409,13 +21461,16 @@ ${suffix}`;
         <button type="button" data-mode="in" class="${mode === "in" ? "on" : ""}">Se connecter</button>
         <button type="button" data-mode="up" class="${mode === "up" ? "on" : ""}">Cr\xE9er un compte</button>
       </div>
+      ${token && !invite ? `<p class="msg err">Ce lien d'invitation n'est plus valable (il a peut-\xEAtre d\xE9j\xE0 servi). Connectez-vous, ou demandez un nouveau lien.</p>` : ""}
+      ${invite && mode === "up" ? `<p class="invite-hello">Bienvenue <b>${esc(invite.username)}</b> ! ${invite.starter ? `Votre deck \xAB ${esc(invite.starter)} \xBB` : "Votre compte"}${invite.boosters ? ` et ${invite.boosters} booster${invite.boosters > 1 ? "s" : ""}` : ""} vous attend${invite.starter && invite.boosters ? "ent" : ""}. Choisissez simplement votre mot de passe.</p>` : ""}
       <div class="field"><label for="au-user">Pseudo</label>
-        <input id="au-user" name="username" autocomplete="username" required maxlength="20" placeholder="ex. : ayoub"></div>
+        <input id="au-user" name="username" autocomplete="username" required maxlength="20" placeholder="ex. : ayoub"
+          ${invite && mode === "up" ? `value="${esc(invite.username)}" readonly` : ""}></div>
       <div class="field"><label for="au-pass">Mot de passe</label>
         <input id="au-pass" name="password" type="password" required minlength="6" autocomplete="${mode === "in" ? "current-password" : "new-password"}"></div>
       ${mode === "up" ? `<div class="field"><label for="au-pass2">Confirmer le mot de passe</label>
         <input id="au-pass2" type="password" required minlength="6" autocomplete="new-password"></div>
-        <p class="muted small">Pseudo : 3 \xE0 20 caract\xE8res (lettres, chiffres, - ou _). Pas besoin d'adresse e-mail.</p>` : ""}
+        ${invite ? "" : `<p class="muted small">L'inscription se fait avec le lien d'invitation personnel envoy\xE9 par l'organisateur.</p>`}` : ""}
       <button class="btn primary big">${mode === "in" ? "Se connecter" : "Cr\xE9er mon compte"}</button>
       <p class="msg err au-msg" role="alert"></p>
     </form>`;
@@ -21440,8 +21495,10 @@ ${suffix}`;
       el.querySelector(".btn.primary").disabled = true;
       try {
         if (mode === "in") await signIn(u, p);
-        else await signUp(u, p);
-        location.reload();
+        else await signUp(u, p, invite ? token : null);
+        const url = new URL(location.href);
+        url.searchParams.delete("invite");
+        location.replace(url.href);
       } catch (err) {
         out.textContent = err.message;
         el.querySelector(".btn.primary").disabled = false;
@@ -24787,6 +24844,19 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     el.innerHTML = `
   <div class="admin">
     <section class="panel">
+      <h2>Invitations</h2>
+      <p class="muted small">Chaque ami re\xE7oit son propre lien, valable une seule fois : son pseudo est r\xE9serv\xE9, son deck et ses boosters l'attendent.</p>
+      <form class="iv-form row-btns" autocomplete="off">
+        <input class="iv-name" maxlength="20" placeholder="Pseudo de l'ami" aria-label="Pseudo">
+        <select class="iv-starter" aria-label="Deck de d\xE9part"></select>
+        <label class="small">Boosters <input class="iv-n" type="number" min="0" max="10000" value="10"></label>
+        <button class="btn primary">Cr\xE9er le lien</button>
+      </form>
+      <p class="msg iv-msg" role="status"></p>
+      <div class="iv-new"></div>
+      <div class="iv-list"></div>
+    </section>
+    <section class="panel">
       <h2>Distribuer des boosters</h2>
       <form class="ad-give row-btns" autocomplete="off">
         <select class="ad-target" aria-label="Joueur"></select>
@@ -24850,8 +24920,70 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       title: "Decks pr\xE9construits",
       intro: "\xC0 sa premi\xE8re connexion, chaque joueur choisit un de ces decks : il re\xE7oit toutes ses cartes et le deck tout pr\xEAt. Seuls les decks valides (50 cartes) sont propos\xE9s."
     });
+    const ivMsg = (t, err = false) => {
+      q(".iv-msg").textContent = t;
+      q(".iv-msg").classList.toggle("err", err);
+    };
+    const starterName = (id) => S.starters.find((d) => d.id === id)?.name || "\u2014";
+    const linkBox = (token) => `<div class="row-btns iv-link"><input readonly value="${esc(inviteLink(token))}">
+    <button type="button" class="btn small" data-copy="${esc(token)}">Copier le lien</button></div>`;
+    function fillStarters() {
+      const keep = q(".iv-starter").value;
+      q(".iv-starter").innerHTML = '<option value="">Sans deck de d\xE9part</option>' + S.starters.filter((d) => validateDeck(d, { owned: false }).ok).map((d) => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join("");
+      q(".iv-starter").value = keep;
+    }
+    async function refreshInvites() {
+      let list;
+      try {
+        list = await listInvites();
+      } catch (e) {
+        ivMsg(e.message, true);
+        return;
+      }
+      q(".iv-list").innerHTML = list.length ? `<table class="tbl"><thead><tr><th>Pseudo</th><th>Deck</th><th>Boosters</th><th>\xC9tat</th><th></th></tr></thead><tbody>
+      ${list.map((v) => `<tr><td>${esc(v.username)}</td><td>${esc(starterName(v.starter_id))}</td><td>${v.boosters}</td>
+        <td>${v.used_by ? '<span class="badge ok">Utilis\xE9e</span>' : '<span class="badge">En attente</span>'}</td>
+        <td class="row-btns">${v.used_by ? "" : `<button type="button" class="btn small" data-copy="${esc(v.token)}">Copier le lien</button>`}
+          <button type="button" class="btn small ghost" data-del="${esc(v.token)}">Supprimer</button></td></tr>`).join("")}
+      </tbody></table>` : `<p class="muted small">Aucune invitation pour l'instant.</p>`;
+    }
+    q(".iv-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      try {
+        const token = await createInvite(q(".iv-name").value, q(".iv-starter").value, +q(".iv-n").value);
+        ivMsg(`Lien cr\xE9\xE9 pour ${q(".iv-name").value.trim().toLowerCase()} : envoyez-le-lui.`);
+        q(".iv-new").innerHTML = linkBox(token);
+        q(".iv-name").value = "";
+        refreshInvites();
+      } catch (err) {
+        ivMsg(err.message, true);
+      }
+    });
+    el.addEventListener("click", async (e) => {
+      const copy = e.target.closest("[data-copy]");
+      if (copy) {
+        navigator.clipboard?.writeText(inviteLink(copy.dataset.copy));
+        copy.textContent = "Copi\xE9 \u2713";
+        return;
+      }
+      const del = e.target.closest("[data-del]")?.dataset.del;
+      if (del && confirm("Supprimer cette invitation ? Le lien ne fonctionnera plus.")) {
+        try {
+          await deleteInvite(del);
+          refreshInvites();
+        } catch (err) {
+          ivMsg(err.message, true);
+        }
+      }
+    });
+    onChange(fillStarters);
+    fillStarters();
+    refreshInvites();
     refresh();
-    document.querySelector("[data-tab=admin]").addEventListener("click", refresh);
+    document.querySelector("[data-tab=admin]").addEventListener("click", () => {
+      refresh();
+      refreshInvites();
+    });
   }
 
   // js/app.js

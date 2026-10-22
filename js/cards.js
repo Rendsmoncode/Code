@@ -87,6 +87,10 @@ function shade(hex, amt) {
   return `rgb(${ch(n >> 16)}, ${ch((n >> 8) & 255)}, ${ch(n & 255)})`;
 }
 
+// Les images du jeu sont privées : le magasin fournit une adresse temporaire pour chaque image.
+let imageResolver = (url) => url;
+export function setImageResolver(fn) { imageResolver = fn; }
+
 // o.power : puissance affichée (si modifiée), o.cls : classes en plus, o.attrs : attributs HTML en plus.
 export function cardHTML(card, o = {}) {
   if (!card) return `<div class="card back ${o.cls || ''}" ${o.attrs || ''}><div class="frame"><div class="back-logo">OPTCG<small>Maison</small></div></div></div>`;
@@ -118,7 +122,7 @@ export function cardHTML(card, o = {}) {
   // Cadrage libre de l'image (card.art : z = zoom, x / y = décalage en % de la carte).
   const a = card.art || {};
   const artImg = card.image
-    ? `<img src="${esc(card.image)}" alt="" draggable="false" style="transform:translate(${Number(a.x) || 0}%, ${Number(a.y) || 0}%) scale(${Number(a.z) || 1})">` : '';
+    ? `<img src="${esc(imageResolver(card.image))}" alt="" draggable="false" style="transform:translate(${Number(a.x) || 0}%, ${Number(a.y) || 0}%) scale(${Number(a.z) || 1})">` : '';
   const c2 = hex[1] || hex[0];
   // Encadré des effets libre (card.box : l = gauche, w = largeur, b = hauteur depuis le bas, en % ; fs = taille du texte).
   const bx = card.box;

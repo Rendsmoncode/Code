@@ -4,7 +4,7 @@ Simulateur de jeu de cartes **dans le navigateur**, avec les règles du One Piec
 
 ## Comptes et boosters
 
-Chaque joueur se crée un compte (pseudo + mot de passe). À sa première connexion, il choisit un **deck préconstruit**, puis il agrandit sa collection en ouvrant des **boosters** :
+Les comptes se créent **sur invitation** : dans l'onglet *Admin*, l'organisateur crée pour chaque ami un lien personnel (valable une fois) qui réserve son pseudo et lui donne son deck de départ et ses boosters ; l'ami n'a plus qu'à choisir son mot de passe. Sans deck attribué, le joueur choisit un **deck préconstruit** à sa première connexion, puis il agrandit sa collection en ouvrant des **boosters** :
 
 - 1 booster gratuit toutes les 10 minutes (6 en réserve au maximum), plus les boosters offerts par les admins ;
 - 5 cartes par booster : 3 Communes, 1 Peu commune, puis 1 carte Rare ou mieux (1 Super rare tous les 4 boosters, 1 Ultra rare tous les 15, 1 Légendaire tous les 50, 1 « 1on1 » tous les 500) ;
@@ -13,7 +13,7 @@ Chaque joueur se crée un compte (pseudo + mot de passe). À sa première connex
 
 Un deck ne peut contenir que des cartes que l'on possède. Le **premier compte créé** devient propriétaire du jeu : il peut créer les cartes, nommer des admins et distribuer des boosters (onglets *Cartes* et *Admin*).
 
-Les données sont stockées sur [Supabase](https://supabase.com). Le script `supabase/setup.sql` crée les tables et les règles de sécurité ; il faut le lancer une fois dans *SQL Editor*.
+Les données sont stockées sur [Supabase](https://supabase.com). Les images des cartes sont privées : seuls les joueurs connectés les voient, grâce à des adresses temporaires. Le script `supabase/setup.sql` crée les tables et les règles de sécurité ; il faut le lancer une fois dans *SQL Editor*.
 
 ## Les onglets
 
