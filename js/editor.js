@@ -24,7 +24,7 @@ export function initEditor() {
         <div class="seg" id="ed-rarity">${Object.entries(RARITIES).map(([k, v]) =>
           `<button type="button" data-rarity="${k}" class="rb r-${k}">${v.label}</button>`).join('')}</div>
         <label class="check"><input type="checkbox" id="ed-inb"> Peut sortir dans les boosters</label></div>
-      <div class="field"><label>Couleur(s) <small>(2 max)</small></label>
+      <div class="field"><label>Couleur <small id="ed-cnote"></small></label>
         <div class="colors" id="ed-colors">${Object.entries(COLORS).map(([k, v]) =>
           `<button type="button" data-color="${k}" style="--c:${v.hex}">${v.label}</button>`).join('')}</div></div>
       <div class="grid3">
@@ -81,7 +81,7 @@ export function initEditor() {
 
   r.querySelector('#ed-type').addEventListener('click', (e) => {
     const t = e.target.closest('[data-type]')?.dataset.type;
-    if (t) { cur.type = t; fill(); }
+    if (t) { cur.type = t; cur.colors = cur.colors.slice(0, maxColors()); fill(); }
   });
   r.querySelector('#ed-rarity').addEventListener('click', (e) => {
     const k = e.target.closest('[data-rarity]')?.dataset.rarity;
@@ -91,7 +91,7 @@ export function initEditor() {
     const c = e.target.closest('[data-color]')?.dataset.color;
     if (!c) return;
     if (cur.colors.includes(c)) { if (cur.colors.length > 1) cur.colors = cur.colors.filter((x) => x !== c); }
-    else cur.colors = [...cur.colors, c].slice(-2);
+    else cur.colors = [...cur.colors, c].slice(-maxColors());
     fill();
   });
   r.querySelector('.kws').addEventListener('click', (e) => {
@@ -119,7 +119,7 @@ export function initEditor() {
     if (!cur.name.trim()) return msg('Donnez un nom à la carte.', true);
     msg('Enregistrement…');
     try {
-      const c = { ...cur, colors: [...cur.colors] };
+      const c = { ...cur, colors: cur.colors.slice(0, maxColors()) };
       await saveCard(c);
       cur.image = c.image;
       fill();
@@ -183,6 +183,9 @@ export function initEditor() {
   renderList();
 }
 
+// Seuls les Leaders peuvent être bicolores.
+const maxColors = () => (cur.type === 'leader' ? 2 : 1);
+
 function msg(t, err = false) {
   const m = root().querySelector('#ed-msg');
   m.textContent = t;
@@ -209,6 +212,7 @@ function fill() {
   r.querySelectorAll('#ed-type [data-type]').forEach((b) => b.classList.toggle('on', b.dataset.type === cur.type));
   r.querySelector('#ed-inb').checked = cur.inBoosters !== false;
   r.querySelectorAll('#ed-rarity [data-rarity]').forEach((b) => b.classList.toggle('on', b.dataset.rarity === (cur.rarity || 'C')));
+  r.querySelector('#ed-cnote').textContent = cur.type === 'leader' ? '(1 ou 2 : un Leader peut être bicolore)' : '(une seule : seuls les Leaders peuvent être bicolores)';
   r.querySelectorAll('#ed-colors [data-color]').forEach((b) => b.classList.toggle('on', cur.colors.includes(b.dataset.color)));
   const t = cur.type;
   const show = (cls, yes) => { r.querySelector(cls).hidden = !yes; };
