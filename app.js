@@ -20987,9 +20987,11 @@ ${suffix}`;
     oppTurn: { label: "Tour adverse (permanent)", tag: "[Tour adverse]", continuous: true },
     static: { label: "Permanent", tag: "", continuous: true },
     onOppAttack: { label: "Quand l'adversaire attaque", tag: "[Quand l'adversaire attaque]" },
-    onOwnKO: { label: "Quand un de vos Personnages est mis KO", tag: "[Quand un de vos Personnages est mis KO]" },
+    // subject : l'effet regarde la carte concernée, qu'on peut filtrer (e.wf : type, nom…).
+    onOwnKO: { label: "Quand un de vos Personnages est mis KO", subject: true, phrase: (f) => `Quand un de vos Personnages${filterText(f)} est mis KO` },
+    onOwnLeave: { label: "Quand un de vos Personnages quitte le terrain", subject: true, phrase: (f) => `Quand un de vos Personnages${filterText(f)} quitte le terrain` },
     onLifeLost: { label: "Quand vous perdez une Vie", tag: "[Quand vous perdez une Vie]" },
-    onPlayChar: { label: "Quand vous jouez un Personnage", tag: "[Quand vous jouez un Personnage]" }
+    onPlayChar: { label: "Quand vous jouez un Personnage", subject: true, phrase: (f) => `Quand vous jouez un Personnage${filterText(f)}` }
   };
   var n = (k = "n", label = "Nombre", def = 1) => ({ k, label, type: "num", def });
   var DUR = {
@@ -21069,13 +21071,13 @@ ${suffix}`;
     search: { label: "Chercher une carte dans le deck", params: [FILTER], text: (p) => `cherchez dans votre deck 1 carte${filterText(p.f, true)}, ajoutez-la \xE0 votre main, puis m\xE9langez votre deck` },
     mill: { label: "D\xE9fausser le dessus du deck", params: [n("n", "Cartes", 2)], text: (p) => `placez les ${p.n} cartes du dessus de votre deck dans votre d\xE9fausse` },
     playFree: {
-      label: "Jouer gratuitement un Personnage",
+      label: "Jouer gratuitement une carte",
       params: [
-        n("max", "Co\xFBt max", 3),
+        { k: "max", label: "Co\xFBt max (vide = sans limite)", type: "num", def: "" },
         FILTER,
         { k: "from", label: "Depuis", type: "sel", def: "hand", opts: ZONES }
       ],
-      text: (p) => `jouez jusqu'\xE0 1 Personnage${filterText(p.f, true)} de co\xFBt ${p.max} ou moins depuis ${ZONES[p.from]}`
+      text: (p) => `jouez jusqu'\xE0 1 ${p.f?.cardType === "stage" ? "Lieu" : p.f?.cardType === "character" ? "Personnage" : "carte"}${filterText({ ...p.f, cardType: "" })}${p.max !== "" && p.max !== void 0 ? ` de co\xFBt ${p.max} ou moins` : ""} depuis ${ZONES[p.from]}`
     },
     ko: { label: "Mettre KO", params: [TARGET({ side: "opp", who: "chars", n: 1 })], text: (p) => `mettez KO ${targetText(p.t)}` },
     bounce: { label: "Renvoyer en main", params: [TARGET({ side: "opp", who: "chars", n: 1 })], text: (p) => `renvoyez ${targetText(p.t)} dans la main de son propri\xE9taire` },
@@ -21147,10 +21149,10 @@ ${suffix}`;
   };
   function filterText(f = {}, short = false) {
     const parts = [];
+    if (f.name) parts.push(`[${f.name}]`);
     if (f.type) parts.push(`de type {${f.type}}`);
     if (f.color) parts.push(f.color);
     if (f.attr) parts.push(`d'attribut ${f.attr}`);
-    if (f.name) parts.push(`nomm\xE9 \xAB ${f.name} \xBB`);
     if (f.cardType) parts.push(`de type ${{ character: "Personnage", event: "\xC9v\xE9nement", stage: "Lieu", leader: "Leader" }[f.cardType]}`);
     if (f.maxCost !== void 0 && f.maxCost !== "") parts.push(`de co\xFBt ${f.maxCost} ou moins`);
     if (f.minCost !== void 0 && f.minCost !== "") parts.push(`de co\xFBt ${f.minCost} ou plus`);
@@ -21182,7 +21184,8 @@ ${suffix}`;
   var cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
   function effectText(e) {
     const w = WHEN[e.when] || {};
-    const head2 = [w.tag, e.once ? "[Une fois par tour]" : ""].filter(Boolean);
+    const tag = w.subject ? `[${w.phrase(e.wf || {})}]` : w.tag;
+    const head2 = [tag, e.once ? "[Une fois par tour]" : ""].filter(Boolean);
     const donCond = (e.conds || []).filter((c) => c.k === "donAttached").map((c) => CONDS.donAttached.text(c));
     const otherConds = (e.conds || []).filter((c) => c.k !== "donAttached" && CONDS[c.k]).map((c) => CONDS[c.k].text(c));
     const costs = (e.costs || []).filter((c) => COSTS[c.k]).map((c) => COSTS[c.k].text(c));
@@ -21500,6 +21503,7 @@ ${suffix}`;
         return;
       }
       if (t.dataset.f === "when") eff.when = t.value;
+      else if (t.dataset.wp) setPath(eff, t.dataset.wp, t.type === "number" ? t.value === "" ? "" : Number(t.value) : t.value);
       else if (t.dataset.f === "once") eff.once = t.checked;
       else if (t.dataset.p) {
         const row = t.closest("[data-j]");
@@ -21536,6 +21540,7 @@ ${suffix}`;
     <div class="fxe-head">
       <label>Quand <select data-f="when">${allowed.map(([k, v]) => `<option value="${k}" ${k === eff.when ? "selected" : ""}>${v.label}</option>`).join("")}</select></label>
       <label class="check"><input type="checkbox" data-f="once" ${eff.once ? "checked" : ""}> Une fois par tour</label>
+      ${w.subject ? `<span class="fxe-when-filter"><span class="muted small">Quel Personnage ?</span>${filterHTML("wf", eff.wf || {}, "data-wp")}</span>` : ""}
       <button type="button" class="btn small danger" data-act="del-effect">Supprimer l'effet</button>
     </div>
     ${sectionHTML(eff, "conds")}
@@ -21583,15 +21588,18 @@ ${suffix}`;
     }
     return "";
   }
-  function filterHTML(path, f) {
+  function filterHTML(path, f, attr = "data-p") {
+    const sel = (k, opts) => select(`${path}.${k}`, opts, f[k] || "").replace("data-p=", `${attr}=`);
     return `<span class="fxe-filter">
-    <label>Type <input type="text" data-p="${path}.type" value="${esc(f.type || "")}" placeholder="ex. Marine"></label>
-    <label>Couleur ${select(`${path}.color`, { "": "\u2014", ...COLORS_FR }, f.color || "")}</label>
-    <label>Attribut ${select(`${path}.attr`, { "": "\u2014", ...Object.fromEntries(ATTRIBUTES.map((a) => [a, a])) }, f.attr || "")}</label>
-    <label>Co\xFBt max <input type="number" data-p="${path}.maxCost" value="${esc(f.maxCost ?? "")}"></label>
-    <label>Puissance max <input type="number" step="1000" data-p="${path}.maxPower" value="${esc(f.maxPower ?? "")}"></label>
-    <label>Puissance de base max <input type="number" step="1000" data-p="${path}.maxBasePower" value="${esc(f.maxBasePower ?? "")}"></label>
-    <label>\xC9tat ${select(`${path}.rested`, { "": "\u2014", yes: "repos\xE9", no: "actif" }, f.rested || "")}</label>
+    <label>Type <input type="text" ${attr}="${path}.type" value="${esc(f.type || "")}" placeholder="ex. Marine"></label>
+    <label>Nom <input type="text" ${attr}="${path}.name" value="${esc(f.name || "")}" placeholder="ex. Prisonnier"></label>
+    <label>Genre ${sel("cardType", { "": "\u2014", character: "Personnage", stage: "Lieu", event: "\xC9v\xE9nement" })}</label>
+    <label>Couleur ${sel("color", { "": "\u2014", ...COLORS_FR })}</label>
+    <label>Attribut ${sel("attr", { "": "\u2014", ...Object.fromEntries(ATTRIBUTES.map((a) => [a, a])) })}</label>
+    <label>Co\xFBt max <input type="number" ${attr}="${path}.maxCost" value="${esc(f.maxCost ?? "")}"></label>
+    <label>Puissance max <input type="number" step="1000" ${attr}="${path}.maxPower" value="${esc(f.maxPower ?? "")}"></label>
+    <label>Puissance de base max <input type="number" step="1000" ${attr}="${path}.maxBasePower" value="${esc(f.maxBasePower ?? "")}"></label>
+    <label>\xC9tat ${sel("rested", { "": "\u2014", yes: "repos\xE9", no: "actif" })}</label>
   </span>`;
   }
   function select(path, opts, v) {
@@ -22755,6 +22763,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     const { inst } = loc;
     if (loc.zone === "stage") me.stage = null;
     else me[loc.zone].splice(loc.idx, 1);
+    if (loc.zone === "chars" && to !== "chars") queueLeave(myCard(inst));
     if (loc.zone === "chars" || loc.zone === "stage") {
       me.donRested += inst.d || 0;
       for (const k of ["m", "bm", "pm", "cm", "cmt", "kw", "prot", "frozen", "noAtk", "neg", "used"]) delete inst[k];
@@ -22810,7 +22819,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     if (c.type === "event") await fireCard(inst, "main");
     else {
       await fireCard(inst, "onPlay");
-      if (c.type === "character") await fireAll("onPlayChar", inst.u);
+      if (c.type === "character") await fireAll("onPlayChar", inst.u, c);
     }
     if (hasFreeText(c) && String(c.effect || "").trim() && !G.manual) {
       const go = await ask(
@@ -23232,7 +23241,24 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     move(inst.u, "trash");
     log(`voit ${name(c)} mis KO${why}.`);
     await fireCard(inst, "onKO");
-    if (c.type === "character") await fireAll("onOwnKO");
+    if (c.type === "character") await fireAll("onOwnKO", null, c);
+  }
+  var leaveQueue = [];
+  var leaveTimer = null;
+  function queueLeave(c) {
+    leaveQueue.push(c);
+    if (!leaveTimer) leaveTimer = setTimeout(flushLeaves, 0);
+  }
+  async function flushLeaves() {
+    if (busy > 0 || G?.phase !== "play") {
+      leaveTimer = G?.phase === "play" ? setTimeout(flushLeaves, 250) : null;
+      if (!leaveTimer) leaveQueue = [];
+      return;
+    }
+    leaveTimer = null;
+    const list = leaveQueue;
+    leaveQueue = [];
+    for (const c of list) await fireAll("onOwnLeave", null, c);
   }
   function canPay(costs, src) {
     const me = G.me;
@@ -23292,7 +23318,16 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       }
     }
   }
-  async function runEffect(src, eff, { optional = false, idx = 0 } = {}) {
+  async function runEffect(src, eff, opts = {}) {
+    busy++;
+    try {
+      return await runEffectNow(src, eff, opts);
+    } finally {
+      busy--;
+    }
+  }
+  var busy = 0;
+  async function runEffectNow(src, eff, { optional = false, idx = 0 } = {}) {
     const c = myCard(src);
     if (!condsOK(eff, src)) return false;
     const usedKey = `${src.c}:${idx}`;
@@ -23331,16 +23366,19 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   async function fireCard(inst, when, opts = {}) {
     const list = effectsOf(inst);
     let ctx = null;
+    const { subject, ...rest } = opts;
+    opts = rest;
     for (let idx = 0; idx < list.length; idx++) {
       if (list[idx].when !== when) continue;
+      if (WHEN[when]?.subject && subject && !matches(subject, list[idx].wf || {})) continue;
       ctx = await runEffect(inst, list[idx], { ...opts, idx }) || ctx;
     }
     return ctx;
   }
-  async function fireAll(when, except = null) {
+  async function fireAll(when, except = null, subject = null) {
     for (const inst of fieldInsts()) {
       if (inst.u === except) continue;
-      if (effectsOf(inst).some((e) => e.when === when)) await fireCard(inst, when);
+      if (effectsOf(inst).some((e) => e.when === when)) await fireCard(inst, when, { subject });
     }
   }
   var hasEffect = (inst, when) => effectsOf(inst).some((e) => e.when === when);
@@ -23404,8 +23442,8 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       }
       case "playFree": {
         const zone = a.from || "hand";
-        const list = me[zone].filter((i2) => myCard(i2).type === "character" && curCost(i2, myCard(i2)) <= a.max && matches(myCard(i2), a.f || {}));
-        const [i] = await pickMany(title(`jouez un Personnage de co\xFBt ${a.max} ou moins`), list, myCard, { max: 1 }) || [];
+        const list = me[zone].filter((i2) => ["character", "stage"].includes(myCard(i2).type) && (!hasNum(a.max) || curCost(i2, myCard(i2)) <= a.max) && matches(myCard(i2), a.f || {}));
+        const [i] = await pickMany(title("jouez une carte gratuitement"), list, myCard, { max: 1 }) || [];
         if (i) await playCard(i.u, true);
         break;
       }
@@ -23527,6 +23565,14 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     commit();
   }
   async function applyFx(m) {
+    busy++;
+    try {
+      await applyFxNow(m);
+    } finally {
+      busy--;
+    }
+  }
+  async function applyFxNow(m) {
     const me = G.me;
     const by = m.by ? ` (effet de \xAB ${m.by} \xBB)` : "";
     const insts = (m.us || []).map((u) => locate(u)?.inst).filter(Boolean);
@@ -24415,7 +24461,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     ["1 carte", "Rare ou mieux : 1 Super rare (SR) tous les 4 boosters, 1 Ultra rare (UR) tous les 15, 1 L\xE9gendaire (LR) tous les 50, 1 \xAB 1on1 \xBB tous les 500"]
   ];
   var opening = null;
-  var busy = false;
+  var busy2 = false;
   function initBoosters() {
     const el = document.getElementById("tab-boosters");
     el.innerHTML = `
@@ -24435,8 +24481,8 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   </div>`;
     const q = (s) => el.querySelector(s);
     q(".bs-open").addEventListener("click", async () => {
-      if (busy) return;
-      busy = true;
+      if (busy2) return;
+      busy2 = true;
       q(".bs-msg").textContent = "";
       q(".bs-open").disabled = true;
       try {
@@ -24447,7 +24493,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         q(".bs-msg").textContent = e.message;
         q(".bs-msg").classList.add("err");
       }
-      busy = false;
+      busy2 = false;
       renderHead();
     });
     q(".bs-stage").addEventListener("click", (e) => {
@@ -24492,7 +24538,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       const ss = String(left % 60).padStart(2, "0");
       q(".bs-detail").innerHTML = `Gratuits : ${free}/${st.free_max} ${next ? `\xB7 prochain dans <b>${mm}:${ss}</b>` : "\xB7 r\xE9serve pleine"}
       \xB7 Offerts : <b>${st.gifted}</b>`;
-      q(".bs-open").disabled = busy || total === 0;
+      q(".bs-open").disabled = busy2 || total === 0;
     }
     function renderStage() {
       const stage = q(".bs-stage");

@@ -456,6 +456,7 @@ function move(u, to, pos = 'top') {
   const me = G.me;
   const { inst } = loc;
   if (loc.zone === 'stage') me.stage = null; else me[loc.zone].splice(loc.idx, 1);
+  if (loc.zone === 'chars' && to !== 'chars') queueLeave(myCard(inst));
   if (loc.zone === 'chars' || loc.zone === 'stage') {
     me.donRested += inst.d || 0; // les DON!! attachés retournent dans la zone de coût, reposés
     for (const k of ['m', 'bm', 'pm', 'cm', 'cmt', 'kw', 'prot', 'frozen', 'noAtk', 'neg', 'used']) delete inst[k];
@@ -507,7 +508,7 @@ async function playCard(u, free = false) {
   if (c.type === 'event') await fireCard(inst, 'main');
   else {
     await fireCard(inst, 'onPlay');
-    if (c.type === 'character') await fireAll('onPlayChar', inst.u);
+    if (c.type === 'character') await fireAll('onPlayChar', inst.u, c);
   }
   if (hasFreeText(c) && String(c.effect || '').trim() && !G.manual) {
     const go = await ask('Effet en texte libre', `<div class="ask-card">${cardHTML(c)}</div><p>Cette carte a un effet que le jeu ne fait pas automatiquement. Le résoudre à la main maintenant ?</p>`,
@@ -913,7 +914,27 @@ async function koMine(inst, why = '') {
   move(inst.u, 'trash');
   log(`voit ${name(c)} mis KO${why}.`);
   await fireCard(inst, 'onKO');
-  if (c.type === 'character') await fireAll('onOwnKO');
+  if (c.type === 'character') await fireAll('onOwnKO', null, c);
+}
+
+// « Quand un de vos Personnages quitte le terrain » : move() met les départs en file, résolus dès
+// qu'aucun autre effet n'est en cours (pour ne pas ouvrir deux fenêtres de choix à la fois).
+let leaveQueue = [];
+let leaveTimer = null;
+function queueLeave(c) {
+  leaveQueue.push(c);
+  if (!leaveTimer) leaveTimer = setTimeout(flushLeaves, 0);
+}
+async function flushLeaves() {
+  if (busy > 0 || G?.phase !== 'play') {
+    leaveTimer = G?.phase === 'play' ? setTimeout(flushLeaves, 250) : null;
+    if (!leaveTimer) leaveQueue = [];
+    return;
+  }
+  leaveTimer = null;
+  const list = leaveQueue;
+  leaveQueue = [];
+  for (const c of list) await fireAll('onOwnLeave', null, c);
 }
 
 // ---------- coûts ----------
@@ -962,7 +983,12 @@ async function payCosts(costs, src) {
 
 // ---------- exécution ----------
 // ctx : { src, eff, played (Déclenchement : la carte a été jouée) }
-async function runEffect(src, eff, { optional = false, idx = 0 } = {}) {
+async function runEffect(src, eff, opts = {}) {
+  busy++;
+  try { return await runEffectNow(src, eff, opts); } finally { busy--; }
+}
+let busy = 0; // nombre d'effets en cours de résolution (les déclenchements en attente patientent)
+async function runEffectNow(src, eff, { optional = false, idx = 0 } = {}) {
   const c = myCard(src);
   if (!condsOK(eff, src)) return false;
   const usedKey = `${src.c}:${idx}`;
@@ -990,17 +1016,21 @@ async function runEffect(src, eff, { optional = false, idx = 0 } = {}) {
 async function fireCard(inst, when, opts = {}) {
   const list = effectsOf(inst);
   let ctx = null;
+  const { subject, ...rest } = opts;
+  opts = rest;
   for (let idx = 0; idx < list.length; idx++) {
     if (list[idx].when !== when) continue;
+    if (WHEN[when]?.subject && subject && !matches(subject, list[idx].wf || {})) continue;
     ctx = (await runEffect(inst, list[idx], { ...opts, idx })) || ctx;
   }
   return ctx;
 }
 // Effets de toutes mes cartes en jeu pour un déclencheur donné.
-async function fireAll(when, except = null) {
+// subject : carte concernée par le déclencheur (Personnage KO, joué, qui quitte le terrain), filtrée par e.wf.
+async function fireAll(when, except = null, subject = null) {
   for (const inst of fieldInsts()) {
     if (inst.u === except) continue;
-    if (effectsOf(inst).some((e) => e.when === when)) await fireCard(inst, when);
+    if (effectsOf(inst).some((e) => e.when === when)) await fireCard(inst, when, { subject });
   }
 }
 const hasEffect = (inst, when) => effectsOf(inst).some((e) => e.when === when);
@@ -1057,8 +1087,9 @@ async function doFx(a, ctx) {
     }
     case 'playFree': {
       const zone = a.from || 'hand';
-      const list = me[zone].filter((i) => myCard(i).type === 'character' && curCost(i, myCard(i)) <= a.max && matches(myCard(i), a.f || {}));
-      const [i] = (await pickMany(title(`jouez un Personnage de coût ${a.max} ou moins`), list, myCard, { max: 1 })) || [];
+      const list = me[zone].filter((i) => ['character', 'stage'].includes(myCard(i).type)
+        && (!hasNum(a.max) || curCost(i, myCard(i)) <= a.max) && matches(myCard(i), a.f || {}));
+      const [i] = (await pickMany(title('jouez une carte gratuitement'), list, myCard, { max: 1 })) || [];
       if (i) await playCard(i.u, true);
       break;
     }
@@ -1147,6 +1178,10 @@ async function doFx(a, ctx) {
 
 // Action reçue de l'adversaire sur mes cartes.
 async function applyFx(m) {
+  busy++;
+  try { await applyFxNow(m); } finally { busy--; }
+}
+async function applyFxNow(m) {
   const me = G.me;
   const by = m.by ? ` (effet de « ${m.by} »)` : '';
   const insts = (m.us || []).map((u) => locate(u)?.inst).filter(Boolean);

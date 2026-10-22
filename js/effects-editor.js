@@ -54,6 +54,7 @@ export function mountEffectsEditor(el, getCard, onChange) {
       return;
     }
     if (t.dataset.f === 'when') eff.when = t.value;
+    else if (t.dataset.wp) setPath(eff, t.dataset.wp, t.type === 'number' ? (t.value === '' ? '' : Number(t.value)) : t.value);
     else if (t.dataset.f === 'once') eff.once = t.checked;
     else if (t.dataset.p) {
       const row = t.closest('[data-j]');
@@ -92,6 +93,7 @@ function blockHTML(eff, i, card) {
     <div class="fxe-head">
       <label>Quand <select data-f="when">${allowed.map(([k, v]) => `<option value="${k}" ${k === eff.when ? 'selected' : ''}>${v.label}</option>`).join('')}</select></label>
       <label class="check"><input type="checkbox" data-f="once" ${eff.once ? 'checked' : ''}> Une fois par tour</label>
+      ${w.subject ? `<span class="fxe-when-filter"><span class="muted small">Quel Personnage ?</span>${filterHTML('wf', eff.wf || {}, 'data-wp')}</span>` : ''}
       <button type="button" class="btn small danger" data-act="del-effect">Supprimer l'effet</button>
     </div>
     ${sectionHTML(eff, 'conds')}
@@ -142,15 +144,19 @@ function paramHTML(p, item) {
   return '';
 }
 
-function filterHTML(path, f) {
+// attr : nom de l'attribut HTML qui porte le chemin (data-p dans une ligne, data-wp pour le filtre du déclencheur).
+function filterHTML(path, f, attr = 'data-p') {
+  const sel = (k, opts) => select(`${path}.${k}`, opts, f[k] || '').replace('data-p=', `${attr}=`);
   return `<span class="fxe-filter">
-    <label>Type <input type="text" data-p="${path}.type" value="${esc(f.type || '')}" placeholder="ex. Marine"></label>
-    <label>Couleur ${select(`${path}.color`, { '': '—', ...COLORS_FR }, f.color || '')}</label>
-    <label>Attribut ${select(`${path}.attr`, { '': '—', ...Object.fromEntries(ATTRIBUTES.map((a) => [a, a])) }, f.attr || '')}</label>
-    <label>Coût max <input type="number" data-p="${path}.maxCost" value="${esc(f.maxCost ?? '')}"></label>
-    <label>Puissance max <input type="number" step="1000" data-p="${path}.maxPower" value="${esc(f.maxPower ?? '')}"></label>
-    <label>Puissance de base max <input type="number" step="1000" data-p="${path}.maxBasePower" value="${esc(f.maxBasePower ?? '')}"></label>
-    <label>État ${select(`${path}.rested`, { '': '—', yes: 'reposé', no: 'actif' }, f.rested || '')}</label>
+    <label>Type <input type="text" ${attr}="${path}.type" value="${esc(f.type || '')}" placeholder="ex. Marine"></label>
+    <label>Nom <input type="text" ${attr}="${path}.name" value="${esc(f.name || '')}" placeholder="ex. Prisonnier"></label>
+    <label>Genre ${sel('cardType', { '': '—', character: 'Personnage', stage: 'Lieu', event: 'Événement' })}</label>
+    <label>Couleur ${sel('color', { '': '—', ...COLORS_FR })}</label>
+    <label>Attribut ${sel('attr', { '': '—', ...Object.fromEntries(ATTRIBUTES.map((a) => [a, a])) })}</label>
+    <label>Coût max <input type="number" ${attr}="${path}.maxCost" value="${esc(f.maxCost ?? '')}"></label>
+    <label>Puissance max <input type="number" step="1000" ${attr}="${path}.maxPower" value="${esc(f.maxPower ?? '')}"></label>
+    <label>Puissance de base max <input type="number" step="1000" ${attr}="${path}.maxBasePower" value="${esc(f.maxBasePower ?? '')}"></label>
+    <label>État ${sel('rested', { '': '—', yes: 'reposé', no: 'actif' })}</label>
   </span>`;
 }
 

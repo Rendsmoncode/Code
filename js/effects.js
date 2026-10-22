@@ -21,9 +21,11 @@ export const WHEN = {
   oppTurn: { label: 'Tour adverse (permanent)', tag: '[Tour adverse]', continuous: true },
   static: { label: 'Permanent', tag: '', continuous: true },
   onOppAttack: { label: 'Quand l\'adversaire attaque', tag: '[Quand l\'adversaire attaque]' },
-  onOwnKO: { label: 'Quand un de vos Personnages est mis KO', tag: '[Quand un de vos Personnages est mis KO]' },
+  // subject : l'effet regarde la carte concernée, qu'on peut filtrer (e.wf : type, nom…).
+  onOwnKO: { label: 'Quand un de vos Personnages est mis KO', subject: true, phrase: (f) => `Quand un de vos Personnages${filterText(f)} est mis KO` },
+  onOwnLeave: { label: 'Quand un de vos Personnages quitte le terrain', subject: true, phrase: (f) => `Quand un de vos Personnages${filterText(f)} quitte le terrain` },
   onLifeLost: { label: 'Quand vous perdez une Vie', tag: '[Quand vous perdez une Vie]' },
-  onPlayChar: { label: 'Quand vous jouez un Personnage', tag: '[Quand vous jouez un Personnage]' },
+  onPlayChar: { label: 'Quand vous jouez un Personnage', subject: true, phrase: (f) => `Quand vous jouez un Personnage${filterText(f)}` },
 };
 
 // ---------- Types de paramètres ----------
@@ -99,9 +101,9 @@ export const ACTIONS = {
   search: { label: 'Chercher une carte dans le deck', params: [FILTER], text: (p) => `cherchez dans votre deck 1 carte${filterText(p.f, true)}, ajoutez-la à votre main, puis mélangez votre deck` },
   mill: { label: 'Défausser le dessus du deck', params: [n('n', 'Cartes', 2)], text: (p) => `placez les ${p.n} cartes du dessus de votre deck dans votre défausse` },
   playFree: {
-    label: 'Jouer gratuitement un Personnage', params: [n('max', 'Coût max', 3), FILTER,
+    label: 'Jouer gratuitement une carte', params: [{ k: 'max', label: 'Coût max (vide = sans limite)', type: 'num', def: '' }, FILTER,
       { k: 'from', label: 'Depuis', type: 'sel', def: 'hand', opts: ZONES }],
-    text: (p) => `jouez jusqu'à 1 Personnage${filterText(p.f, true)} de coût ${p.max} ou moins depuis ${ZONES[p.from]}`,
+    text: (p) => `jouez jusqu'à 1 ${p.f?.cardType === 'stage' ? 'Lieu' : p.f?.cardType === 'character' ? 'Personnage' : 'carte'}${filterText({ ...p.f, cardType: '' })}${p.max !== '' && p.max !== undefined ? ` de coût ${p.max} ou moins` : ''} depuis ${ZONES[p.from]}`,
   },
   ko: { label: 'Mettre KO', params: [TARGET({ side: 'opp', who: 'chars', n: 1 })], text: (p) => `mettez KO ${targetText(p.t)}` },
   bounce: { label: 'Renvoyer en main', params: [TARGET({ side: 'opp', who: 'chars', n: 1 })], text: (p) => `renvoyez ${targetText(p.t)} dans la main de son propriétaire` },
@@ -161,10 +163,11 @@ export const WHO = {
 
 export function filterText(f = {}, short = false) {
   const parts = [];
+  if (f.name) parts.push(`[${f.name}]`);
   if (f.type) parts.push(`de type {${f.type}}`);
   if (f.color) parts.push(f.color);
   if (f.attr) parts.push(`d'attribut ${f.attr}`);
-  if (f.name) parts.push(`nommé « ${f.name} »`);
+
   if (f.cardType) parts.push(`de type ${{ character: 'Personnage', event: 'Événement', stage: 'Lieu', leader: 'Leader' }[f.cardType]}`);
   if (f.maxCost !== undefined && f.maxCost !== '') parts.push(`de coût ${f.maxCost} ou moins`);
   if (f.minCost !== undefined && f.minCost !== '') parts.push(`de coût ${f.minCost} ou plus`);
@@ -195,7 +198,8 @@ const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export function effectText(e) {
   const w = WHEN[e.when] || {};
-  const head = [w.tag, e.once ? '[Une fois par tour]' : ''].filter(Boolean);
+  const tag = w.subject ? `[${w.phrase(e.wf || {})}]` : w.tag;
+  const head = [tag, e.once ? '[Une fois par tour]' : ''].filter(Boolean);
   const donCond = (e.conds || []).filter((c) => c.k === 'donAttached').map((c) => CONDS.donAttached.text(c));
   const otherConds = (e.conds || []).filter((c) => c.k !== 'donAttached' && CONDS[c.k]).map((c) => CONDS[c.k].text(c));
   const costs = (e.costs || []).filter((c) => COSTS[c.k]).map((c) => COSTS[c.k].text(c));
