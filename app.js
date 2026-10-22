@@ -7751,26 +7751,26 @@ Suggested solution: ${env.workaround}`;
   var RECONNECT_INTERVALS = [1e3, 2e3, 5e3, 1e4];
   var DEFAULT_RECONNECT_FALLBACK = 1e4;
   function createMemorySessionStorage() {
-    const store = /* @__PURE__ */ new Map();
+    const store2 = /* @__PURE__ */ new Map();
     return {
       get length() {
-        return store.size;
+        return store2.size;
       },
       clear() {
-        store.clear();
+        store2.clear();
       },
       getItem(key) {
-        return store.has(key) ? store.get(key) : null;
+        return store2.has(key) ? store2.get(key) : null;
       },
       key(index) {
         var _a;
-        return (_a = Array.from(store.keys())[index]) !== null && _a !== void 0 ? _a : null;
+        return (_a = Array.from(store2.keys())[index]) !== null && _a !== void 0 ? _a : null;
       },
       removeItem(key) {
-        store.delete(key);
+        store2.delete(key);
       },
       setItem(key, value) {
-        store.set(key, String(value));
+        store2.set(key, String(value));
       }
     };
   }
@@ -13834,16 +13834,16 @@ Suggested solution: ${env.workaround}`;
   };
 
   // node_modules/@supabase/auth-js/dist/module/lib/local-storage.js
-  function memoryLocalStorageAdapter(store = {}) {
+  function memoryLocalStorageAdapter(store2 = {}) {
     return {
       getItem: (key) => {
-        return store[key] || null;
+        return store2[key] || null;
       },
       setItem: (key, value) => {
-        store[key] = value;
+        store2[key] = value;
       },
       removeItem: (key) => {
-        delete store[key];
+        delete store2[key];
       }
     };
   }
@@ -22099,8 +22099,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     const a = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     return Array.from({ length: 6 }, () => a[Math.floor(Math.random() * a.length)]).join("");
   }
-  function host(mode, h) {
-    const code = randomCode();
+  function host(mode, h, code = randomCode()) {
     return mode === "local" ? localLink(code, true, h) : peerHost(code, h);
   }
   function join(mode, code, h) {
@@ -22117,7 +22116,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     let conn = null;
     peer.on("open", () => h.onReady(code));
     peer.on("connection", (c) => {
-      if (conn) {
+      if (conn?.open) {
         c.on("open", () => c.close());
         return;
       }
@@ -22156,18 +22155,21 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     const post2 = (kind, data) => ch.postMessage({ from: me, kind, data });
     ch.onmessage = ({ data: m }) => {
       if (m.from === me) return;
-      if (m.kind === "hi" && isHost && !open) {
-        open = true;
+      if (m.kind === "hi") {
         post2("hi-back");
+        open = true;
         h.onOpen();
-      } else if (m.kind === "hi-back" && !isHost && !open) {
+      } else if (m.kind === "hi-back" && !open) {
         open = true;
         h.onOpen();
       } else if (m.kind === "msg") h.onMessage(m.data);
-      else if (m.kind === "bye") h.onClose();
+      else if (m.kind === "bye") {
+        open = false;
+        h.onClose();
+      }
     };
     if (isHost) setTimeout(() => h.onReady(code));
-    else post2("hi");
+    post2("hi");
     addEventListener("beforeunload", () => post2("bye"));
     return {
       send: (data) => post2("msg", data),
@@ -22212,6 +22214,31 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     donActive: 0,
     donRested: 0
   });
+  var SAVE_KEY = "optcgm-game";
+  var store = () => lobby.mode === "local" ? sessionStorage : localStorage;
+  function saveGame() {
+    if (!G || !lobby.code || ["hello", "over"].includes(G.phase)) return;
+    try {
+      const snap = { ...G, preview: null, reveals: [], viewer: null, select: null, log: G.log.slice(-80) };
+      store().setItem(SAVE_KEY, JSON.stringify({ at: Date.now(), code: lobby.code, mode: lobby.mode, G: snap }));
+    } catch {
+    }
+  }
+  function loadSave() {
+    try {
+      const s = JSON.parse(sessionStorage.getItem(SAVE_KEY) || localStorage.getItem(SAVE_KEY) || "null");
+      return s && Date.now() - s.at < 12 * 36e5 ? s : null;
+    } catch {
+      return null;
+    }
+  }
+  function clearSave() {
+    try {
+      sessionStorage.removeItem(SAVE_KEY);
+      localStorage.removeItem(SAVE_KEY);
+    } catch {
+    }
+  }
   function initPlay() {
     const p = new URLSearchParams(location.search);
     if (p.get("join")) lobby.joinCode = p.get("join");
@@ -22231,6 +22258,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     const decks = S.decks.map((d) => ({ d, v: validateDeck(d) }));
     if (!lobby.deck || !decks.find((x) => x.d.id === lobby.deck && x.v.ok)) lobby.deck = decks.find((x) => x.v.ok)?.d.id || "";
     const savedName = localStorage.getItem("optcgm-name") || "";
+    const saved = lobby.status === "idle" ? loadSave() : null;
     const waiting = lobby.status === "waiting";
     const shareUrl = `${location.origin}${location.pathname}?join=${lobby.code}${lobby.mode === "local" ? "&local=1" : ""}`;
     root2().innerHTML = `
@@ -22242,6 +22270,9 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         <div class="field"><label for="lb-deck">Votre deck</label>
           <select id="lb-deck">${decks.map(({ d, v }) => `<option value="${d.id}" ${v.ok ? "" : "disabled"} ${d.id === lobby.deck ? "selected" : ""}>${esc(d.name)}${v.ok ? "" : ` (invalide : ${v.total}/50)`}</option>`).join("")}</select></div>
       </div>
+      ${saved ? `<div class="box resume"><h3>Partie en cours</h3>
+        <p>Contre <b>${esc(saved.G.oppName)}</b> \xB7 tour ${saved.G.turn?.count || 0} \xB7 code ${esc(saved.code)}</p>
+        <div class="row-btns"><button class="btn primary" id="lb-resume">Reprendre la partie</button><button class="btn ghost" id="lb-drop">Abandonner cette partie</button></div></div>` : ""}
       ${lobby.deck ? "" : `<p class="msg err">Il vous faut un deck valide (1 Leader + 50 cartes) : allez dans l'onglet <b>Decks</b>.</p>`}
       <div class="lobby-actions">
         <div class="box">
@@ -22281,6 +22312,13 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       lobby.joinCode = e.target.value.toUpperCase();
     });
     r.querySelector("#lb-host")?.addEventListener("click", () => connect(true));
+    r.querySelector("#lb-resume")?.addEventListener("click", () => resumeGame(saved));
+    r.querySelector("#lb-drop")?.addEventListener("click", () => {
+      if (confirm("Abandonner d\xE9finitivement cette partie ?")) {
+        clearSave();
+        renderLobby();
+      }
+    });
     r.querySelector("#lb-join")?.addEventListener("click", () => {
       if (!lobby.joinCode?.trim()) {
         lobby.error = "Entrez un code.";
@@ -22301,28 +22339,52 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       renderLobby();
     });
   }
-  function connect(isHost, code) {
-    const deck = S.decks.find((d) => d.id === lobby.deck);
-    if (!deck || !validateDeck(deck).ok) return;
+  function connect(isHost, code, resumed = null) {
     if (lobby.mode === "online" && !window.Peer) {
       lobby.error = "Le module de connexion n'a pas pu se charger. V\xE9rifiez votre connexion Internet et rechargez la page.";
       renderLobby();
       return;
     }
-    G = newGame(isHost ? "host" : "guest", deck, localStorage.getItem("optcgm-name") || (isHost ? "Joueur 1" : "Joueur 2"));
-    Object.assign(lobby, { status: "connecting", error: "" });
-    renderLobby();
+    if (resumed) G = resumed;
+    else {
+      const deck = S.decks.find((d) => d.id === lobby.deck);
+      if (!deck || !validateDeck(deck).ok) return;
+      G = newGame(isHost ? "host" : "guest", deck, localStorage.getItem("optcgm-name") || (isHost ? "Joueur 1" : "Joueur 2"));
+    }
+    Object.assign(lobby, { status: resumed ? "playing" : "connecting", error: "" });
+    if (!isHost) lobby.code = code.trim().toUpperCase();
+    if (resumed) render();
+    else renderLobby();
+    let retries = 0;
+    const open = () => {
+      link = isHost ? host(lobby.mode, h, lobby.code || void 0) : join(lobby.mode, lobby.code, h);
+    };
+    const retry = () => {
+      if (!G || G.phase === "over" || !G.disconnected || retries++ > 40) return;
+      link?.close();
+      open();
+    };
     const h = {
       onReady: (c) => {
         lobby.code = c;
-        lobby.status = "waiting";
-        renderLobby();
+        if (!G.connected) {
+          lobby.status = resumed ? "playing" : "waiting";
+          if (resumed) render();
+          else renderLobby();
+        }
       },
       onOpen: () => {
+        const again = G.connected;
         G.connected = true;
+        G.disconnected = false;
+        retries = 0;
         lobby.status = "playing";
-        send({ t: "hello", name: G.name, cards: G.myCards });
-        sys("Connect\xE9. \xC9change des decks\u2026");
+        if (G.phase === "hello") {
+          send({ t: "hello", name: G.name, cards: G.myCards });
+          if (!again) sys("Connect\xE9. \xC9change des decks\u2026");
+        } else {
+          send({ t: "resume", name: G.name, cards: G.myCards, view: pub(), turn: G.turn });
+        }
         render();
       },
       onMessage: (m) => {
@@ -22333,14 +22395,25 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         }
       },
       onClose: () => {
-        if (G) {
-          G.disconnected = true;
-          sys("Votre adversaire s'est d\xE9connect\xE9.");
-          render();
-        }
+        if (!G) return;
+        G.disconnected = true;
+        sys("Connexion avec l'adversaire perdue : reconnexion automatique\u2026");
+        render();
+        if (!isHost && lobby.mode === "online") setTimeout(retry, 3e3);
       },
       onError: (t) => {
-        if (G?.connected) {
+        if (isHost && resumed && /déjà utilisé/.test(t) && retries++ < 20) {
+          setTimeout(() => {
+            link?.close();
+            open();
+          }, 3e3);
+          return;
+        }
+        if (!isHost && G?.connected) {
+          setTimeout(retry, 3e3);
+          return;
+        }
+        if (G?.connected || resumed) {
           sys(t);
           render();
           return;
@@ -22352,7 +22425,15 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         renderLobby();
       }
     };
-    link = isHost ? host(lobby.mode, h) : join(lobby.mode, code, h);
+    open();
+  }
+  function resumeGame(saved) {
+    lobby.mode = saved.mode;
+    lobby.code = saved.code;
+    const g = saved.G;
+    Object.assign(g, { connected: false, disconnected: true, battle: null, manual: null, oppManual: null });
+    g.log.push({ who: "sys", text: "Partie reprise : reconnexion avec l'adversaire\u2026" });
+    connect(g.role === "host", saved.code, g);
   }
   function newGame(role, deck, playerName) {
     const myCards = {};
@@ -22388,7 +22469,25 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   }
   function onMsg(m) {
     switch (m.t) {
+      case "resume": {
+        G.oppName = m.name || G.oppName;
+        G.oppCards = m.cards || G.oppCards;
+        G.opp = m.view;
+        if ((m.turn?.count || 0) > (G.turn?.count || 0)) G.turn = m.turn;
+        if (G.battle) {
+          G.battle = null;
+          endBattleMods();
+        }
+        G.select = null;
+        G.disconnected = false;
+        sys(`${G.oppName} est de retour : la partie reprend.`);
+        break;
+      }
       case "hello":
+        if (G.phase !== "hello") {
+          sys("Votre adversaire a relanc\xE9 une nouvelle partie de son c\xF4t\xE9 : la partie en cours ne peut pas reprendre.");
+          break;
+        }
         G.oppName = m.name || "Adversaire";
         G.oppCards = m.cards || {};
         G.oppHello = true;
@@ -22455,6 +22554,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         G.phase = "over";
         G.winner = m.winner;
         G.overReason = m.reason;
+        clearSave();
         break;
       case "rematch":
         resetMatch();
@@ -22504,6 +22604,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       }
     }
     send({ t: "view", v: pub() });
+    saveGame();
     render();
   }
   function coinFlip() {
@@ -22611,6 +22712,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     G.overReason = reason;
     G.battle = null;
     log(`a perdu : ${reason}`);
+    clearSave();
     send({ t: "gameover", winner: G.winner, reason });
     send({ t: "view", v: pub() });
     render();
@@ -23567,7 +23669,8 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     if (zone === "hand") {
       if (defending && c.type === "character" && Number(c.counter) > 0) act(`\u{1F6E1} Contre +${c.counter}`, () => counterChar(inst), { cls: "hl" });
       if (defending && c.type === "event") act("\u{1F6E1} Jouer en Contre (\xC9v\xE9nement)", () => counterEvent(inst), { cls: "hl" });
-      if (myTurn() && !b && c.type !== "leader") act(`\u25B6 Jouer (co\xFBt ${Math.max(0, curCost(inst, c))})`, () => playCard(u), { cls: "hl" });
+      const counterOnly = c.type === "event" && hasEffect(inst, "counter") && !hasEffect(inst, "main") && !String(c.effect || "").trim();
+      if (myTurn() && !b && c.type !== "leader" && !counterOnly) act(`\u25B6 Jouer (co\xFBt ${Math.max(0, curCost(inst, c))})`, () => playCard(u), { cls: "hl" });
       act("R\xE9v\xE9ler \xE0 l'adversaire", () => {
         reveal(inst, "Carte r\xE9v\xE9l\xE9e");
         log(`r\xE9v\xE8le ${name(c)}.`);
@@ -24259,6 +24362,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         send({ t: "rematch" });
         return resetMatch();
       case "quit":
+        clearSave();
         link?.close();
         link = null;
         G = null;

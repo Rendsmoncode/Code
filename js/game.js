@@ -39,6 +39,28 @@ const emptySide = () => ({
   donDeck: 10, donActive: 0, donRested: 0,
 });
 
+// ---------- sauvegarde de la partie (reprise après rechargement) ----------
+// En ligne : localStorage (survit à la fermeture du navigateur). En mode local (deux onglets du même
+// navigateur), sessionStorage, propre à chaque onglet, pour que les deux sauvegardes ne s'écrasent pas.
+const SAVE_KEY = 'optcgm-game';
+const store = () => (lobby.mode === 'local' ? sessionStorage : localStorage);
+function saveGame() {
+  if (!G || !lobby.code || ['hello', 'over'].includes(G.phase)) return;
+  try {
+    const snap = { ...G, preview: null, reveals: [], viewer: null, select: null, log: G.log.slice(-80) };
+    store().setItem(SAVE_KEY, JSON.stringify({ at: Date.now(), code: lobby.code, mode: lobby.mode, G: snap }));
+  } catch { /* stockage plein ou indisponible : pas de reprise possible */ }
+}
+function loadSave() {
+  try {
+    const s = JSON.parse(sessionStorage.getItem(SAVE_KEY) || localStorage.getItem(SAVE_KEY) || 'null');
+    return s && Date.now() - s.at < 12 * 3600e3 ? s : null;
+  } catch { return null; }
+}
+function clearSave() {
+  try { sessionStorage.removeItem(SAVE_KEY); localStorage.removeItem(SAVE_KEY); } catch { /* rien */ }
+}
+
 export function initPlay() {
   const p = new URLSearchParams(location.search);
   if (p.get('join')) lobby.joinCode = p.get('join');
@@ -55,6 +77,7 @@ function renderLobby() {
   const decks = S.decks.map((d) => ({ d, v: validateDeck(d) }));
   if (!lobby.deck || !decks.find((x) => x.d.id === lobby.deck && x.v.ok)) lobby.deck = decks.find((x) => x.v.ok)?.d.id || '';
   const savedName = localStorage.getItem('optcgm-name') || '';
+  const saved = lobby.status === 'idle' ? loadSave() : null;
   const waiting = lobby.status === 'waiting';
   const shareUrl = `${location.origin}${location.pathname}?join=${lobby.code}${lobby.mode === 'local' ? '&local=1' : ''}`;
   root().innerHTML = `
@@ -66,6 +89,9 @@ function renderLobby() {
         <div class="field"><label for="lb-deck">Votre deck</label>
           <select id="lb-deck">${decks.map(({ d, v }) => `<option value="${d.id}" ${v.ok ? '' : 'disabled'} ${d.id === lobby.deck ? 'selected' : ''}>${esc(d.name)}${v.ok ? '' : ` (invalide : ${v.total}/50)`}</option>`).join('')}</select></div>
       </div>
+      ${saved ? `<div class="box resume"><h3>Partie en cours</h3>
+        <p>Contre <b>${esc(saved.G.oppName)}</b> · tour ${saved.G.turn?.count || 0} · code ${esc(saved.code)}</p>
+        <div class="row-btns"><button class="btn primary" id="lb-resume">Reprendre la partie</button><button class="btn ghost" id="lb-drop">Abandonner cette partie</button></div></div>` : ''}
       ${lobby.deck ? '' : '<p class="msg err">Il vous faut un deck valide (1 Leader + 50 cartes) : allez dans l\'onglet <b>Decks</b>.</p>'}
       <div class="lobby-actions">
         <div class="box">
@@ -100,6 +126,8 @@ function renderLobby() {
   r.querySelector('#lb-local').addEventListener('change', (e) => { lobby.mode = e.target.checked ? 'local' : 'online'; });
   r.querySelector('#lb-code').addEventListener('input', (e) => { lobby.joinCode = e.target.value.toUpperCase(); });
   r.querySelector('#lb-host')?.addEventListener('click', () => connect(true));
+  r.querySelector('#lb-resume')?.addEventListener('click', () => resumeGame(saved));
+  r.querySelector('#lb-drop')?.addEventListener('click', () => { if (confirm('Abandonner définitivement cette partie ?')) { clearSave(); renderLobby(); } });
   r.querySelector('#lb-join')?.addEventListener('click', () => {
     if (!lobby.joinCode?.trim()) { lobby.error = 'Entrez un code.'; renderLobby(); return; }
     connect(false, lobby.joinCode);
@@ -115,36 +143,73 @@ function renderLobby() {
   });
 }
 
-function connect(isHost, code) {
-  const deck = S.decks.find((d) => d.id === lobby.deck);
-  if (!deck || !validateDeck(deck).ok) return;
+function connect(isHost, code, resumed = null) {
   if (lobby.mode === 'online' && !window.Peer) {
     lobby.error = 'Le module de connexion n\'a pas pu se charger. Vérifiez votre connexion Internet et rechargez la page.';
     renderLobby();
     return;
   }
-  G = newGame(isHost ? 'host' : 'guest', deck, localStorage.getItem('optcgm-name') || (isHost ? 'Joueur 1' : 'Joueur 2'));
-  Object.assign(lobby, { status: 'connecting', error: '' });
-  renderLobby();
+  if (resumed) G = resumed;
+  else {
+    const deck = S.decks.find((d) => d.id === lobby.deck);
+    if (!deck || !validateDeck(deck).ok) return;
+    G = newGame(isHost ? 'host' : 'guest', deck, localStorage.getItem('optcgm-name') || (isHost ? 'Joueur 1' : 'Joueur 2'));
+  }
+  Object.assign(lobby, { status: resumed ? 'playing' : 'connecting', error: '' });
+  if (!isHost) lobby.code = code.trim().toUpperCase();
+  if (resumed) render(); else renderLobby();
+  let retries = 0;
+  const open = () => { link = isHost ? net.host(lobby.mode, h, lobby.code || undefined) : net.join(lobby.mode, lobby.code, h); };
+  // Reconnexion automatique (l'invité relance la connexion ; l'hôte attend qu'on revienne vers lui).
+  const retry = () => {
+    if (!G || G.phase === 'over' || !G.disconnected || retries++ > 40) return;
+    link?.close();
+    open();
+  };
   const h = {
-    onReady: (c) => { lobby.code = c; lobby.status = 'waiting'; renderLobby(); },
+    onReady: (c) => { lobby.code = c; if (!G.connected) { lobby.status = resumed ? 'playing' : 'waiting'; if (resumed) render(); else renderLobby(); } },
     onOpen: () => {
+      const again = G.connected;
       G.connected = true;
+      G.disconnected = false;
+      retries = 0;
       lobby.status = 'playing';
-      send({ t: 'hello', name: G.name, cards: G.myCards });
-      sys('Connecté. Échange des decks…');
+      if (G.phase === 'hello') {
+        send({ t: 'hello', name: G.name, cards: G.myCards });
+        if (!again) sys('Connecté. Échange des decks…');
+      } else {
+        send({ t: 'resume', name: G.name, cards: G.myCards, view: pub(), turn: G.turn });
+      }
       render();
     },
     onMessage: (m) => { try { onMsg(m); } catch (e) { console.error(e); } },
-    onClose: () => { if (G) { G.disconnected = true; sys('Votre adversaire s\'est déconnecté.'); render(); } },
+    onClose: () => {
+      if (!G) return;
+      G.disconnected = true;
+      sys('Connexion avec l\'adversaire perdue : reconnexion automatique…');
+      render();
+      if (!isHost && lobby.mode === 'online') setTimeout(retry, 3000);
+    },
     onError: (t) => {
-      if (G?.connected) { sys(t); render(); return; }
+      // Hôte qui revient : son ancien code peut rester réservé quelques secondes.
+      if (isHost && resumed && /déjà utilisé/.test(t) && retries++ < 20) { setTimeout(() => { link?.close(); open(); }, 3000); return; }
+      if (!isHost && G?.connected) { setTimeout(retry, 3000); return; }
+      if (G?.connected || resumed) { sys(t); render(); return; }
       link?.close(); link = null; G = null;
       Object.assign(lobby, { status: 'idle', error: t });
       renderLobby();
     },
   };
-  link = isHost ? net.host(lobby.mode, h) : net.join(lobby.mode, code, h);
+  open();
+}
+
+function resumeGame(saved) {
+  lobby.mode = saved.mode;
+  lobby.code = saved.code;
+  const g = saved.G;
+  Object.assign(g, { connected: false, disconnected: true, battle: null, manual: null, oppManual: null });
+  g.log.push({ who: 'sys', text: 'Partie reprise : reconnexion avec l\'adversaire…' });
+  connect(g.role === 'host', saved.code, g);
 }
 
 function newGame(role, deck, playerName) {
@@ -163,7 +228,20 @@ function newGame(role, deck, playerName) {
 // ---------- messages réseau ----------
 function onMsg(m) {
   switch (m.t) {
+    case 'resume': {
+      G.oppName = m.name || G.oppName;
+      G.oppCards = m.cards || G.oppCards;
+      G.opp = m.view;
+      if ((m.turn?.count || 0) > (G.turn?.count || 0)) G.turn = m.turn;
+      // Un combat interrompu par la coupure est annulé des deux côtés.
+      if (G.battle) { G.battle = null; endBattleMods(); }
+      G.select = null;
+      G.disconnected = false;
+      sys(`${G.oppName} est de retour : la partie reprend.`);
+      break;
+    }
     case 'hello':
+      if (G.phase !== 'hello') { sys('Votre adversaire a relancé une nouvelle partie de son côté : la partie en cours ne peut pas reprendre.'); break; }
       G.oppName = m.name || 'Adversaire';
       G.oppCards = m.cards || {};
       G.oppHello = true;
@@ -191,7 +269,7 @@ function onMsg(m) {
     case 'attack': G.battle = { ...m.b, role: 'def' }; render(); fireAll('onOppAttack'); return;
     case 'battleUpd': if (G.battle) Object.assign(G.battle, m.b); break;
     case 'battleEnd': G.battle = null; G.select = null; endBattleMods(); break;
-    case 'gameover': G.phase = 'over'; G.winner = m.winner; G.overReason = m.reason; break;
+    case 'gameover': G.phase = 'over'; G.winner = m.winner; G.overReason = m.reason; clearSave(); break;
     case 'rematch': resetMatch(); return;
     default: break;
   }
@@ -227,6 +305,7 @@ function commit() {
     if (pw !== b.atkPower) { b.atkPower = pw; send({ t: 'battleUpd', b: { atkPower: pw } }); }
   }
   send({ t: 'view', v: pub() });
+  saveGame();
   render();
 }
 
@@ -342,6 +421,7 @@ function lose(reason) {
   G.overReason = reason;
   G.battle = null;
   log(`a perdu : ${reason}`);
+  clearSave();
   send({ t: 'gameover', winner: G.winner, reason });
   send({ t: 'view', v: pub() });
   render();
@@ -1175,7 +1255,8 @@ function menuForCard(u) {
   if (zone === 'hand') {
     if (defending && c.type === 'character' && Number(c.counter) > 0) act(`🛡 Contre +${c.counter}`, () => counterChar(inst), { cls: 'hl' });
     if (defending && c.type === 'event') act('🛡 Jouer en Contre (Événement)', () => counterEvent(inst), { cls: 'hl' });
-    if (myTurn() && !b && c.type !== 'leader') act(`▶ Jouer (coût ${Math.max(0, curCost(inst, c))})`, () => playCard(u), { cls: 'hl' });
+    const counterOnly = c.type === 'event' && hasEffect(inst, 'counter') && !hasEffect(inst, 'main') && !String(c.effect || '').trim();
+    if (myTurn() && !b && c.type !== 'leader' && !counterOnly) act(`▶ Jouer (coût ${Math.max(0, curCost(inst, c))})`, () => playCard(u), { cls: 'hl' });
     act('Révéler à l\'adversaire', () => { reveal(inst, 'Carte révélée'); log(`révèle ${name(c)}.`); commit(); });
     man('Jouer sans payer le coût', () => playCard(u, true));
     man('Défausser', () => { move(u, 'trash'); done(`défausse ${name(c)} de sa main.`)(); });
@@ -1692,6 +1773,7 @@ function doAction(a, el) {
       return render();
     case 'rematch': send({ t: 'rematch' }); return resetMatch();
     case 'quit':
+      clearSave();
       link?.close(); link = null; G = null;
       Object.assign(lobby, { status: 'idle', code: '', error: '' });
       return renderLobby();

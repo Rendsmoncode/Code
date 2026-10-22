@@ -10,8 +10,8 @@ export function randomCode() {
 }
 
 // handlers : { onReady(code), onOpen(), onMessage(msg), onClose(), onError(text) }
-export function host(mode, h) {
-  const code = randomCode();
+// code : réutilisé pour reprendre une partie après un rechargement de page.
+export function host(mode, h, code = randomCode()) {
   return mode === 'local' ? localLink(code, true, h) : peerHost(code, h);
 }
 
@@ -31,7 +31,7 @@ function peerHost(code, h) {
   let conn = null;
   peer.on('open', () => h.onReady(code));
   peer.on('connection', (c) => {
-    if (conn) { c.on('open', () => c.close()); return; } // partie déjà pleine
+    if (conn?.open) { c.on('open', () => c.close()); return; } // partie déjà pleine (sinon : reconnexion)
     conn = c;
     wire(c, h);
   });
@@ -63,6 +63,8 @@ function peerError(e) {
   return `Erreur de connexion (${e?.type || e}).`;
 }
 
+// Mode local : les deux onglets s'annoncent (« hi ») en arrivant ; chacun répond, ce qui permet aussi
+// de se retrouver après le rechargement d'un des deux onglets.
 function localLink(code, isHost, h) {
   const ch = new BroadcastChannel(PREFIX + code);
   const me = Math.random().toString(36).slice(2);
@@ -70,13 +72,13 @@ function localLink(code, isHost, h) {
   const post = (kind, data) => ch.postMessage({ from: me, kind, data });
   ch.onmessage = ({ data: m }) => {
     if (m.from === me) return;
-    if (m.kind === 'hi' && isHost && !open) { open = true; post('hi-back'); h.onOpen(); }
-    else if (m.kind === 'hi-back' && !isHost && !open) { open = true; h.onOpen(); }
+    if (m.kind === 'hi') { post('hi-back'); open = true; h.onOpen(); }
+    else if (m.kind === 'hi-back' && !open) { open = true; h.onOpen(); }
     else if (m.kind === 'msg') h.onMessage(m.data);
-    else if (m.kind === 'bye') h.onClose();
+    else if (m.kind === 'bye') { open = false; h.onClose(); }
   };
   if (isHost) setTimeout(() => h.onReady(code));
-  else post('hi');
+  post('hi');
   addEventListener('beforeunload', () => post('bye'));
   return {
     send: (data) => post('msg', data),

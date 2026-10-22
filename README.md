@@ -45,6 +45,10 @@ Un effet impossible à décrire ainsi s'écrit en **texte libre** : il se résou
 Hors de ce mode, les actions libres (piocher, chercher dans le deck, défausser…) sont verrouillées ; pendant ce mode,
 chaque action s'affiche en rouge chez l'adversaire, qui peut **contester** pour tout annuler.
 
+## Reprise d'une partie
+
+La partie est sauvegardée en continu dans le navigateur. Si un joueur recharge sa page ou perd sa connexion, l'onglet *Jouer* lui propose de **reprendre la partie** ; l'invité se reconnecte aussi tout seul après une coupure.
+
 ## Tester seul
 
 Dans *Jouer*, ouvrez « Tester seul », cochez *Mode local*, créez une partie, puis ouvrez le lien dans un second onglet.
@@ -59,4 +63,4 @@ Le code source est dans `js/`. Le fichier `app.js` à la racine est généré à
 
 ## Tests
 
-`npm test` lance deux parties automatiques à deux onglets, avec un faux serveur Supabase : la première essaie chaque action, coût, condition et déclencheur d'effet ; la seconde joue une partie avec attaque, blocage et Contre. Il faut d'abord installer les outils : `npm install` puis `npx playwright install chromium`.
+`npm test` lance des parties automatiques à deux onglets, avec un faux serveur Supabase : chaque action, coût, condition et déclencheur d'effet ; une partie avec attaque, blocage et Contre ; le déroulement complet (Déclenchement depuis la Vie, victoire, revanche, deck vide) ; la reprise d'une partie après le rechargement d'une page. Il faut d'abord installer les outils : `npm install` puis `npx playwright install chromium`.

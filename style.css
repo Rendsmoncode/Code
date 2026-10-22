@@ -374,3 +374,4 @@ details { margin-top: 12px; }
 .manual-bar.opp { background: #3a0d0d; border-color: var(--err); }
 .log li.manual { color: #ff9b8f; }
 .pv-text .free { color: #ffcf9c; }
+.box.resume { margin: 12px 0; border-color: var(--accent-2); }
