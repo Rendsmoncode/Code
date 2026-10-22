@@ -72,6 +72,13 @@ export function fmtEffect(txt) {
     .replace(/\n/g, '<br>');
 }
 
+// Éclaircit (amt > 0) ou assombrit (amt < 0) une couleur #rrggbb.
+function shade(hex, amt) {
+  const n = parseInt(hex.slice(1), 16);
+  const ch = (v) => Math.round(amt > 0 ? v + (255 - v) * amt : v * (1 + amt));
+  return `rgb(${ch(n >> 16)}, ${ch((n >> 8) & 255)}, ${ch(n & 255)})`;
+}
+
 // o.power : puissance affichée (si modifiée), o.cls : classes en plus, o.attrs : attributs HTML en plus.
 export function cardHTML(card, o = {}) {
   if (!card) return `<div class="card back ${o.cls || ''}" ${o.attrs || ''}><div class="frame"><div class="back-logo">OPTCG<small>Maison</small></div></div></div>`;
@@ -97,10 +104,12 @@ export function cardHTML(card, o = {}) {
   const hex = (card.colors?.length ? card.colors : ['noir']).map((c) => COLORS[c]?.hex || '#555');
   const len = (card.name || '').length;
   const art = card.image ? ` style="background-image:url('${card.image}')"` : '';
-  return `<div class="card t-${t} r-${r} ${o.cls || ''}" style="--c1:${hex[0]};--c2:${hex[1] || hex[0]}" ${o.attrs || ''}>
+  const c2 = hex[1] || hex[0];
+  const vars = `--c1:${hex[0]};--c2:${c2};--c1l:${shade(hex[0], 0.45)};--c1d:${shade(hex[0], -0.55)};--c1k:${shade(hex[0], -0.85)};--c2d:${shade(c2, -0.55)}`;
+  return `<div class="card t-${t} r-${r} ${o.cls || ''}" style="${vars}" ${o.attrs || ''}>
     <div class="frame">
       <div class="art${card.image ? '' : ' empty'}"${art}></div>
-      <div class="shade"></div>
+      <div class="shade"></div><div class="band"></div>
       ${cost}${pow}${ctr}${attr}
       <div class="nm${len > 18 ? ' xlong' : len > 13 ? ' long' : ''}"><span>${esc(card.name || 'Sans nom')}</span></div>
       <div class="info">

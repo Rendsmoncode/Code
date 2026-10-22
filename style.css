@@ -81,8 +81,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-2); 
 .filters { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
 .filters input { flex: 1; min-width: 140px; }
 .badge { font-size: .75em; padding: 2px 8px; border-radius: 99px; font-weight: 700; }
-.badge.ok { background: color-mix(in srgb, var(--ok) 25%, transparent); color: var(--ok); }
-.badge.ko { background: color-mix(in srgb, var(--err) 20%, transparent); color: var(--err); }
+.badge.ok { background: #3fb26b40; color: var(--ok); }
+.badge.ko { background: #ef5a5a33; color: var(--err); }
 .kw {
   display: inline-block; background: #1f3d8a; color: #fff; border-radius: 3px; padding: 0 .35em; font-weight: 700; font-size: .92em;
 }

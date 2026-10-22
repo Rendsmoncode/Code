@@ -80,12 +80,21 @@
 .card .art { position: absolute; inset: 0; background: center / cover no-repeat; }
 .card .art.empty {
   background:
-    radial-gradient(circle at 28% 22%, color-mix(in srgb, var(--c1) 50%, #fff) 0, transparent 42%),
-    radial-gradient(circle at 78% 78%, color-mix(in srgb, var(--c2) 75%, transparent) 0, transparent 55%),
-    repeating-linear-gradient(135deg, #ffffff08 0 2cqw, transparent 2cqw 4cqw),
-    linear-gradient(160deg, color-mix(in srgb, var(--c1) 85%, #000), color-mix(in srgb, var(--c1) 22%, #000));
+    radial-gradient(circle at 28% 22%, var(--c1l) 0, transparent 45%),
+    radial-gradient(circle at 78% 72%, var(--c2) 0, transparent 50%),
+    repeating-linear-gradient(135deg, #ffffff0a 0 2cqw, transparent 2cqw 4cqw),
+    linear-gradient(160deg, var(--c1), var(--c1d) 55%, var(--c1k));
 }
-.card .shade { position: absolute; inset: 0; pointer-events: none; z-index: 1; background: linear-gradient(to bottom, transparent 42%, #000a 68%, #000e 100%); }
+/* Bande de couleur de la carte (deux moitiés pour un Leader bicolore), sous le nom */
+.card .band {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 30%; z-index: 2; pointer-events: none;
+  background: linear-gradient(90deg, var(--c1) 0 50%, var(--c2) 50% 100%);
+  -webkit-mask: linear-gradient(to bottom, transparent, #000 45%); mask: linear-gradient(to bottom, transparent, #000 45%);
+}
+.card .band::after {
+  content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, var(--c1d) 0 50%, var(--c2d) 50% 100%); opacity: .55;
+}
+.card .shade { position: absolute; inset: 0; pointer-events: none; z-index: 1; background: linear-gradient(to bottom, transparent 40%, #0009 62%, #000c 100%); }
 .card .nm, .card .cost, .card .pow, .card .ctr, .card .attr, .card .info, .card .rar { position: absolute; z-index: 3; }
 .card .nm span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
