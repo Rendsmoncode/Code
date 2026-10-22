@@ -66,6 +66,15 @@ export const CONDS = {
       return `Si vous avez ${p.n > 1 ? `${p.n} Personnages` : 'un Personnage'}${filterText(f)}${p.n > 1 ? ' ou plus' : ''},`;
     },
   },
+  typeFieldGE: {
+    label: 'Vous avez X cartes de type… ou plus sur votre terrain',
+    params: [n('n', 'Cartes', 2), { k: 'type', label: 'Type', type: 'text', def: '' }, { k: 'self', label: 'Cette carte', type: 'sel', def: 'count', opts: { count: 'compte aussi', skip: 'ne compte pas' } }],
+    text: (p) => {
+      const many = p.n > 1;
+      const other = p.self === 'skip' ? (many ? 'autres ' : 'autre ') : '';
+      return `Si vous avez ${many ? p.n : 'une'} ${other}carte${many ? 's' : ''} de type {${p.type}}${many ? ' ou plus' : ''} sur votre terrain,`;
+    },
+  },
   noTypeField: {
     label: 'Vous n\'avez aucune carte de type… sur votre terrain',
     params: [{ k: 'type', label: 'Type', type: 'text', def: '' }, { k: 'self', label: 'Cette carte', type: 'sel', def: 'skip', opts: { skip: 'ne compte pas', count: 'compte aussi' } }],

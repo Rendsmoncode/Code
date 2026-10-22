@@ -143,6 +143,8 @@ await act('condition non remplie (lifeLE 0)', [{ k: 'draw', n: 1 }], async () =>
 await act('condition remplie (handLE 99)', [{ k: 'draw', n: 1 }], async () => [s1.hand === s0.hand + 1, ''], { extra: { conds: [{ k: 'handLE', n: 99 }] } });
 await act('condition « aucune carte de type Marine » remplie', [{ k: 'draw', n: 1 }], async () => [s1.hand === s0.hand + 1, ''], { extra: { conds: [{ k: 'noTypeField', type: 'Marine', self: 'skip' }] } });
 await act('condition « aucune carte de type Équipage » non remplie', [{ k: 'draw', n: 1 }], async () => [s1.hand === s0.hand, ''], { extra: { conds: [{ k: 'noTypeField', type: 'Équipage', self: 'skip' }] } });
+await act('condition « 2 cartes de type Équipage ou plus » remplie', [{ k: 'draw', n: 1 }], async () => [s1.hand === s0.hand + 1, ''], { extra: { conds: [{ k: 'typeFieldGE', n: 2, type: 'Équipage' }] } });
+await act('condition « 99 cartes de type Équipage ou plus » non remplie', [{ k: 'draw', n: 1 }], async () => [s1.hand === s0.hand, ''], { extra: { conds: [{ k: 'typeFieldGE', n: 99, type: 'Équipage' }] } });
 // Filtre puissance de base : B a un perso faible (1000) et un fort (6000 de base)
 await g(B, () => { const m = __optcg.G().me; m.chars = []; __optcg.commit(); }); await W(300);
 await placeB('P0'); await placeB('Fort'); await W(500);

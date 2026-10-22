@@ -730,6 +730,7 @@ function condOK(c, src) {
       const f = { ...(c.f || {}), ...(c.type ? { type: c.type } : {}) };
       return me.chars.filter((i) => matches(myCard(i), f, i, 'me')).length >= c.n;
     }
+    case 'typeFieldGE': return fieldInsts().filter((i) => (c.self !== 'skip' || i.u !== src?.u) && norm(myCard(i).traits).includes(norm(c.type))).length >= c.n;
     case 'noTypeField': return !fieldInsts().some((i) => (c.self === 'count' || i.u !== src?.u) && norm(myCard(i).traits).includes(norm(c.type)));
     case 'trashGE': return me.trash.length >= c.n;
     case 'myTurn': return myTurn();

@@ -20838,6 +20838,15 @@ ${suffix}`;
         return `Si vous avez ${p.n > 1 ? `${p.n} Personnages` : "un Personnage"}${filterText(f)}${p.n > 1 ? " ou plus" : ""},`;
       }
     },
+    typeFieldGE: {
+      label: "Vous avez X cartes de type\u2026 ou plus sur votre terrain",
+      params: [n("n", "Cartes", 2), { k: "type", label: "Type", type: "text", def: "" }, { k: "self", label: "Cette carte", type: "sel", def: "count", opts: { count: "compte aussi", skip: "ne compte pas" } }],
+      text: (p) => {
+        const many = p.n > 1;
+        const other2 = p.self === "skip" ? many ? "autres " : "autre " : "";
+        return `Si vous avez ${many ? p.n : "une"} ${other2}carte${many ? "s" : ""} de type {${p.type}}${many ? " ou plus" : ""} sur votre terrain,`;
+      }
+    },
     noTypeField: {
       label: "Vous n'avez aucune carte de type\u2026 sur votre terrain",
       params: [{ k: "type", label: "Type", type: "text", def: "" }, { k: "self", label: "Cette carte", type: "sel", def: "skip", opts: { skip: "ne compte pas", count: "compte aussi" } }],
@@ -23314,6 +23323,8 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         const f = { ...c.f || {}, ...c.type ? { type: c.type } : {} };
         return me.chars.filter((i) => matches(myCard(i), f, i, "me")).length >= c.n;
       }
+      case "typeFieldGE":
+        return fieldInsts().filter((i) => (c.self !== "skip" || i.u !== src?.u) && norm(myCard(i).traits).includes(norm(c.type))).length >= c.n;
       case "noTypeField":
         return !fieldInsts().some((i) => (c.self === "count" || i.u !== src?.u) && norm(myCard(i).traits).includes(norm(c.type)));
       case "trashGE":
