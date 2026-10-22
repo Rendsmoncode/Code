@@ -68,43 +68,54 @@ export function fmtEffect(txt) {
     .replace(/\n/g, '<br>');
 }
 
-function colorBg(colors) {
-  const hex = (colors?.length ? colors : ['noir']).map((c) => COLORS[c]?.hex || '#555');
-  return hex.length > 1 ? `linear-gradient(135deg, ${hex[0]} 0 50%, ${hex[1]} 50% 100%)` : hex[0];
-}
+// Symboles de rareté (affichés par certains habillages).
+const RARITY_GEMS = { C: '◆', UC: '◆◆', R: '◆◆◆', UR: '◆◆◆◆', L: '★', S: '♛' };
+
+// Habillages disponibles. Le nom sert de classe CSS sur <body> (skin-xxx).
+export const SKINS = {
+  grandline: 'Grand Line',
+  impact: 'Impact',
+  horizon: 'Horizon',
+};
 
 // o.power : puissance affichée (si modifiée), o.cls : classes en plus, o.attrs : attributs HTML en plus.
 export function cardHTML(card, o = {}) {
-  if (!card) return `<div class="card back ${o.cls || ''}" ${o.attrs || ''}><div class="frame"></div></div>`;
+  if (!card) return `<div class="card back ${o.cls || ''}" ${o.attrs || ''}><div class="frame"><div class="back-logo">OPTCG<small>Maison</small></div></div></div>`;
   const t = card.type;
-  const corner = t === 'leader'
-    ? `<div class="corner life" title="Vie">${esc(card.life)}</div>`
-    : `<div class="corner cost" title="Coût">${esc(card.cost ?? 0)}</div>`;
+  const fighter = t === 'leader' || t === 'character';
+  const cost = t === 'leader'
+    ? `<div class="cost life" title="Vie"><span>${esc(card.life)}</span></div>`
+    : `<div class="cost" title="Coût"><span>${esc(card.cost ?? 0)}</span></div>`;
   let pow = '';
-  if (t === 'leader' || t === 'character') {
+  if (fighter) {
     const base = Number(card.power) || 0;
     const shown = o.power ?? base;
     const diff = shown > base ? ' up' : shown < base ? ' down' : '';
-    pow = `<div class="pow${diff}" title="Puissance">${shown}</div>`;
+    pow = `<div class="pow${diff}" title="Puissance"><span>${shown}</span></div>`;
   }
   const ctr = t === 'character' && Number(card.counter) > 0
-    ? `<div class="ctr" title="Contre">+${esc(card.counter)}</div>` : '';
-  const attr = (t === 'leader' || t === 'character') && card.attribute
-    ? `<div class="attr">${esc(card.attribute)}</div>` : '';
+    ? `<div class="ctr" title="Contre"><span>+${esc(card.counter)}</span></div>` : '';
+  const attr = fighter && card.attribute ? `<div class="attr">${esc(card.attribute)}</div>` : '';
   const trig = card.trigger && t !== 'leader'
     ? `<div class="trg"><span class="kw trig">Déclenchement</span> ${fmtEffect(card.trigger)}</div>` : '';
-  const rar = RARITIES[card.rarity] ? `<div class="rar r-${card.rarity}" title="${RARITIES[card.rarity].label}">${RARITIES[card.rarity].short}</div>` : '';
+  const r = RARITIES[card.rarity] ? card.rarity : 'C';
+  const hex = (card.colors?.length ? card.colors : ['noir']).map((c) => COLORS[c]?.hex || '#555');
+  const len = (card.name || '').length;
   const art = card.image ? ` style="background-image:url('${card.image}')"` : '';
-  return `<div class="card t-${t} r-${card.rarity || 'C'} ${o.cls || ''}" style="--bg:${colorBg(card.colors)}" ${o.attrs || ''}>
+  return `<div class="card t-${t} r-${r} ${o.cls || ''}" style="--c1:${hex[0]};--c2:${hex[1] || hex[0]}" ${o.attrs || ''}>
     <div class="frame">
       <div class="art${card.image ? '' : ' empty'}"${art}></div>
-      ${corner}${pow}${ctr}${attr}${rar}
+      <div class="shade"></div>
+      ${cost}${pow}${ctr}${attr}
+      <div class="nm${len > 18 ? ' xlong' : len > 13 ? ' long' : ''}"><span>${esc(card.name || 'Sans nom')}</span></div>
       <div class="info">
-        <div class="nm">${esc(card.name || 'Sans nom')}</div>
-        <div class="tl">${TYPES[t] || ''}${card.traits ? ' · ' + esc(card.traits) : ''}${card.code ? ' · ' + esc(card.code) : ''}</div>
-        <div class="fx">${fmtEffect(card.effect)}</div>
+        <div class="tl">${TYPES[t] || ''}${card.traits ? ' · ' + esc(card.traits) : ''}</div>
+        ${card.effect ? `<div class="fx">${fmtEffect(card.effect)}</div>` : ''}
         ${trig}
       </div>
+      <div class="rar" title="${RARITIES[r].label}"><span class="rs">${RARITIES[r].short}</span><span class="rg">${RARITY_GEMS[r]}</span></div>
+      ${card.code ? `<div class="code">${esc(card.code)}</div>` : ''}
+      <div class="foil"></div>
     </div>
   </div>`;
 }

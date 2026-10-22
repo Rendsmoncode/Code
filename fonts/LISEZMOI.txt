@@ -1,0 +1,5 @@
+Polices utilisées pour les cartes, toutes sous licence libre SIL Open Font License 1.1 :
+- Cinzel (Natanael Gama), https://fonts.google.com/specimen/Cinzel
+- Anton (Vernon Adams), https://fonts.google.com/specimen/Anton
+- Rubik (Hubert et Fischer), https://fonts.google.com/specimen/Rubik
+Fichiers issus des paquets @fontsource (sous-ensemble latin).
