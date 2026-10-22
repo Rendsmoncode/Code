@@ -5,7 +5,7 @@ import { RARITIES, RARITY_ORDER, TYPES, esc, cardHTML } from './cards.js';
 const RATES = [
   ['3 cartes', 'Commune'],
   ['1 carte', 'Peu commune'],
-  ['1 carte', 'Rare ou mieux : 1 Super rare (SR) tous les 4 boosters, 1 Ultra rare (UR) tous les 15, 1 Légendaire (LR) tous les 50, 1 « 1 of 1 » tous les 500'],
+  ['1 carte', 'Rare ou mieux : 1 Super rare (SR) tous les 4 boosters, 1 Ultra rare (UR) tous les 15, 1 Légendaire (LR) tous les 50, 1 « 1on1 » tous les 500'],
 ];
 
 let opening = null; // { pulls, flipped: Set }
@@ -24,7 +24,7 @@ export function initBoosters() {
     <section class="bs-stage"></section>
     <details class="panel small bs-rates"><summary>Contenu d'un booster</summary>
       <ul>${RATES.map(([n, r]) => `<li><b>${n}</b> : ${r}</li>`).join('')}</ul>
-      <p class="muted">Une carte <b>1 of 1</b> n'existe qu'en un seul exemplaire dans tout le jeu : le premier qui la tire est le seul à l'avoir.</p>
+      <p class="muted">Une carte <b>1on1</b> n'existe qu'en un seul exemplaire dans tout le jeu : le premier qui la tire est le seul à l'avoir.</p>
       <p class="muted">1 booster gratuit toutes les 10 minutes (6 en réserve au maximum), plus les boosters offerts par les admins.</p>
     </details>
   </div>`;

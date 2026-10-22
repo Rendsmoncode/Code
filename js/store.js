@@ -164,7 +164,7 @@ export function validateDeck(deck, { owned = true } = {}) {
   const leader = S.byId[deck.leader];
   if (!leader) errs.push('Choisissez un Leader.');
   else if (owned && !S.collection[leader.id]) errs.push(`Vous ne possédez pas le Leader « ${leader.name} ».`);
-  else if (!owned && leader.rarity === 'S') errs.push(`« ${leader.name} » est une 1 of 1 : interdite dans un deck préconstruit.`);
+  else if (!owned && leader.rarity === 'S') errs.push(`« ${leader.name} » est une 1on1 : interdite dans un deck préconstruit.`);
   let total = 0;
   const perCode = {};
   for (const [id, n] of Object.entries(deck.cards || {})) {
@@ -176,7 +176,7 @@ export function validateDeck(deck, { owned = true } = {}) {
     if (perCode[key] > 4) errs.push(`« ${c.name} » : 4 exemplaires maximum.`);
     if (owned && n > (S.collection[id] || 0)) errs.push(`« ${c.name} » : vous n'en possédez que ${S.collection[id] || 0}.`);
     if (c.type === 'leader') errs.push(`« ${c.name} » est un Leader : il ne va pas dans le deck.`);
-    if (!owned && c.rarity === 'S') errs.push(`« ${c.name} » est une 1 of 1 : interdite dans un deck préconstruit.`);
+    if (!owned && c.rarity === 'S') errs.push(`« ${c.name} » est une 1on1 : interdite dans un deck préconstruit.`);
     if (leader && !c.colors.some((x) => leader.colors.includes(x))) {
       errs.push(`« ${c.name} » n'a aucune couleur du Leader.`);
     }

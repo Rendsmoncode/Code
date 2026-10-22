@@ -20921,7 +20921,7 @@ ${suffix}`;
     const leader = S.byId[deck.leader];
     if (!leader) errs.push("Choisissez un Leader.");
     else if (owned && !S.collection[leader.id]) errs.push(`Vous ne poss\xE9dez pas le Leader \xAB ${leader.name} \xBB.`);
-    else if (!owned && leader.rarity === "S") errs.push(`\xAB ${leader.name} \xBB est une 1 of 1 : interdite dans un deck pr\xE9construit.`);
+    else if (!owned && leader.rarity === "S") errs.push(`\xAB ${leader.name} \xBB est une 1on1 : interdite dans un deck pr\xE9construit.`);
     let total = 0;
     const perCode = {};
     for (const [id, n] of Object.entries(deck.cards || {})) {
@@ -20936,7 +20936,7 @@ ${suffix}`;
       if (perCode[key] > 4) errs.push(`\xAB ${c.name} \xBB : 4 exemplaires maximum.`);
       if (owned && n > (S.collection[id] || 0)) errs.push(`\xAB ${c.name} \xBB : vous n'en poss\xE9dez que ${S.collection[id] || 0}.`);
       if (c.type === "leader") errs.push(`\xAB ${c.name} \xBB est un Leader : il ne va pas dans le deck.`);
-      if (!owned && c.rarity === "S") errs.push(`\xAB ${c.name} \xBB est une 1 of 1 : interdite dans un deck pr\xE9construit.`);
+      if (!owned && c.rarity === "S") errs.push(`\xAB ${c.name} \xBB est une 1on1 : interdite dans un deck pr\xE9construit.`);
       if (leader && !c.colors.some((x) => leader.colors.includes(x))) {
         errs.push(`\xAB ${c.name} \xBB n'a aucune couleur du Leader.`);
       }
@@ -20991,7 +20991,7 @@ ${suffix}`;
     SR: { label: "Super rare", short: "SR" },
     UR: { label: "Ultra rare", short: "UR" },
     L: { label: "L\xE9gendaire", short: "LR" },
-    S: { label: "1 of 1", short: "1/1" }
+    S: { label: "1on1", short: "1ON1" }
   };
   var RARITY_ORDER = Object.keys(RARITIES);
   var ATTRIBUTES = ["Frappe", "Tranchant", "Distance", "Sp\xE9cial", "Sagesse"];
@@ -23038,7 +23038,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   var RATES = [
     ["3 cartes", "Commune"],
     ["1 carte", "Peu commune"],
-    ["1 carte", "Rare ou mieux : 1 Super rare (SR) tous les 4 boosters, 1 Ultra rare (UR) tous les 15, 1 L\xE9gendaire (LR) tous les 50, 1 \xAB 1 of 1 \xBB tous les 500"]
+    ["1 carte", "Rare ou mieux : 1 Super rare (SR) tous les 4 boosters, 1 Ultra rare (UR) tous les 15, 1 L\xE9gendaire (LR) tous les 50, 1 \xAB 1on1 \xBB tous les 500"]
   ];
   var opening = null;
   var busy = false;
@@ -23055,7 +23055,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     <section class="bs-stage"></section>
     <details class="panel small bs-rates"><summary>Contenu d'un booster</summary>
       <ul>${RATES.map(([n, r]) => `<li><b>${n}</b> : ${r}</li>`).join("")}</ul>
-      <p class="muted">Une carte <b>1 of 1</b> n'existe qu'en un seul exemplaire dans tout le jeu : le premier qui la tire est le seul \xE0 l'avoir.</p>
+      <p class="muted">Une carte <b>1on1</b> n'existe qu'en un seul exemplaire dans tout le jeu : le premier qui la tire est le seul \xE0 l'avoir.</p>
       <p class="muted">1 booster gratuit toutes les 10 minutes (6 en r\xE9serve au maximum), plus les boosters offerts par les admins.</p>
     </details>
   </div>`;

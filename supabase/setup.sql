@@ -24,7 +24,7 @@ create table if not exists public.cards (
   updated_at timestamptz not null default now()
 );
 
--- Raretés : C Commune, UC Peu commune, R Rare, SR Super rare, UR Ultra rare, L Légendaire (LR), S 1 of 1.
+-- Raretés : C Commune, UC Peu commune, R Rare, SR Super rare, UR Ultra rare, L Légendaire (LR), S 1on1.
 alter table public.cards drop constraint if exists cards_rarity_check;
 alter table public.cards add constraint cards_rarity_check check (rarity in ('C', 'UC', 'R', 'SR', 'UR', 'L', 'S'));
 
@@ -124,8 +124,8 @@ begin
 end $$;
 
 -- Tire une carte de la rareté voulue ; si aucune n'est disponible, prend la rareté la plus proche
--- (en dessous d'abord, puis au-dessus). Une carte 1 of 1 (S) déjà obtenue par un joueur ne sort plus,
--- et une 1 of 1 ne remplace jamais une rareté plus faible.
+-- (en dessous d'abord, puis au-dessus). Une carte 1on1 (S) déjà obtenue par un joueur ne sort plus,
+-- et une 1on1 ne remplace jamais une rareté plus faible.
 create or replace function public.pick_card(want text) returns text
 language plpgsql volatile security definer set search_path = public as $$
 declare
@@ -148,7 +148,7 @@ begin
 end $$;
 
 -- Ouvre un booster de 5 cartes : 3 Communes, 1 Peu commune, 1 Rare ou mieux.
--- Dernière carte : 1 SR sur 4, 1 UR sur 15, 1 LR sur 50, 1 « 1 of 1 » sur 500, sinon Rare.
+-- Dernière carte : 1 SR sur 4, 1 UR sur 15, 1 LR sur 50, 1 « 1on1 » sur 500, sinon Rare.
 create or replace function public.open_booster() returns json
 language plpgsql security definer set search_path = public as $$
 declare
@@ -178,7 +178,7 @@ begin
     when roll < 1.0 / 500 + 1.0 / 50 + 1.0 / 15 + 1.0 / 4 then 'SR'
     else 'R' end];
   foreach r in array slots loop
-    -- Verrou : deux joueurs ne peuvent pas tirer la même 1 of 1 au même instant.
+    -- Verrou : deux joueurs ne peuvent pas tirer la même 1on1 au même instant.
     if r = 'S' then perform pg_advisory_xact_lock(hashtext('optcg-one-of-one')); end if;
     cid := public.pick_card(r);
     if cid is null then raise exception 'Il n''y a encore aucune carte dans les boosters.'; end if;
@@ -190,7 +190,7 @@ begin
   return array_to_json(result);
 end $$;
 
--- Qui possède chaque carte 1 of 1 (visible par tous).
+-- Qui possède chaque carte 1on1 (visible par tous).
 create or replace function public.one_of_one_owners() returns table (card_id text, username text)
 language sql stable security definer set search_path = public as $$
   select c.card_id, p.username
@@ -218,7 +218,7 @@ begin
   if not found then raise exception 'Deck préconstruit introuvable.'; end if;
   if exists (select 1 from public.cards where rarity = 'S'
              and (id = s.leader or id in (select jsonb_object_keys(s.cards)))) then
-    raise exception 'Un deck préconstruit ne peut pas contenir de carte 1 of 1.';
+    raise exception 'Un deck préconstruit ne peut pas contenir de carte 1on1.';
   end if;
   if coalesce(s.leader, '') <> '' then
     insert into public.collection (user_id, card_id, qty) values (p.id, s.leader, 1)

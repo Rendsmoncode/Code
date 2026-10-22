@@ -7,8 +7,8 @@ Simulateur de jeu de cartes **dans le navigateur**, avec les règles du One Piec
 Chaque joueur se crée un compte (pseudo + mot de passe). À sa première connexion, il choisit un **deck préconstruit**, puis il agrandit sa collection en ouvrant des **boosters** :
 
 - 1 booster gratuit toutes les 10 minutes (6 en réserve au maximum), plus les boosters offerts par les admins ;
-- 5 cartes par booster : 3 Communes, 1 Peu commune, puis 1 carte Rare ou mieux (1 Super rare tous les 4 boosters, 1 Ultra rare tous les 15, 1 Légendaire tous les 50, 1 « 1 of 1 » tous les 500) ;
-- une carte « 1 of 1 » n'existe qu'en un seul exemplaire dans tout le jeu ;
+- 5 cartes par booster : 3 Communes, 1 Peu commune, puis 1 carte Rare ou mieux (1 Super rare tous les 4 boosters, 1 Ultra rare tous les 15, 1 Légendaire tous les 50, 1 « 1on1 » tous les 500) ;
+- une carte « 1on1 » n'existe qu'en un seul exemplaire dans tout le jeu ;
 - le tirage se fait sur le serveur : impossible de tricher.
 
 Un deck ne peut contenir que des cartes que l'on possède. Le **premier compte créé** devient propriétaire du jeu : il peut créer les cartes, nommer des admins et distribuer des boosters (onglets *Cartes* et *Admin*).

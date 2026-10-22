@@ -24,7 +24,7 @@ export const RARITIES = {
   SR: { label: 'Super rare', short: 'SR' },
   UR: { label: 'Ultra rare', short: 'UR' },
   L: { label: 'Légendaire', short: 'LR' },
-  S: { label: '1 of 1', short: '1/1' },
+  S: { label: '1on1', short: '1ON1' },
 };
 export const RARITY_ORDER = Object.keys(RARITIES);
 
