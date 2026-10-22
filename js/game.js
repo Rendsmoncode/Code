@@ -946,6 +946,7 @@ function canPay(costs, src) {
     if (c.k === 'donReturn' && donTotal() < c.n) return `Il faut ${c.n} DON!! sur le terrain.`;
     if (c.k === 'discard' && me.hand.length < c.n) return `Il faut ${c.n} carte(s) en main.`;
     if (c.k === 'restSelf' && src?.r) return 'Cette carte est déjà reposée.';
+    if (c.k === 'restLeader' && me.leader?.r) return 'Votre Leader est déjà reposé.';
     if (c.k === 'koOwn' && !me.chars.length) return 'Il faut un Personnage à mettre KO.';
     if (c.k === 'trashToDeck' && me.trash.length < c.n) return `Il faut ${c.n} carte(s) en défausse.`;
     if (c.k === 'lifeToHand' && !me.life.length) return 'Il faut une Vie.';
@@ -967,6 +968,7 @@ async function payCosts(costs, src) {
       const picked = await pickMany(`Coût : défaussez ${c.n} carte(s)`, me.hand, myCard, { min: c.n, max: c.n, cancel: false });
       for (const i of picked) move(i.u, 'trash');
     } else if (c.k === 'restSelf') src.r = true;
+    else if (c.k === 'restLeader') me.leader.r = true;
     else if (c.k === 'koOwn') {
       const [v] = await pickMany('Coût : mettez KO un de vos Personnages', me.chars, myCard, { min: 1, max: 1, cancel: false });
       if (v) await koMine(v, ' (coût)');

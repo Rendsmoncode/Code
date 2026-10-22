@@ -125,6 +125,8 @@ await g(A, () => { const m = __optcg.G().me; m.donActive = 3; __optcg.commit(); 
 await cost('restDon', [{ k: 'restDon', n: 2 }], async () => [s1.donA === s0.donA - 2 && s1.hand === s0.hand + 1, '']);
 await cost('donReturn', [{ k: 'donReturn', n: 1 }], async () => [s1.donD === s0.donD + 1, '']);
 await cost('discard', [{ k: 'discard', n: 1 }], async () => [s1.trash === s0.trash + 1 && s1.hand === s0.hand, '']);
+await cost('restLeader', [{ k: 'restLeader' }], async () => [await g(A, () => __optcg.G().me.leader.r), ''], mine);
+await g(A, () => { __optcg.G().me.leader.r = false; __optcg.commit(); });
 await cost('restSelf', [{ k: 'restSelf' }], async () => [await g(A, (u) => __optcg.G().me.chars.find((x) => x.u === u).r, mine), ''], mine);
 await g(A, (u) => { __optcg.G().me.chars.find((x) => x.u === u).r = false; }, mine);
 await placeA('P3'); await W(300);

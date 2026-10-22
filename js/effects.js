@@ -75,6 +75,7 @@ export const COSTS = {
   donReturn: { label: 'Renvoyer X DON!! au deck DON!! (DON!! −X)', params: [n('n', 'DON!!')], text: (p) => `DON!! −${p.n}` },
   discard: { label: 'Défausser X cartes de sa main', params: [n('n', 'Cartes')], text: (p) => `Défaussez ${p.n} carte${p.n > 1 ? 's' : ''} de votre main` },
   restSelf: { label: 'Reposer cette carte', params: [], text: () => 'Reposez cette carte' },
+  restLeader: { label: 'Reposer son Leader', params: [], text: () => 'Reposez votre Leader' },
   koOwn: { label: 'Mettre KO un de ses Personnages', params: [], text: () => 'Mettez KO 1 de vos Personnages' },
   trashToDeck: { label: 'Placer X cartes de sa défausse sous son deck', params: [n('n', 'Cartes', 3)], text: (p) => `Placez ${p.n} cartes de votre défausse sous votre deck` },
   lifeToHand: { label: 'Prendre une de ses Vies en main', params: [], text: () => 'Ajoutez 1 de vos Vies à votre main' },
