@@ -85,17 +85,8 @@
     repeating-linear-gradient(135deg, #ffffff0a 0 2cqw, transparent 2cqw 4cqw),
     linear-gradient(160deg, var(--c1), var(--c1d) 55%, var(--c1k));
 }
-/* Bande de couleur de la carte (deux moitiés pour un Leader bicolore), sous le nom */
-.card .band {
-  position: absolute; left: 0; right: 0; bottom: 0; height: 30%; z-index: 2; pointer-events: none;
-  background: linear-gradient(90deg, var(--c1) 0 50%, var(--c2) 50% 100%);
-  -webkit-mask: linear-gradient(to bottom, transparent, #000 45%); mask: linear-gradient(to bottom, transparent, #000 45%);
-}
-.card .band::after {
-  content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, var(--c1d) 0 50%, var(--c2d) 50% 100%); opacity: .55;
-}
-.card .shade { position: absolute; inset: 0; pointer-events: none; z-index: 1; background: linear-gradient(to bottom, transparent 40%, #0009 62%, #000c 100%); }
 .card .nm, .card .cost, .card .pow, .card .ctr, .card .attr, .card .info, .card .rar { position: absolute; z-index: 3; }
+.card .nm { z-index: 4; }
 .card .nm span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .card .cost {
@@ -135,9 +126,19 @@
 }
 .card .nm.long { font-size: 8cqw; }
 .card .nm.xlong { font-size: 6.6cqw; }
-.card .info {
-  left: 5cqw; right: 5cqw; bottom: 17.5cqw; max-height: 44%; overflow: hidden; text-align: center; font-size: 4.4cqw;
-  padding: 2cqw 3cqw; border-radius: 3cqw; background: #000000b3; backdrop-filter: blur(2px);
+.card .info { left: 5cqw; right: 5cqw; bottom: 17.5cqw; text-align: center; font-size: 4.4cqw; }
+.card .info-in { position: relative; max-height: 58cqw; overflow: hidden; padding: 2cqw 3cqw; }
+/* Encadré sombre du texte */
+.card .info::after {
+  content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 3cqw;
+  background: #000000b8; box-shadow: 0 0 0 .4cqw #ffffff1f;
+}
+/* Bande unie à la couleur de la carte (deux moitiés pour un Leader bicolore) :
+   elle part du milieu de l'encadré et descend jusqu'en bas de la carte. */
+.card .info::before {
+  content: ""; position: absolute; left: -5cqw; right: -5cqw; top: 50%; height: 100cqw; z-index: -2;
+  background: linear-gradient(90deg, var(--c1) 0 50%, var(--c2) 50% 100%);
+  box-shadow: inset 0 .6cqw 0 #ffffff40, 0 -.5cqw 1.5cqw #0006;
 }
 .card .info .fx, .card .info .trg { margin-top: 1.2cqw; }
 .card .tl { font: 400 3.6cqw/1.2 "Anton", sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #ffd23f; }

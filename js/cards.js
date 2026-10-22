@@ -109,14 +109,13 @@ export function cardHTML(card, o = {}) {
   return `<div class="card t-${t} r-${r} ${o.cls || ''}" style="${vars}" ${o.attrs || ''}>
     <div class="frame">
       <div class="art${card.image ? '' : ' empty'}"${art}></div>
-      <div class="shade"></div><div class="band"></div>
       ${cost}${pow}${ctr}${attr}
       <div class="nm${len > 18 ? ' xlong' : len > 13 ? ' long' : ''}"><span>${esc(card.name || 'Sans nom')}</span></div>
-      <div class="info">
+      <div class="info"><div class="info-in">
         <div class="tl">${TYPES[t] || ''}${card.traits ? ' · ' + esc(card.traits) : ''}</div>
         ${card.effect ? `<div class="fx">${fmtEffect(card.effect)}</div>` : ''}
         ${trig}
-      </div>
+      </div></div>
       <div class="rar" title="${RARITIES[r].label}">${RARITIES[r].short}</div>
       <div class="foil"></div>
     </div>
