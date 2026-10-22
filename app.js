@@ -21317,7 +21317,7 @@ ${suffix}`;
     }
     const ctr = t === "character" && Number(card.counter) > 0 ? `<div class="ctr" title="Contre"><span>+${esc(card.counter)}</span></div>` : "";
     const attrs = attributesOf(card);
-    const attr = fighter && attrs.length ? `<div class="attr">${attrs.map((a) => `<span class="a-${attrKey(a)}">${esc(a)}</span>`).join("")}</div>` : "";
+    const attr = fighter && attrs.length ? `<div class="attr">${attrs.map((a2) => `<span class="a-${attrKey(a2)}">${esc(a2)}</span>`).join("")}</div>` : "";
     const auto = effectsText(card);
     const fxText = [auto.main, card.effect].filter(Boolean).join("\n");
     const trigText = [auto.trigger, card.trigger].filter(Boolean).join(" ");
@@ -21325,13 +21325,16 @@ ${suffix}`;
     const r = RARITIES[card.rarity] ? card.rarity : "C";
     const hex = (card.colors?.length ? card.colors : ["noir"]).map((c) => COLORS[c]?.hex || "#555");
     const len = (card.name || "").length;
-    const art = card.image ? ` style="background-image:url('${card.image}')"` : "";
+    const a = card.art || {};
+    const artImg = card.image ? `<img src="${esc(card.image)}" alt="" draggable="false" style="transform:translate(${Number(a.x) || 0}%, ${Number(a.y) || 0}%) scale(${Number(a.z) || 1})">` : "";
     const c2 = hex[1] || hex[0];
-    const vars = `--c1:${hex[0]};--c2:${c2};--c1l:${shade(hex[0], 0.45)};--c1d:${shade(hex[0], -0.55)};--c1k:${shade(hex[0], -0.85)};--c2d:${shade(c2, -0.55)}`;
+    const bx = card.box;
+    const boxVars = bx ? `;--info-l:${bx.l}cqw;--info-r:${100 - bx.l - bx.w}cqw;--info-b:${bx.b * 1.397}cqw;--info-fs:${bx.fs || 1}` : "";
+    const vars = `--c1:${hex[0]};--c2:${c2};--c1l:${shade(hex[0], 0.45)};--c1d:${shade(hex[0], -0.55)};--c1k:${shade(hex[0], -0.85)};--c2d:${shade(c2, -0.55)}${boxVars}`;
     const ink = card.ink === "dark" ? " ink-dark" : "";
     return `<div class="card t-${t} r-${r}${ink} ${o.cls || ""}" style="${vars}" ${o.attrs || ""}>
     <div class="frame">
-      <div class="art${card.image ? "" : " empty"}"${art}></div>
+      <div class="art${card.image ? "" : " empty"}">${artImg}</div>
       ${cost}${pow}${ctr}${attr}
       <div class="nm${len > 18 ? " xlong" : len > 13 ? " long" : ""}"><span>${esc(card.name || "Sans nom")}</span></div>
       ${card.traits ? `<div class="traits">${esc(card.traits)}</div>` : ""}
@@ -21662,6 +21665,21 @@ ${suffix}`;
           <label class="btn"><input type="file" id="ed-img" accept="image/*" hidden>Choisir une image\u2026</label>
           <button type="button" class="btn ghost" id="ed-noimg">Retirer l'image</button>
         </div></div>
+      <div class="field lay"><label>Cadrage de l'image <small>(ou glissez l'image sur l'aper\xE7u, molette pour zoomer)</small></label>
+        <div class="lay-grid">
+          <label>Zoom <input type="range" data-lay="art.z" min="0.2" max="4" step="0.01"><output></output></label>
+          <label>Horizontal <input type="range" data-lay="art.x" min="-100" max="100" step="0.5"><output></output></label>
+          <label>Vertical <input type="range" data-lay="art.y" min="-100" max="100" step="0.5"><output></output></label>
+        </div>
+        <button type="button" class="btn small ghost" data-lay-reset="art">Recentrer l'image</button></div>
+      <div class="field lay"><label>Encadr\xE9 des effets <small>(ou glissez l'encadr\xE9 sur l'aper\xE7u)</small></label>
+        <div class="lay-grid">
+          <label>Gauche <input type="range" data-lay="box.l" min="0" max="70" step="0.5"><output></output></label>
+          <label>Largeur <input type="range" data-lay="box.w" min="30" max="100" step="0.5"><output></output></label>
+          <label>Hauteur <input type="range" data-lay="box.b" min="0" max="90" step="0.5"><output></output></label>
+          <label>Taille du texte <input type="range" data-lay="box.fs" min="0.6" max="1.6" step="0.01"><output></output></label>
+        </div>
+        <button type="button" class="btn small ghost" data-lay-reset="box">Remettre l'encadr\xE9 par d\xE9faut</button></div>
       <div class="row-btns sticky">
         <button type="submit" class="btn primary">Enregistrer</button>
         <button type="button" class="btn" id="ed-new">Nouvelle carte</button>
@@ -21745,6 +21763,7 @@ ${suffix}`;
       cur.image = "";
       preview();
     });
+    bindLayout(r);
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       readForm();
@@ -21898,8 +21917,89 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     show2(".f-attr2", t === "leader" || t === "character");
     show2(".f-trigger", t !== "leader");
     fxEd?.render();
+    fillLayout();
     r.querySelector("#ed-title").textContent = S.byId[cur.id] ? `Modifier \xAB ${cur.name} \xBB` : "Nouvelle carte";
     preview();
+  }
+  var defaultBox = () => ({ l: 5, w: 90, b: cur.type === "leader" ? 17.2 : 14.3, fs: 1 });
+  var layGet = (path) => {
+    const [o, k] = path.split(".");
+    const src = o === "art" ? { z: 1, x: 0, y: 0, ...cur.art || {} } : { ...defaultBox(), ...cur.box || {} };
+    return src[k];
+  };
+  function laySet(path, v) {
+    const [o, k] = path.split(".");
+    if (o === "art") cur.art = { z: 1, x: 0, y: 0, ...cur.art || {}, [k]: v };
+    else {
+      const box = { ...defaultBox(), ...cur.box || {}, [k]: v };
+      box.l = Math.min(box.l, 100 - box.w);
+      cur.box = box;
+    }
+  }
+  function fillLayout() {
+    root().querySelectorAll("[data-lay]").forEach((inp) => {
+      const v = layGet(inp.dataset.lay);
+      inp.value = v;
+      const k = inp.dataset.lay.split(".")[1];
+      inp.nextElementSibling.textContent = ["z", "fs"].includes(k) ? `${Math.round(v * 100)} %` : `${Math.round(v)}`;
+    });
+  }
+  function bindLayout(r) {
+    r.querySelector(".editor").addEventListener("input", (e) => {
+      const p = e.target.dataset.lay;
+      if (!p) return;
+      laySet(p, Number(e.target.value));
+      fillLayout();
+      preview();
+    });
+    r.querySelector(".editor").addEventListener("click", (e) => {
+      const k = e.target.closest("[data-lay-reset]")?.dataset.layReset;
+      if (!k) return;
+      if (k === "art") delete cur.art;
+      else delete cur.box;
+      fillLayout();
+      preview();
+    });
+    const pv = r.querySelector("#ed-card");
+    let drag = null;
+    pv.addEventListener("pointerdown", (e) => {
+      const card = pv.querySelector(".card");
+      if (!card) return;
+      const rect = card.getBoundingClientRect();
+      const onBox = Boolean(e.target.closest(".info"));
+      if (!onBox && !cur.image) return;
+      drag = { onBox, x: e.clientX, y: e.clientY, rect, start: onBox ? { ...defaultBox(), ...cur.box || {} } : { z: 1, x: 0, y: 0, ...cur.art || {} } };
+      pv.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+    pv.addEventListener("pointermove", (e) => {
+      if (!drag) return;
+      const dx = (e.clientX - drag.x) / drag.rect.width * 100;
+      const dy = (e.clientY - drag.y) / drag.rect.height * 100;
+      if (drag.onBox) {
+        const s0 = drag.start;
+        cur.box = { ...s0, l: Math.max(0, Math.min(100 - s0.w, s0.l + dx)), b: Math.max(0, Math.min(95, s0.b - dy)) };
+      } else {
+        cur.art = { ...drag.start, x: drag.start.x + dx, y: drag.start.y + dy };
+      }
+      preview();
+    });
+    const end = () => {
+      if (drag) {
+        drag = null;
+        fillLayout();
+      }
+    };
+    pv.addEventListener("pointerup", end);
+    pv.addEventListener("pointercancel", end);
+    pv.addEventListener("wheel", (e) => {
+      if (!cur.image) return;
+      e.preventDefault();
+      const z = layGet("art.z") * (e.deltaY < 0 ? 1.08 : 1 / 1.08);
+      laySet("art.z", Math.max(0.2, Math.min(4, z)));
+      fillLayout();
+      preview();
+    }, { passive: false });
   }
   function preview() {
     root().querySelector("#ed-card").innerHTML = cardHTML(cur);

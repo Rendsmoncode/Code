@@ -375,3 +375,12 @@ details { margin-top: 12px; }
 .log li.manual { color: #ff9b8f; }
 .pv-text .free { color: #ffcf9c; }
 .box.resume { margin: 12px 0; border-color: var(--accent-2); }
+
+/* ---------- mise en page libre (éditeur) ---------- */
+.lay-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px 16px; }
+.lay-grid label { display: flex; align-items: center; gap: 8px; font-weight: 400 !important; font-size: .85em; color: var(--muted); }
+.lay-grid input[type=range] { flex: 1; padding: 0; accent-color: var(--accent); }
+.lay-grid output { min-width: 3.4em; text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
+.lay .btn { align-self: flex-start; margin-top: 4px; }
+#ed-card { touch-action: none; cursor: grab; }
+#ed-card:active { cursor: grabbing; }

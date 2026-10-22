@@ -115,13 +115,19 @@ export function cardHTML(card, o = {}) {
   const r = RARITIES[card.rarity] ? card.rarity : 'C';
   const hex = (card.colors?.length ? card.colors : ['noir']).map((c) => COLORS[c]?.hex || '#555');
   const len = (card.name || '').length;
-  const art = card.image ? ` style="background-image:url('${card.image}')"` : '';
+  // Cadrage libre de l'image (card.art : z = zoom, x / y = décalage en % de la carte).
+  const a = card.art || {};
+  const artImg = card.image
+    ? `<img src="${esc(card.image)}" alt="" draggable="false" style="transform:translate(${Number(a.x) || 0}%, ${Number(a.y) || 0}%) scale(${Number(a.z) || 1})">` : '';
   const c2 = hex[1] || hex[0];
-  const vars = `--c1:${hex[0]};--c2:${c2};--c1l:${shade(hex[0], 0.45)};--c1d:${shade(hex[0], -0.55)};--c1k:${shade(hex[0], -0.85)};--c2d:${shade(c2, -0.55)}`;
+  // Encadré des effets libre (card.box : l = gauche, w = largeur, b = hauteur depuis le bas, en % ; fs = taille du texte).
+  const bx = card.box;
+  const boxVars = bx ? `;--info-l:${bx.l}cqw;--info-r:${100 - bx.l - bx.w}cqw;--info-b:${bx.b * 1.397}cqw;--info-fs:${bx.fs || 1}` : '';
+  const vars = `--c1:${hex[0]};--c2:${c2};--c1l:${shade(hex[0], 0.45)};--c1d:${shade(hex[0], -0.55)};--c1k:${shade(hex[0], -0.85)};--c2d:${shade(c2, -0.55)}${boxVars}`;
   const ink = card.ink === 'dark' ? ' ink-dark' : '';
   return `<div class="card t-${t} r-${r}${ink} ${o.cls || ''}" style="${vars}" ${o.attrs || ''}>
     <div class="frame">
-      <div class="art${card.image ? '' : ' empty'}"${art}></div>
+      <div class="art${card.image ? '' : ' empty'}">${artImg}</div>
       ${cost}${pow}${ctr}${attr}
       <div class="nm${len > 18 ? ' xlong' : len > 13 ? ' long' : ''}"><span>${esc(card.name || 'Sans nom')}</span></div>
       ${card.traits ? `<div class="traits">${esc(card.traits)}</div>` : ''}

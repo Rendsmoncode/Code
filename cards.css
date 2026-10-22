@@ -80,7 +80,8 @@
 }
 
 /* ---------- contenu ---------- */
-.card .art { position: absolute; inset: 0; background: center / cover no-repeat; }
+.card .art { position: absolute; inset: 0; overflow: hidden; background: #0b0d12; }
+.card .art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform-origin: center; user-select: none; pointer-events: none; }
 .card .art.empty {
   background:
     radial-gradient(circle at 28% 22%, var(--c1l) 0, transparent 45%),
@@ -187,8 +188,11 @@
 
 /* Encadré du texte : panneau fumé translucide à coins coupés */
 .card { --info-b: 20cqw; --band-h: 27.5cqw; }
-.card .info { left: 5cqw; right: 5cqw; bottom: var(--info-b); text-align: center; font: 500 4.3cqw/1.2 "Crimson Pro", serif; }
-.card .info-in { position: relative; max-height: 58cqw; overflow: hidden; padding: 3cqw 4cqw 2.6cqw; text-shadow: 0 .2cqw .8cqw #000, 0 0 .4cqw #000; }
+.card .info {
+  left: var(--info-l, 5cqw); right: var(--info-r, 5cqw); bottom: var(--info-b); text-align: center;
+  font-family: "Crimson Pro", serif; font-weight: 500; line-height: 1.2; font-size: calc(4.3cqw * var(--info-fs, 1));
+}
+.card .info-in { position: relative; max-height: 110cqw; overflow: hidden; padding: 3cqw 4cqw 2.6cqw; text-shadow: 0 .2cqw .8cqw #000, 0 0 .4cqw #000; }
 .card .info::after {
   content: ""; position: absolute; inset: 0; z-index: -1; backdrop-filter: blur(4px);
   background: linear-gradient(180deg, #0c0e14b8, #0c0e14d8);
@@ -198,14 +202,15 @@
 /* Bande unie à la couleur de la carte (deux moitiés pour un Leader bicolore), de hauteur fixe
    depuis le bas de la carte : l'encadré du texte peut grandir par-dessus sans l'agrandir. */
 .card .info::before {
-  content: ""; position: absolute; left: -5cqw; right: -5cqw; bottom: calc(-1 * var(--info-b)); height: var(--band-h); z-index: -2;
+  content: ""; position: absolute; left: calc(-1 * var(--info-l, 5cqw)); right: calc(-1 * var(--info-r, 5cqw));
+  bottom: calc(-1 * var(--info-b)); height: var(--band-h); z-index: -2;
   background: linear-gradient(90deg, var(--c1) 0 50%, var(--c2) 50% 100%);
   box-shadow: inset 0 .6cqw 0 #ffffff40, 0 -.5cqw 1.5cqw #0006;
 }
 .card .info .fx, .card .info .trg { margin-top: 1.2cqw; }
-.card .tl { font: 700 3cqw/1.2 "Cinzel", serif; color: var(--c1l); letter-spacing: .14em; text-transform: uppercase; }
+.card .tl { font: 700 calc(3cqw * var(--info-fs, 1))/1.2 "Cinzel", serif; color: var(--c1l); letter-spacing: .14em; text-transform: uppercase; }
 .card .kw {
-  display: inline-block; font: 700 2.9cqw/1.5 "Cinzel", serif; letter-spacing: .05em; text-transform: uppercase;
+  display: inline-block; font: 700 calc(2.9cqw * var(--info-fs, 1))/1.5 "Cinzel", serif; letter-spacing: .05em; text-transform: uppercase;
   background: #ffffff14; color: #fff; box-shadow: inset 0 0 0 .3cqw #ffffff55; padding: 0 1.2cqw;
 }
 .card .kw.trig { background: #ffd23f; color: #111; box-shadow: none; }

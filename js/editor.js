@@ -55,6 +55,21 @@ export function initEditor() {
           <label class="btn"><input type="file" id="ed-img" accept="image/*" hidden>Choisir une image…</label>
           <button type="button" class="btn ghost" id="ed-noimg">Retirer l'image</button>
         </div></div>
+      <div class="field lay"><label>Cadrage de l'image <small>(ou glissez l'image sur l'aperçu, molette pour zoomer)</small></label>
+        <div class="lay-grid">
+          <label>Zoom <input type="range" data-lay="art.z" min="0.2" max="4" step="0.01"><output></output></label>
+          <label>Horizontal <input type="range" data-lay="art.x" min="-100" max="100" step="0.5"><output></output></label>
+          <label>Vertical <input type="range" data-lay="art.y" min="-100" max="100" step="0.5"><output></output></label>
+        </div>
+        <button type="button" class="btn small ghost" data-lay-reset="art">Recentrer l'image</button></div>
+      <div class="field lay"><label>Encadré des effets <small>(ou glissez l'encadré sur l'aperçu)</small></label>
+        <div class="lay-grid">
+          <label>Gauche <input type="range" data-lay="box.l" min="0" max="70" step="0.5"><output></output></label>
+          <label>Largeur <input type="range" data-lay="box.w" min="30" max="100" step="0.5"><output></output></label>
+          <label>Hauteur <input type="range" data-lay="box.b" min="0" max="90" step="0.5"><output></output></label>
+          <label>Taille du texte <input type="range" data-lay="box.fs" min="0.6" max="1.6" step="0.01"><output></output></label>
+        </div>
+        <button type="button" class="btn small ghost" data-lay-reset="box">Remettre l'encadré par défaut</button></div>
       <div class="row-btns sticky">
         <button type="submit" class="btn primary">Enregistrer</button>
         <button type="button" class="btn" id="ed-new">Nouvelle carte</button>
@@ -126,6 +141,7 @@ export function initEditor() {
     preview();
   });
   val('ed-noimg').addEventListener('click', () => { cur.image = ''; preview(); });
+  bindLayout(r);
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     readForm();
@@ -240,8 +256,86 @@ function fill() {
   show('.f-attr2', t === 'leader' || t === 'character');
   show('.f-trigger', t !== 'leader');
   fxEd?.render();
+  fillLayout();
   r.querySelector('#ed-title').textContent = S.byId[cur.id] ? `Modifier « ${cur.name} »` : 'Nouvelle carte';
   preview();
+}
+
+// ---------- mise en page libre (image et encadré des effets) ----------
+const defaultBox = () => ({ l: 5, w: 90, b: cur.type === 'leader' ? 17.2 : 14.3, fs: 1 });
+const layGet = (path) => {
+  const [o, k] = path.split('.');
+  const src = o === 'art' ? { z: 1, x: 0, y: 0, ...(cur.art || {}) } : { ...defaultBox(), ...(cur.box || {}) };
+  return src[k];
+};
+function laySet(path, v) {
+  const [o, k] = path.split('.');
+  if (o === 'art') cur.art = { z: 1, x: 0, y: 0, ...(cur.art || {}), [k]: v };
+  else {
+    const box = { ...defaultBox(), ...(cur.box || {}), [k]: v };
+    box.l = Math.min(box.l, 100 - box.w); // l'encadré reste dans la carte
+    cur.box = box;
+  }
+}
+function fillLayout() {
+  root().querySelectorAll('[data-lay]').forEach((inp) => {
+    const v = layGet(inp.dataset.lay);
+    inp.value = v;
+    const k = inp.dataset.lay.split('.')[1];
+    inp.nextElementSibling.textContent = ['z', 'fs'].includes(k) ? `${Math.round(v * 100)} %` : `${Math.round(v)}`;
+  });
+}
+function bindLayout(r) {
+  r.querySelector('.editor').addEventListener('input', (e) => {
+    const p = e.target.dataset.lay;
+    if (!p) return;
+    laySet(p, Number(e.target.value));
+    fillLayout();
+    preview();
+  });
+  r.querySelector('.editor').addEventListener('click', (e) => {
+    const k = e.target.closest('[data-lay-reset]')?.dataset.layReset;
+    if (!k) return;
+    if (k === 'art') delete cur.art; else delete cur.box;
+    fillLayout();
+    preview();
+  });
+  // Glisser sur l'aperçu : l'encadré si on le saisit, sinon l'image. Molette : zoom de l'image.
+  const pv = r.querySelector('#ed-card');
+  let drag = null;
+  pv.addEventListener('pointerdown', (e) => {
+    const card = pv.querySelector('.card');
+    if (!card) return;
+    const rect = card.getBoundingClientRect();
+    const onBox = Boolean(e.target.closest('.info'));
+    if (!onBox && !cur.image) return;
+    drag = { onBox, x: e.clientX, y: e.clientY, rect, start: onBox ? { ...defaultBox(), ...(cur.box || {}) } : { z: 1, x: 0, y: 0, ...(cur.art || {}) } };
+    pv.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  pv.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const dx = ((e.clientX - drag.x) / drag.rect.width) * 100;
+    const dy = ((e.clientY - drag.y) / drag.rect.height) * 100;
+    if (drag.onBox) {
+      const s0 = drag.start;
+      cur.box = { ...s0, l: Math.max(0, Math.min(100 - s0.w, s0.l + dx)), b: Math.max(0, Math.min(95, s0.b - dy)) };
+    } else {
+      cur.art = { ...drag.start, x: drag.start.x + dx, y: drag.start.y + dy };
+    }
+    preview();
+  });
+  const end = () => { if (drag) { drag = null; fillLayout(); } };
+  pv.addEventListener('pointerup', end);
+  pv.addEventListener('pointercancel', end);
+  pv.addEventListener('wheel', (e) => {
+    if (!cur.image) return;
+    e.preventDefault();
+    const z = layGet('art.z') * (e.deltaY < 0 ? 1.08 : 1 / 1.08);
+    laySet('art.z', Math.max(0.2, Math.min(4, z)));
+    fillLayout();
+    preview();
+  }, { passive: false });
 }
 
 function preview() {
