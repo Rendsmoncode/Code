@@ -58,6 +58,9 @@ export const hasBanish = (c) => hasWord(c, ['[exil]', '[banish]']);
 // Une carte a 1 ou 2 attributs, stockés dans `attribute` sous la forme « Frappe / Tranchant ».
 export const attributesOf = (card) => String(card?.attribute || '').split('/').map((a) => a.trim()).filter(Boolean).slice(0, 2);
 
+// Clé CSS d'un attribut (pour son icône) : « Spécial » → « special ».
+const attrKey = (a) => a.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z]+/g, '');
+
 export function newCard() {
   return {
     id: uid(), code: '', name: '', type: 'character', colors: ['rouge'],
@@ -97,7 +100,7 @@ export function cardHTML(card, o = {}) {
   const ctr = t === 'character' && Number(card.counter) > 0
     ? `<div class="ctr" title="Contre"><span>+${esc(card.counter)}</span></div>` : '';
   const attrs = attributesOf(card);
-  const attr = fighter && attrs.length ? `<div class="attr">${attrs.map((a) => `<span>${esc(a)}</span>`).join('')}</div>` : '';
+  const attr = fighter && attrs.length ? `<div class="attr">${attrs.map((a) => `<span class="a-${attrKey(a)}">${esc(a)}</span>`).join('')}</div>` : '';
   const trig = card.trigger && t !== 'leader'
     ? `<div class="trg"><span class="kw trig">Déclenchement</span> ${fmtEffect(card.trigger)}</div>` : '';
   const r = RARITIES[card.rarity] ? card.rarity : 'C';
