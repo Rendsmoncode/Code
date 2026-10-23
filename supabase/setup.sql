@@ -178,7 +178,7 @@ begin
 end $$;
 
 -- Ouvre un booster de 5 cartes : 3 Communes, 1 Peu commune, 1 Rare ou mieux.
--- Dernière carte : 1 SR sur 4, 1 UR sur 15, 1 LR sur 50, 1 « 1on1 » sur 500, sinon Rare.
+-- Dernière carte : 1 SR sur 4, 1 UR sur 15, 1 LR sur 50, 1 « 1on1 » sur 2 000, sinon Rare.
 create or replace function public.open_booster() returns json
 language plpgsql security definer set search_path = public as $$
 declare
@@ -202,10 +202,10 @@ begin
     raise exception 'Aucun booster disponible pour le moment.';
   end if;
   slots := array['C', 'C', 'C', 'UC', case
-    when roll < 1.0 / 500 then 'S'
-    when roll < 1.0 / 500 + 1.0 / 50 then 'L'
-    when roll < 1.0 / 500 + 1.0 / 50 + 1.0 / 15 then 'UR'
-    when roll < 1.0 / 500 + 1.0 / 50 + 1.0 / 15 + 1.0 / 4 then 'SR'
+    when roll < 1.0 / 2000 then 'S'
+    when roll < 1.0 / 2000 + 1.0 / 50 then 'L'
+    when roll < 1.0 / 2000 + 1.0 / 50 + 1.0 / 15 then 'UR'
+    when roll < 1.0 / 2000 + 1.0 / 50 + 1.0 / 15 + 1.0 / 4 then 'SR'
     else 'R' end];
   foreach r in array slots loop
     -- Verrou : deux joueurs ne peuvent pas tirer la même 1on1 au même instant.

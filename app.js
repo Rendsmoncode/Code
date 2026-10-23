@@ -25504,7 +25504,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   var RATES = [
     ["3 cartes", "Commune"],
     ["1 carte", "Peu commune"],
-    ["1 carte", "Rare ou mieux : 1 Super rare (SR) tous les 4 boosters, 1 Ultra rare (UR) tous les 15, 1 L\xE9gendaire (LR) tous les 50, 1 \xAB 1on1 \xBB tous les 500"]
+    ["1 carte", "Rare ou mieux : 1 Super rare (SR) tous les 4 boosters, 1 Ultra rare (UR) tous les 15, 1 L\xE9gendaire (LR) tous les 50, 1 \xAB 1on1 \xBB tous les 2 000"]
   ];
   var opening = null;
   var busy2 = false;

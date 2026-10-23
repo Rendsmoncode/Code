@@ -5,7 +5,7 @@ import { RARITIES, RARITY_ORDER, TYPES, esc, cardHTML } from './cards.js';
 const RATES = [
   ['3 cartes', 'Commune'],
   ['1 carte', 'Peu commune'],
-  ['1 carte', 'Rare ou mieux : 1 Super rare (SR) tous les 4 boosters, 1 Ultra rare (UR) tous les 15, 1 Légendaire (LR) tous les 50, 1 « 1on1 » tous les 500'],
+  ['1 carte', 'Rare ou mieux : 1 Super rare (SR) tous les 4 boosters, 1 Ultra rare (UR) tous les 15, 1 Légendaire (LR) tous les 50, 1 « 1on1 » tous les 2 000'],
 ];
 
 let opening = null; // { pulls, flipped: Set }
