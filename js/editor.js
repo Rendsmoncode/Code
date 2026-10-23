@@ -104,6 +104,8 @@ export function initEditor() {
         <select id="ed-ftype"><option value="">Tous types</option>${Object.entries(TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>
         <select id="ed-frarity"><option value="">Toutes raretés</option>${Object.entries(RARITIES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('')}</select>
         <select id="ed-fcolor"><option value="">Toutes couleurs</option>${Object.entries(COLORS).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('')}</select>
+        <select id="ed-ftrait" aria-label="Type (famille)"><option value="">Tous les types</option></select>
+        <select id="ed-fimg" aria-label="Image"><option value="">Avec ou sans image</option><option value="yes">Avec image</option><option value="no">Sans image</option></select>
       </div>
       <div class="card-grid" id="ed-grid"></div>
     </section>
@@ -214,6 +216,7 @@ export function initEditor() {
   r.querySelector('.filters').addEventListener('input', () => {
     filter = {
       q: val('ed-q').value.toLowerCase(), type: val('ed-ftype').value, color: val('ed-fcolor').value, rarity: val('ed-frarity').value,
+      trait: val('ed-ftrait').value, img: val('ed-fimg').value,
     };
     renderList();
   });
@@ -559,11 +562,17 @@ function preview() {
 
 function renderList() {
   const r = root();
+  // Liste des types (familles) à jour, en gardant le choix courant.
+  const sel = r.querySelector('#ed-ftrait');
+  sel.innerHTML = `<option value="">Tous les types</option>${allTraits().map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}`;
+  sel.value = filter.trait || '';
   const list = S.cards.filter((c) => (!filter.type || c.type === filter.type)
+    && (!filter.trait || traitsOf(c).includes(filter.trait))
+    && (!filter.img || (filter.img === 'yes') === Boolean(c.image))
     && (!filter.rarity || c.rarity === filter.rarity)
     && (!filter.color || c.colors.includes(filter.color))
     && (!filter.q || `${c.name} ${c.code} ${c.traits} ${c.effect}`.toLowerCase().includes(filter.q)));
-  r.querySelector('#ed-count').textContent = `(${S.cards.length})`;
+  r.querySelector('#ed-count').textContent = list.length === S.cards.length ? `(${S.cards.length})` : `(${list.length} / ${S.cards.length})`;
   r.querySelector('#ed-grid').innerHTML = list.length
     ? list.map((c) => `<button class="grid-card" data-id="${c.id}" title="${esc(c.name)}">${cardHTML(c)}</button>`).join('')
     : `<p class="muted">${S.cards.length ? 'Aucune carte ne correspond.' : 'Aucune carte pour l\'instant : créez-en une avec le formulaire.'}</p>`;
