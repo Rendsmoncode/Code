@@ -10,7 +10,7 @@ import { openSettings } from './settings.js';
 import { initCredits } from './credits.js';
 import { logoSVG } from './logo.js';
 
-document.querySelector('.top .brand').innerHTML = logoSVG();
+document.querySelector('.top .brand').innerHTML = logoSVG('', true);
 
 const tabs = document.querySelectorAll('[data-tab]');
 

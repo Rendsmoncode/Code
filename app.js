@@ -21136,9 +21136,10 @@ ${suffix}`;
   function hat(id, tr, col = "currentColor", band = "") {
     return `<g transform="${tr}"><mask id="${id}"><rect x="-50" y="-50" width="200" height="200" fill="#fff"/><g stroke="#000" fill="none" stroke-linecap="round">${GAPS}</g></mask><g mask="url(#${id})" fill="${col}"><path d="${CROWN}"/>${BRIM}</g>${band ? `<path d="M30.6 51.2 C40 54.4 60 54.4 69.4 51.2 L69.1 49 C60 52.2 40 52.2 30.9 49 Z" fill="${band}"/>` : ""}</g>`;
   }
-  function logoSVG(cls = "") {
+  function logoSVG(cls = "", inline = false) {
     const k = "nk" + ++n2;
-    return `<svg class="${cls}" viewBox="8 20 84 81" role="img" aria-label="Nakama TCG"><mask id="${k}w"><rect x="-50" y="-50" width="200" height="200" fill="#fff"/><text ${WORD} fill="#000" stroke="#000" stroke-width="5" stroke-linejoin="round">NAKAMA</text></mask>${hat(k + "h", "translate(50 38) scale(.95) translate(-50 -53.5)")}<path d="M20 62 L82 96 M82 62 L20 96" stroke="currentColor" stroke-width="5" stroke-linecap="round" fill="none" mask="url(#${k}w)"/><text ${WORD} fill="currentColor">NAKAMA</text></svg>`;
+    const word = `<mask id="${k}w"><rect x="-50" y="-50" width="200" height="200" fill="#fff"/><text ${WORD} fill="#000" stroke="#000" stroke-width="5" stroke-linejoin="round">NAKAMA</text></mask><path d="M20 62 L82 96 M82 62 L20 96" stroke="currentColor" stroke-width="5" stroke-linecap="round" fill="none" mask="url(#${k}w)"/><text ${WORD} fill="currentColor">NAKAMA</text>`;
+    return inline ? `<svg class="${cls}" viewBox="-46 58 135 41" role="img" aria-label="Nakama TCG">${hat(k + "h", "translate(-20 79) scale(.6) translate(-50 -55)")}${word}</svg>` : `<svg class="${cls}" viewBox="8 20 84 81" role="img" aria-label="Nakama TCG">${hat(k + "h", "translate(50 38) scale(.95) translate(-50 -53.5)")}${word}</svg>`;
   }
 
   // js/cards.js
@@ -25831,7 +25832,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   }
 
   // js/app.js
-  document.querySelector(".top .brand").innerHTML = logoSVG();
+  document.querySelector(".top .brand").innerHTML = logoSVG("", true);
   var tabs = document.querySelectorAll("[data-tab]");
   function show(name2) {
     if (!document.querySelector(`[data-tab=${name2}]:not([hidden])`)) name2 = "boosters";
