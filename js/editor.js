@@ -96,6 +96,7 @@ export function initEditor() {
           <button class="btn ghost" id="ed-export">Exporter</button>
           <label class="btn ghost"><input type="file" id="ed-import" accept=".json,application/json" hidden>Importer</label>
           <label class="btn ghost" title="Plusieurs images d'un coup : nommez chaque fichier avec le numéro ou le nom de la carte (ex. FT-003.jpg ou Pelé.jpg)"><input type="file" id="ed-images" accept="image/*" multiple hidden>Importer des images</label>
+          <button class="btn ghost" id="ed-wiki" title="Cherche une photo sous licence libre sur Wikimedia Commons pour les cartes choisies">Chercher les photos (Wikimedia)</button>
         </div>
       </div>
       <div class="filters">
@@ -191,6 +192,7 @@ export function initEditor() {
   val('ed-export').addEventListener('click', () => {
     download('mes-cartes.json', { format: 'optcg-maison-cartes', cards: S.cards });
   });
+  val('ed-wiki').addEventListener('click', openWikiSearch);
   val('ed-images').addEventListener('change', (e) => {
     const files = [...e.target.files];
     e.target.value = '';
@@ -230,6 +232,115 @@ export function initEditor() {
 
 // Seuls les Leaders peuvent être bicolores.
 const maxColors = () => (cur.type === 'leader' ? 2 : 1);
+
+// ---------- photos libres depuis Wikimedia Commons (depuis le navigateur du joueur) ----------
+const WIKI = 'https://commons.wikimedia.org/w/api.php';
+const FREE = /^(cc[ -]?by|cc[ -]?zero|cc0|public domain|pd|attribution|gfdl|fal|free art)/i;
+const BAD = /(signature|autograph|logo|coat of arms|blason|map|stamp|timbre|grave|tombe|plaque|\.svg|\.gif|\.tiff?)/i;
+const strip = (s) => String(s || '').replace(/<[^>]+>/g, '').replace(/&[a-z#0-9]+;/gi, ' ').trim();
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// Mot qui doit figurer dans le titre du fichier : le dernier mot du nom (ou le nom entier s'il est court).
+function wikiKey(name) {
+  const parts = name.replace(/\(.*\)/, '').split(/[\s'’-]+/).map(key).filter((p) => p.length > 2 && p !== 'jr');
+  return parts.at(-1) || key(name);
+}
+async function wikiFind(card) {
+  const q = new URLSearchParams({
+    action: 'query', format: 'json', origin: '*', generator: 'search', gsrsearch: `${card.name.replace(/\(.*\)/, '')} filetype:bitmap`,
+    gsrnamespace: '6', gsrlimit: '12', prop: 'imageinfo', iiprop: 'url|extmetadata|size', iiurlwidth: '600',
+  });
+  const r = await (await fetch(`${WIKI}?${q}`)).json();
+  const pages = Object.values(r.query?.pages || {}).sort((a, b) => (a.index || 99) - (b.index || 99));
+  const k = wikiKey(card.name);
+  for (const p of pages) {
+    const t = key(p.title);
+    const ii = p.imageinfo?.[0];
+    if (!ii || !t.includes(k) || BAD.test(p.title)) continue;
+    const m = ii.extmetadata || {};
+    const license = strip(m.LicenseShortName?.value);
+    if (!FREE.test(license) || (ii.width || 0) < 300) continue;
+    return { thumb: ii.thumburl || ii.url, page: ii.descriptionurl, file: p.title.replace(/^File:/, ''), license, author: strip(m.Artist?.value).slice(0, 120) || 'auteur inconnu' };
+  }
+  return null;
+}
+// Recadre au format de la carte (63:88) en gardant le haut de la photo, là où se trouve le visage.
+async function cropToCard(url) {
+  const blob = await (await fetch(url)).blob();
+  const bmp = await createImageBitmap(blob);
+  const ratio = 63 / 88;
+  let sw = bmp.width; let sh = bmp.height; let sx = 0; let sy = 0;
+  if (sw / sh > ratio) { sw = Math.round(sh * ratio); sx = Math.round((bmp.width - sw) / 2); } else { sh = Math.round(sw / ratio); sy = Math.min(bmp.height - sh, Math.round(bmp.height * 0.03)); }
+  const c = document.createElement('canvas');
+  c.width = 500; c.height = Math.round(500 / ratio);
+  c.getContext('2d').drawImage(bmp, sx, sy, sw, sh, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', 0.85);
+}
+function openWikiSearch() {
+  const o = document.createElement('div');
+  o.className = 'overlay';
+  const prefixes = [...new Set(S.cards.map((c) => (c.code || '').split('-')[0]).filter(Boolean))].sort();
+  o.innerHTML = `<div class="dialog wide" role="dialog" aria-label="Chercher les photos">
+    <h3>Chercher les photos sur Wikimedia Commons</h3>
+    <p class="small muted">Seulement des photos sous licence libre, dont le titre contient le nom de la carte. Vous validez chaque photo avant l'envoi ; l'auteur et la licence sont gardés avec la carte.</p>
+    <div class="row-btns">
+      <label>Série <select class="ws-prefix"><option value="">Toutes</option>${prefixes.map((p) => `<option>${esc(p)}</option>`).join('')}</select></label>
+      <label class="check"><input type="checkbox" class="ws-empty" checked> Seulement les cartes sans image</label>
+      <label class="check"><input type="checkbox" class="ws-chars" checked> Seulement les Personnages</label>
+      <button class="btn primary" data-start>Lancer la recherche</button><button class="btn ghost" data-close>Fermer</button>
+    </div>
+    <p class="msg ws-msg" role="status"></p>
+    <div class="ws-grid"></div>
+    <div class="row-btns ws-save" hidden><button class="btn primary" data-save>Enregistrer les photos cochées</button></div></div>`;
+  document.body.append(o);
+  const q = (s) => o.querySelector(s);
+  const out = (t, err = false) => { q('.ws-msg').textContent = t; q('.ws-msg').classList.toggle('err', err); };
+  let found = [];
+  let stop = false;
+  o.addEventListener('click', async (e) => {
+    if (e.target.closest('[data-close]')) { stop = true; o.remove(); return; }
+    if (e.target.closest('[data-start]')) {
+      e.target.closest('[data-start]').disabled = true;
+      const pre = q('.ws-prefix').value;
+      const list = S.cards.filter((c) => (!pre || (c.code || '').startsWith(`${pre}-`)) && (!q('.ws-empty').checked || !c.image)
+        && (!q('.ws-chars').checked || c.type === 'character'));
+      found = [];
+      q('.ws-grid').innerHTML = '';
+      let n = 0;
+      for (const c of list) {
+        if (stop) return;
+        n++;
+        out(`Recherche ${n} / ${list.length} : ${c.name}…`);
+        let hit = null;
+        try { hit = await wikiFind(c); } catch (err) { console.warn(err); }
+        const i = found.length;
+        if (hit) found.push({ c, hit });
+        q('.ws-grid').insertAdjacentHTML('beforeend', hit
+          ? `<label class="ws-item"><input type="checkbox" data-i="${i}" checked><img src="${esc(hit.thumb)}" alt="" loading="lazy"><b>${esc(c.name)}</b><span>${esc(hit.license)} · ${esc(hit.author)}</span></label>`
+          : `<div class="ws-item none"><b>${esc(c.name)}</b><span>Aucune photo libre trouvée</span></div>`);
+        await sleep(400);
+      }
+      out(`${found.length} photo(s) trouvée(s) sur ${list.length} carte(s). Décochez celles qui ne conviennent pas, puis enregistrez.`);
+      q('.ws-save').hidden = !found.length;
+      return;
+    }
+    const save = e.target.closest('[data-save]');
+    if (save) {
+      save.disabled = true;
+      const keep = found.filter((_, i) => q(`[data-i="${i}"]`)?.checked);
+      let n = 0;
+      try {
+        for (const { c, hit } of keep) {
+          out(`Envoi ${n + 1} / ${keep.length} : ${c.name}…`);
+          const image = await cropToCard(hit.thumb);
+          await saveCards([{ ...c, image, art: undefined, credit: { author: hit.author, license: hit.license, file: hit.file, source: hit.page } }]);
+          n++;
+        }
+        out(`${n} photo(s) enregistrée(s).`);
+        msg(`${n} photo(s) ajoutée(s) depuis Wikimedia Commons.`);
+      } catch (err) { out(`Erreur après ${n} photo(s) : ${err.message || err}`, true); }
+    }
+  });
+}
 
 // ---------- import d'images en masse ----------
 // Le nom du fichier (sans extension) désigne la carte : son numéro (FT-003) ou son nom (Pelé). Accents et majuscules ignorés.
