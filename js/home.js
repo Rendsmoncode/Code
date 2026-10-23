@@ -1,9 +1,8 @@
 // Onglet Accueil : grand logo, boosters disponibles et raccourcis.
 // Sur ordinateur : logo, boutons et chiffres clés. Sur téléphone : logo, booster au centre et bouton Ouvrir.
 import { S, onChange } from './store.js';
-import { cardHTML } from './cards.js';
 import { logoSVG } from './logo.js';
-import { boosterState, mmss, openFromHome } from './boosters.js';
+import { boosterState, mmss, openFromHome, packHTML } from './boosters.js';
 import { icon } from './icons.js';
 
 export function initHome(go) {
@@ -12,7 +11,7 @@ export function initHome(go) {
   <div class="home">
     <div class="hm-logo">${logoSVG()}</div>
     <p class="hm-tag">Le jeu de cartes entre amis</p>
-    <div class="hm-pack" aria-hidden="true">${cardHTML(null)}</div>
+    <div class="hm-pack">${packHTML()}</div>
     <div class="hm-count"></div>
     <p class="hm-next"></p>
     <div class="hm-acts">

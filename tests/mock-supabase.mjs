@@ -39,7 +39,7 @@ export function makeMock() {
       const fn = path.split('/').pop();
       if (fn === 'booster_status') return json(route, status(p));
       if (fn === 'open_booster') { if (p.free > 0) p.free--; else if (p.boosters > 0) p.boosters--; else return json(route, { message: 'Aucun booster disponible pour le moment.' }, 400);
-        const roll = Math.random(); const slots = ['C', 'C', 'C', 'UC', roll < 0.3 ? 'S' : roll < 0.6 ? 'L' : 'R'];
+        const roll = Math.random(); const slots = ['C', 'C', 'C', 'UC', st.force || (roll < 0.3 ? 'S' : roll < 0.6 ? 'L' : 'R')];
         return json(route, slots.map((r) => { const id = pick(r); const isNew = !st.coll[uid]?.[id]; add(uid, id, 1); return { id, new: isNew }; })); }
       if (fn === 'claim_starter') { const s = st.starters[body.starter_id]; add(uid, s.leader, 1); for (const [k, v] of Object.entries(s.cards)) add(uid, k, v); const id = 'deck-' + Date.now(); st.decks[id] = { id, user_id: uid, name: s.name, leader: s.leader, cards: s.cards }; p.starter_claimed = true; return json(route, id); }
       if (fn === 'admin_give_boosters') { if (!['admin', 'owner'].includes(p.role)) return json(route, { message: 'Réservé aux admins.' }, 400); const t = Object.values(st.profiles).filter((x) => body.target == null || x.username === body.target); t.forEach((x) => { x.boosters += body.amount; }); return json(route, t.length); }

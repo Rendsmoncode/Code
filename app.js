@@ -25521,8 +25521,14 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     ["1 carte", "Peu commune"],
     ["1 carte", "Rare ou mieux : 1 Super rare (SR) tous les 4 boosters, 1 Ultra rare (UR) tous les 15, 1 L\xE9gendaire (LR) tous les 50, 1 \xAB 1on1 \xBB tous les 2 000"]
   ];
-  var opening = null;
   var busy2 = false;
+  var SPECIAL = { UR: 1100, L: 1700, S: 2600 };
+  var rank = (id) => RARITY_ORDER.indexOf(S.byId[id]?.rarity);
+  function packHTML(cls = "") {
+    return `<div class="bpack ${cls}" aria-hidden="true"><div class="bp-seal bp-top"></div>
+    <div class="bp-body"><div class="bp-logo">${logoSVG()}</div><div class="bp-sub">Booster \xB7 5 cartes</div></div>
+    <div class="bp-seal bp-bot"></div></div>`;
+  }
   function boosterState() {
     const st = S.status;
     if (!st) return null;
@@ -25546,14 +25552,14 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     const el = document.getElementById("tab-boosters");
     el.innerHTML = `
   <div class="boosters">
-    <section class="panel bs-head">
-      <div class="bs-stock"><div class="pack" aria-hidden="true"><span>BOOSTER</span></div>
-        <div><div class="bs-count"></div><div class="bs-detail muted"></div></div></div>
-      <button class="btn primary big bs-open">Ouvrir un booster</button>
+    <section class="bs-head">
+      <div class="bs-pack">${packHTML()}</div>
+      <div class="bs-count"></div>
+      <p class="bs-detail"></p>
+      <button class="btn bs-open">Ouvrir</button>
       <p class="msg bs-msg" role="status"></p>
     </section>
-    <section class="bs-stage"></section>
-    <details class="panel small bs-rates"><summary>Contenu d'un booster</summary>
+    <details class="bs-rates"><summary>Contenu d'un booster</summary>
       <ul>${RATES.map(([n3, r]) => `<li><b>${n3}</b> : ${r}</li>`).join("")}</ul>
       <p class="muted">Une carte <b>1on1</b> n'existe qu'en un seul exemplaire dans tout le jeu : le premier qui la tire est le seul \xE0 l'avoir.</p>
       <p class="muted">1 booster gratuit toutes les 10 minutes (6 en r\xE9serve au maximum), plus les boosters offerts par les admins.</p>
@@ -25564,29 +25570,21 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       if (busy2) return;
       busy2 = true;
       q(".bs-msg").textContent = "";
+      q(".bs-msg").classList.remove("err");
       q(".bs-open").disabled = true;
       try {
         const pulls = await openBooster();
-        opening = { pulls, flipped: /* @__PURE__ */ new Set() };
-        renderStage();
+        const pack = q(".bpack");
+        pack.classList.add("tear");
+        await wait(650);
+        pack.classList.remove("tear");
+        reveal2([...pulls].sort((x, y) => rank(x.id) - rank(y.id)));
       } catch (e) {
         q(".bs-msg").textContent = e.message;
         q(".bs-msg").classList.add("err");
+        busy2 = false;
       }
-      busy2 = false;
       renderHead();
-    });
-    q(".bs-stage").addEventListener("click", (e) => {
-      if (e.target.closest("[data-do=all]")) {
-        opening.pulls.forEach((_, i2) => opening.flipped.add(i2));
-        renderStage();
-        return;
-      }
-      const i = e.target.closest("[data-i]")?.dataset.i;
-      if (i !== void 0 && opening) {
-        opening.flipped.add(+i);
-        renderStage();
-      }
     });
     setInterval(renderHead, 1e3);
     setInterval(() => {
@@ -25595,38 +25593,90 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     }, 3e4);
     onChange(renderHead);
     renderHead();
-    renderStage();
     function renderHead() {
       const b = boosterState();
       if (!b) return;
-      const st = S.status;
-      const { free, next, total, left } = b;
-      q(".bs-count").innerHTML = `<b>${total}</b> booster${total > 1 ? "s" : ""} disponible${total > 1 ? "s" : ""}`;
-      q(".bs-detail").innerHTML = `Gratuits : ${free}/${st.free_max} ${next ? `\xB7 prochain dans <b>${mmss(left)}</b>` : "\xB7 r\xE9serve pleine"}
-      \xB7 Offerts : <b>${st.gifted}</b>`;
+      const { next, total, left } = b;
+      q(".bs-count").textContent = `${total} booster${total > 1 ? "s" : ""}`;
+      q(".bs-detail").innerHTML = next ? `Prochain booster gratuit dans <b>${mmss(left)}</b>` : "R\xE9serve de boosters gratuits pleine";
+      if (S.status.gifted) q(".bs-detail").innerHTML += ` \xB7 dont <b>${S.status.gifted}</b> offert${S.status.gifted > 1 ? "s" : ""}`;
       q(".bs-open").disabled = busy2 || total === 0;
     }
-    function renderStage() {
-      const stage = q(".bs-stage");
-      if (!opening) {
-        stage.innerHTML = "";
-        return;
-      }
-      const allOpen = opening.flipped.size === opening.pulls.length;
-      stage.innerHTML = `
-      <div class="pulls">${opening.pulls.map((p, i) => {
+    function reveal2(pulls) {
+      const ov = document.createElement("div");
+      ov.className = "bx";
+      ov.innerHTML = `<div class="bx-fx"></div><div class="bx-stage"></div><div class="bx-info"></div><div class="bx-hint"></div>`;
+      document.body.append(ov);
+      const stage = ov.querySelector(".bx-stage");
+      let i = -1;
+      let lock = false;
+      async function next() {
+        if (lock) return;
+        lock = true;
+        const old = stage.querySelector(".bx-card");
+        if (old) {
+          old.classList.add("out");
+          ov.querySelector(".bx-info").innerHTML = "";
+          await wait(260);
+          old.remove();
+        }
+        i++;
+        ov.className = "bx";
+        ov.querySelector(".bx-fx").innerHTML = "";
+        if (i >= pulls.length) {
+          summary();
+          return;
+        }
+        const p = pulls[i];
         const c = S.byId[p.id];
-        const on = opening.flipped.has(i);
-        return `<button class="pull ${on ? "flipped" : ""} r-${c?.rarity}" data-i="${i}" aria-label="${on ? esc(c?.name) : "Retourner la carte"}">
-          <div class="pull-in">
-            <div class="pull-back">${cardHTML(null)}</div>
-            <div class="pull-front">${cardHTML(c)}
-              <span class="rar-label r-${c?.rarity}">${RARITIES[c?.rarity]?.label || ""}</span>
-              ${p.new ? '<span class="new">Nouvelle !</span>' : ""}</div>
-          </div></button>`;
-      }).join("")}</div>
-      <div class="row-btns center-btns">${allOpen ? "" : '<button class="btn" data-do="all">Tout r\xE9v\xE9ler</button>'}</div>`;
+        const r = c?.rarity;
+        ov.querySelector(".bx-hint").textContent = `${i + 1} / ${pulls.length}`;
+        if (SPECIAL[r]) {
+          ov.classList.add(`fx-${r}`, "intro");
+          ov.querySelector(".bx-fx").innerHTML = fxHTML(r);
+          await wait(SPECIAL[r]);
+          ov.classList.remove("intro");
+        }
+        stage.insertAdjacentHTML("beforeend", `<button class="bx-card in r-${r}" aria-label="Carte suivante">${cardHTML(c)}</button>`);
+        ov.querySelector(".bx-info").innerHTML = `<span class="rar-chip r-${r}">${RARITIES[r]?.label || ""}</span>${p.new ? '<span class="bx-new">Nouvelle !</span>' : ""}
+        ${r === "S" ? '<div class="bx-unique">Exemplaire unique</div>' : ""}`;
+        await wait(SPECIAL[r] ? 500 : 250);
+        lock = false;
+      }
+      function summary() {
+        ov.className = "bx done";
+        ov.querySelector(".bx-hint").textContent = "";
+        ov.querySelector(".bx-info").innerHTML = "";
+        const left = boosterState()?.total || 0;
+        stage.innerHTML = `<div class="bx-sum">${pulls.map((p) => {
+          const c = S.byId[p.id];
+          return `<div class="bx-mini r-${c?.rarity}">${cardHTML(c)}<span class="rar-chip r-${c?.rarity}">${RARITIES[c?.rarity]?.short || ""}</span>${p.new ? '<span class="bx-new">Nouvelle</span>' : ""}</div>`;
+        }).join("")}</div>
+      <div class="bx-acts">${left ? `<button class="btn main" data-do="again">Ouvrir un autre \xB7 ${left}</button>` : ""}<button class="btn ghost" data-do="close">Terminer</button></div>`;
+        lock = false;
+      }
+      ov.addEventListener("click", (e) => {
+        const d = e.target.closest("[data-do]")?.dataset.do;
+        if (d === "close" || d === "again") {
+          ov.remove();
+          busy2 = false;
+          renderHead();
+          if (d === "again") q(".bs-open").click();
+          return;
+        }
+        if (!ov.classList.contains("done")) next();
+      });
+      next();
     }
+  }
+  var wait = (ms) => new Promise((r) => {
+    setTimeout(r, ms);
+  });
+  function fxHTML(r) {
+    const sparks = (n3) => Array.from({ length: n3 }, () => `<i style="--x:${(Math.random() * 100).toFixed(1)}%;--d:${(Math.random() * 1.6).toFixed(2)}s;--s:${(0.5 + Math.random()).toFixed(2)}"></i>`).join("");
+    if (r === "UR") return '<div class="fx-rays"></div><div class="fx-glow"></div>';
+    if (r === "L") return `<div class="fx-flash"></div><div class="fx-rays"></div><div class="fx-glow"></div><div class="fx-sparks">${sparks(28)}</div>`;
+    return `<div class="fx-rays"></div><div class="fx-ring"></div><div class="fx-ring r2"></div><div class="fx-glow"></div><div class="fx-sparks">${sparks(40)}</div>`;
   }
   function initCollection() {
     const el = document.getElementById("tab-collection");
@@ -25860,7 +25910,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   <div class="home">
     <div class="hm-logo">${logoSVG()}</div>
     <p class="hm-tag">Le jeu de cartes entre amis</p>
-    <div class="hm-pack" aria-hidden="true">${cardHTML(null)}</div>
+    <div class="hm-pack">${packHTML()}</div>
     <div class="hm-count"></div>
     <p class="hm-next"></p>
     <div class="hm-acts">
