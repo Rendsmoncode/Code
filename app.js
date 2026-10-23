@@ -22085,32 +22085,32 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     const parts = name2.replace(/\(.*\)/, "").split(/[\s'’-]+/).map(key).filter((p) => p.length > 2 && p !== "jr");
     return parts.at(-1) || key(name2);
   }
-  async function wikiFind(card) {
+  async function wikiFind(query, strictKey = "", max = 6) {
     const q = new URLSearchParams({
       action: "query",
       format: "json",
       origin: "*",
       generator: "search",
-      gsrsearch: `${card.name.replace(/\(.*\)/, "")} filetype:bitmap`,
+      gsrsearch: `${query} filetype:bitmap`,
       gsrnamespace: "6",
-      gsrlimit: "12",
+      gsrlimit: "24",
       prop: "imageinfo",
       iiprop: "url|extmetadata|size",
       iiurlwidth: "600"
     });
     const r = await (await fetch(`${WIKI}?${q}`)).json();
     const pages = Object.values(r.query?.pages || {}).sort((a, b) => (a.index || 99) - (b.index || 99));
-    const k = wikiKey(card.name);
+    const out = [];
     for (const p of pages) {
-      const t = key(p.title);
       const ii = p.imageinfo?.[0];
-      if (!ii || !t.includes(k) || BAD.test(p.title)) continue;
+      if (!ii || strictKey && !key(p.title).includes(strictKey) || BAD.test(p.title)) continue;
       const m = ii.extmetadata || {};
       const license = strip(m.LicenseShortName?.value);
       if (!FREE.test(license) || (ii.width || 0) < 300) continue;
-      return { thumb: ii.thumburl || ii.url, page: ii.descriptionurl, file: p.title.replace(/^File:/, ""), license, author: strip(m.Artist?.value).slice(0, 120) || "auteur inconnu" };
+      out.push({ thumb: ii.thumburl || ii.url, page: ii.descriptionurl, file: p.title.replace(/^File:/, ""), license, author: strip(m.Artist?.value).slice(0, 120) || "auteur inconnu" });
+      if (out.length >= max) break;
     }
-    return null;
+    return out;
   }
   async function cropToCard(url) {
     const blob = await (await fetch(url)).blob();
@@ -22139,11 +22139,11 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     const prefixes = [...new Set(S.cards.map((c) => (c.code || "").split("-")[0]).filter(Boolean))].sort();
     o.innerHTML = `<div class="dialog wide" role="dialog" aria-label="Chercher les photos">
     <h3>Chercher les photos sur Wikimedia Commons</h3>
-    <p class="small muted">Seulement des photos sous licence libre, dont le titre contient le nom de la carte. Vous validez chaque photo avant l'envoi ; l'auteur et la licence sont gard\xE9s avec la carte.</p>
+    <p class="small muted">Seulement des photos sous licence libre. Pour chaque carte : cliquez la vignette de votre choix, ou retapez la recherche (souvent meilleure en anglais : \xAB odd socks \xBB, \xAB nail polish \xBB\u2026). L'auteur et la licence sont gard\xE9s avec la carte.</p>
     <div class="row-btns">
       <label>S\xE9rie <select class="ws-prefix"><option value="">Toutes</option>${prefixes.map((p) => `<option>${esc(p)}</option>`).join("")}</select></label>
       <label class="check"><input type="checkbox" class="ws-empty" checked> Seulement les cartes sans image</label>
-      <label class="check"><input type="checkbox" class="ws-chars" checked> Seulement les Personnages</label>
+      <label class="check"><input type="checkbox" class="ws-chars"> Seulement les Personnages</label>
       <button class="btn primary" data-start>Lancer la recherche</button><button class="btn ghost" data-close>Fermer</button>
     </div>
     <p class="msg ws-msg" role="status"></p>
@@ -22155,50 +22155,82 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       q(".ws-msg").textContent = t;
       q(".ws-msg").classList.toggle("err", err);
     };
-    let found = [];
+    let items = [];
     let stop = false;
+    const itemHTML = (it, i) => {
+      const cur2 = it.cands[it.sel];
+      return `<div class="ws-item ${cur2 ? "" : "none"}" data-item="${i}">
+      ${cur2 ? `<label class="ws-main"><input type="checkbox" data-keep="${i}" ${it.keep ? "checked" : ""}><img src="${esc(cur2.thumb)}" alt=""></label>` : '<div class="ws-empty-img">Aucune photo</div>'}
+      <b>${esc(it.c.name)}</b>${cur2 ? `<span>${esc(cur2.license)} \xB7 ${esc(cur2.author)}</span>` : ""}
+      ${it.cands.length > 1 ? `<div class="ws-thumbs">${it.cands.map((x, j) => `<img src="${esc(x.thumb)}" alt="" data-pick="${i}:${j}" class="${j === it.sel ? "on" : ""}" loading="lazy">`).join("")}</div>` : ""}
+      <div class="ws-q"><input value="${esc(it.query)}" data-q="${i}" aria-label="Recherche"><button class="btn small" data-again="${i}" title="Relancer la recherche">\u21BB</button></div></div>`;
+    };
+    const redraw = (i) => {
+      o.querySelector(`[data-item="${i}"]`).outerHTML = itemHTML(items[i], i);
+    };
+    const search = async (it) => {
+      try {
+        it.cands = await wikiFind(it.query, it.strict ? wikiKey(it.c.name) : "");
+      } catch (err) {
+        console.warn(err);
+        it.cands = [];
+      }
+      it.sel = 0;
+      it.keep = it.cands.length > 0;
+    };
     o.addEventListener("click", async (e) => {
       if (e.target.closest("[data-close]")) {
         stop = true;
         o.remove();
         return;
       }
+      const pick = e.target.closest("[data-pick]");
+      if (pick) {
+        const [i, j] = pick.dataset.pick.split(":").map(Number);
+        items[i].sel = j;
+        items[i].keep = true;
+        redraw(i);
+        return;
+      }
+      const again = e.target.closest("[data-again]");
+      if (again) {
+        const i = +again.dataset.again;
+        items[i].query = o.querySelector(`[data-q="${i}"]`).value.trim() || items[i].c.name;
+        items[i].strict = false;
+        again.disabled = true;
+        await search(items[i]);
+        redraw(i);
+        q(".ws-save").hidden = !items.some((x) => x.cands.length);
+        return;
+      }
       if (e.target.closest("[data-start]")) {
         e.target.closest("[data-start]").disabled = true;
         const pre = q(".ws-prefix").value;
         const list = S.cards.filter((c) => (!pre || (c.code || "").startsWith(`${pre}-`)) && (!q(".ws-empty").checked || !c.image) && (!q(".ws-chars").checked || c.type === "character"));
-        found = [];
+        items = list.map((c) => ({ c, query: c.name.replace(/\(.*\)/, "").trim(), strict: c.type === "character", cands: [], sel: 0, keep: false }));
         q(".ws-grid").innerHTML = "";
-        let n2 = 0;
-        for (const c of list) {
+        for (let i = 0; i < items.length; i++) {
           if (stop) return;
-          n2++;
-          out(`Recherche ${n2} / ${list.length} : ${c.name}\u2026`);
-          let hit = null;
-          try {
-            hit = await wikiFind(c);
-          } catch (err) {
-            console.warn(err);
-          }
-          const i = found.length;
-          if (hit) found.push({ c, hit });
-          q(".ws-grid").insertAdjacentHTML("beforeend", hit ? `<label class="ws-item"><input type="checkbox" data-i="${i}" checked><img src="${esc(hit.thumb)}" alt="" loading="lazy"><b>${esc(c.name)}</b><span>${esc(hit.license)} \xB7 ${esc(hit.author)}</span></label>` : `<div class="ws-item none"><b>${esc(c.name)}</b><span>Aucune photo libre trouv\xE9e</span></div>`);
+          out(`Recherche ${i + 1} / ${items.length} : ${items[i].c.name}\u2026`);
+          await search(items[i]);
+          q(".ws-grid").insertAdjacentHTML("beforeend", itemHTML(items[i], i));
           await sleep3(400);
         }
-        out(`${found.length} photo(s) trouv\xE9e(s) sur ${list.length} carte(s). D\xE9cochez celles qui ne conviennent pas, puis enregistrez.`);
-        q(".ws-save").hidden = !found.length;
+        out(`${items.filter((x) => x.cands.length).length} carte(s) avec des propositions sur ${items.length}. Choisissez, d\xE9cochez ou relancez, puis enregistrez.`);
+        q(".ws-save").hidden = !items.some((x) => x.cands.length);
         return;
       }
       const save = e.target.closest("[data-save]");
       if (save) {
         save.disabled = true;
-        const keep = found.filter((_, i) => q(`[data-i="${i}"]`)?.checked);
+        const keep = items.filter((it) => it.keep && it.cands[it.sel]);
         let n2 = 0;
         try {
-          for (const { c, hit } of keep) {
-            out(`Envoi ${n2 + 1} / ${keep.length} : ${c.name}\u2026`);
+          for (const it of keep) {
+            const hit = it.cands[it.sel];
+            out(`Envoi ${n2 + 1} / ${keep.length} : ${it.c.name}\u2026`);
             const image = await cropToCard(hit.thumb);
-            await saveCards([{ ...c, image, art: void 0, credit: { author: hit.author, license: hit.license, file: hit.file, source: hit.page } }]);
+            await saveCards([{ ...it.c, image, art: void 0, credit: { author: hit.author, license: hit.license, file: hit.file, source: hit.page } }]);
             n2++;
           }
           out(`${n2} photo(s) enregistr\xE9e(s).`);
@@ -22206,7 +22238,15 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         } catch (err) {
           out(`Erreur apr\xE8s ${n2} photo(s) : ${err.message || err}`, true);
         }
+        save.disabled = false;
       }
+    });
+    o.addEventListener("change", (e) => {
+      const k = e.target.dataset.keep;
+      if (k !== void 0) items[+k].keep = e.target.checked;
+    });
+    o.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && e.target.dataset.q !== void 0) o.querySelector(`[data-again="${e.target.dataset.q}"]`).click();
     });
   }
   var key = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "");

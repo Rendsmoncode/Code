@@ -247,24 +247,25 @@ function wikiKey(name) {
   const parts = name.replace(/\(.*\)/, '').split(/[\s'’-]+/).map(key).filter((p) => p.length > 2 && p !== 'jr');
   return parts.at(-1) || key(name);
 }
-async function wikiFind(card) {
+// Jusqu'à `max` photos libres pour une recherche. strict : le titre du fichier doit contenir le nom (personnes réelles).
+async function wikiFind(query, strictKey = '', max = 6) {
   const q = new URLSearchParams({
-    action: 'query', format: 'json', origin: '*', generator: 'search', gsrsearch: `${card.name.replace(/\(.*\)/, '')} filetype:bitmap`,
-    gsrnamespace: '6', gsrlimit: '12', prop: 'imageinfo', iiprop: 'url|extmetadata|size', iiurlwidth: '600',
+    action: 'query', format: 'json', origin: '*', generator: 'search', gsrsearch: `${query} filetype:bitmap`,
+    gsrnamespace: '6', gsrlimit: '24', prop: 'imageinfo', iiprop: 'url|extmetadata|size', iiurlwidth: '600',
   });
   const r = await (await fetch(`${WIKI}?${q}`)).json();
   const pages = Object.values(r.query?.pages || {}).sort((a, b) => (a.index || 99) - (b.index || 99));
-  const k = wikiKey(card.name);
+  const out = [];
   for (const p of pages) {
-    const t = key(p.title);
     const ii = p.imageinfo?.[0];
-    if (!ii || !t.includes(k) || BAD.test(p.title)) continue;
+    if (!ii || (strictKey && !key(p.title).includes(strictKey)) || BAD.test(p.title)) continue;
     const m = ii.extmetadata || {};
     const license = strip(m.LicenseShortName?.value);
     if (!FREE.test(license) || (ii.width || 0) < 300) continue;
-    return { thumb: ii.thumburl || ii.url, page: ii.descriptionurl, file: p.title.replace(/^File:/, ''), license, author: strip(m.Artist?.value).slice(0, 120) || 'auteur inconnu' };
+    out.push({ thumb: ii.thumburl || ii.url, page: ii.descriptionurl, file: p.title.replace(/^File:/, ''), license, author: strip(m.Artist?.value).slice(0, 120) || 'auteur inconnu' });
+    if (out.length >= max) break;
   }
-  return null;
+  return out;
 }
 // Recadre au format de la carte (63:88) en gardant le haut de la photo, là où se trouve le visage.
 async function cropToCard(url) {
@@ -284,11 +285,11 @@ function openWikiSearch() {
   const prefixes = [...new Set(S.cards.map((c) => (c.code || '').split('-')[0]).filter(Boolean))].sort();
   o.innerHTML = `<div class="dialog wide" role="dialog" aria-label="Chercher les photos">
     <h3>Chercher les photos sur Wikimedia Commons</h3>
-    <p class="small muted">Seulement des photos sous licence libre, dont le titre contient le nom de la carte. Vous validez chaque photo avant l'envoi ; l'auteur et la licence sont gardés avec la carte.</p>
+    <p class="small muted">Seulement des photos sous licence libre. Pour chaque carte : cliquez la vignette de votre choix, ou retapez la recherche (souvent meilleure en anglais : « odd socks », « nail polish »…). L'auteur et la licence sont gardés avec la carte.</p>
     <div class="row-btns">
       <label>Série <select class="ws-prefix"><option value="">Toutes</option>${prefixes.map((p) => `<option>${esc(p)}</option>`).join('')}</select></label>
       <label class="check"><input type="checkbox" class="ws-empty" checked> Seulement les cartes sans image</label>
-      <label class="check"><input type="checkbox" class="ws-chars" checked> Seulement les Personnages</label>
+      <label class="check"><input type="checkbox" class="ws-chars"> Seulement les Personnages</label>
       <button class="btn primary" data-start>Lancer la recherche</button><button class="btn ghost" data-close>Fermer</button>
     </div>
     <p class="msg ws-msg" role="status"></p>
@@ -297,51 +298,81 @@ function openWikiSearch() {
   document.body.append(o);
   const q = (s) => o.querySelector(s);
   const out = (t, err = false) => { q('.ws-msg').textContent = t; q('.ws-msg').classList.toggle('err', err); };
-  let found = [];
+  // items : { c, query, strict, cands, sel, keep }
+  let items = [];
   let stop = false;
+  const itemHTML = (it, i) => {
+    const cur = it.cands[it.sel];
+    return `<div class="ws-item ${cur ? '' : 'none'}" data-item="${i}">
+      ${cur ? `<label class="ws-main"><input type="checkbox" data-keep="${i}" ${it.keep ? 'checked' : ''}><img src="${esc(cur.thumb)}" alt=""></label>` : '<div class="ws-empty-img">Aucune photo</div>'}
+      <b>${esc(it.c.name)}</b>${cur ? `<span>${esc(cur.license)} · ${esc(cur.author)}</span>` : ''}
+      ${it.cands.length > 1 ? `<div class="ws-thumbs">${it.cands.map((x, j) => `<img src="${esc(x.thumb)}" alt="" data-pick="${i}:${j}" class="${j === it.sel ? 'on' : ''}" loading="lazy">`).join('')}</div>` : ''}
+      <div class="ws-q"><input value="${esc(it.query)}" data-q="${i}" aria-label="Recherche"><button class="btn small" data-again="${i}" title="Relancer la recherche">↻</button></div></div>`;
+  };
+  const redraw = (i) => { o.querySelector(`[data-item="${i}"]`).outerHTML = itemHTML(items[i], i); };
+  const search = async (it) => {
+    try { it.cands = await wikiFind(it.query, it.strict ? wikiKey(it.c.name) : ''); } catch (err) { console.warn(err); it.cands = []; }
+    it.sel = 0;
+    it.keep = it.cands.length > 0;
+  };
   o.addEventListener('click', async (e) => {
     if (e.target.closest('[data-close]')) { stop = true; o.remove(); return; }
+    const pick = e.target.closest('[data-pick]');
+    if (pick) { const [i, j] = pick.dataset.pick.split(':').map(Number); items[i].sel = j; items[i].keep = true; redraw(i); return; }
+    const again = e.target.closest('[data-again]');
+    if (again) {
+      const i = +again.dataset.again;
+      items[i].query = o.querySelector(`[data-q="${i}"]`).value.trim() || items[i].c.name;
+      items[i].strict = false; // recherche retapée à la main : on fait confiance aux mots choisis
+      again.disabled = true;
+      await search(items[i]);
+      redraw(i);
+      q('.ws-save').hidden = !items.some((x) => x.cands.length);
+      return;
+    }
     if (e.target.closest('[data-start]')) {
       e.target.closest('[data-start]').disabled = true;
       const pre = q('.ws-prefix').value;
       const list = S.cards.filter((c) => (!pre || (c.code || '').startsWith(`${pre}-`)) && (!q('.ws-empty').checked || !c.image)
         && (!q('.ws-chars').checked || c.type === 'character'));
-      found = [];
+      items = list.map((c) => ({ c, query: c.name.replace(/\(.*\)/, '').trim(), strict: c.type === 'character', cands: [], sel: 0, keep: false }));
       q('.ws-grid').innerHTML = '';
-      let n = 0;
-      for (const c of list) {
+      for (let i = 0; i < items.length; i++) {
         if (stop) return;
-        n++;
-        out(`Recherche ${n} / ${list.length} : ${c.name}…`);
-        let hit = null;
-        try { hit = await wikiFind(c); } catch (err) { console.warn(err); }
-        const i = found.length;
-        if (hit) found.push({ c, hit });
-        q('.ws-grid').insertAdjacentHTML('beforeend', hit
-          ? `<label class="ws-item"><input type="checkbox" data-i="${i}" checked><img src="${esc(hit.thumb)}" alt="" loading="lazy"><b>${esc(c.name)}</b><span>${esc(hit.license)} · ${esc(hit.author)}</span></label>`
-          : `<div class="ws-item none"><b>${esc(c.name)}</b><span>Aucune photo libre trouvée</span></div>`);
+        out(`Recherche ${i + 1} / ${items.length} : ${items[i].c.name}…`);
+        await search(items[i]);
+        q('.ws-grid').insertAdjacentHTML('beforeend', itemHTML(items[i], i));
         await sleep(400);
       }
-      out(`${found.length} photo(s) trouvée(s) sur ${list.length} carte(s). Décochez celles qui ne conviennent pas, puis enregistrez.`);
-      q('.ws-save').hidden = !found.length;
+      out(`${items.filter((x) => x.cands.length).length} carte(s) avec des propositions sur ${items.length}. Choisissez, décochez ou relancez, puis enregistrez.`);
+      q('.ws-save').hidden = !items.some((x) => x.cands.length);
       return;
     }
     const save = e.target.closest('[data-save]');
     if (save) {
       save.disabled = true;
-      const keep = found.filter((_, i) => q(`[data-i="${i}"]`)?.checked);
+      const keep = items.filter((it) => it.keep && it.cands[it.sel]);
       let n = 0;
       try {
-        for (const { c, hit } of keep) {
-          out(`Envoi ${n + 1} / ${keep.length} : ${c.name}…`);
+        for (const it of keep) {
+          const hit = it.cands[it.sel];
+          out(`Envoi ${n + 1} / ${keep.length} : ${it.c.name}…`);
           const image = await cropToCard(hit.thumb);
-          await saveCards([{ ...c, image, art: undefined, credit: { author: hit.author, license: hit.license, file: hit.file, source: hit.page } }]);
+          await saveCards([{ ...it.c, image, art: undefined, credit: { author: hit.author, license: hit.license, file: hit.file, source: hit.page } }]);
           n++;
         }
         out(`${n} photo(s) enregistrée(s).`);
         msg(`${n} photo(s) ajoutée(s) depuis Wikimedia Commons.`);
       } catch (err) { out(`Erreur après ${n} photo(s) : ${err.message || err}`, true); }
+      save.disabled = false;
     }
+  });
+  o.addEventListener('change', (e) => {
+    const k = e.target.dataset.keep;
+    if (k !== undefined) items[+k].keep = e.target.checked;
+  });
+  o.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.target.dataset.q !== undefined) o.querySelector(`[data-again="${e.target.dataset.q}"]`).click();
   });
 }
 
