@@ -205,7 +205,7 @@ end $$;
 
 -- Ouvre un booster de 5 cartes : 3 Communes, 1 Peu commune, 1 Rare ou mieux.
 -- Dernière carte : 1 SR sur 4, 1 UR sur 15, 1 LR sur 50, 1 « 1on1 » sur 2 000, sinon Rare.
--- God Pack : 1 booster sur 1 000 ne contient que des cartes SR ou mieux (SR 60 %, UR 30 %, LR 10 %).
+-- God Pack : 1 booster sur 1 000 ne contient que des Légendaires, avec 10 % de chance que la dernière soit une 1on1.
 create or replace function public.open_booster() returns json
 language plpgsql security definer set search_path = public as $$
 declare
@@ -231,11 +231,7 @@ begin
     raise exception 'Aucun booster disponible pour le moment.';
   end if;
   if god then
-    slots := '{}';
-    for i in 1..5 loop
-      roll := random();
-      slots := slots || case when roll < 0.1 then 'L' when roll < 0.4 then 'UR' else 'SR' end;
-    end loop;
+    slots := array['L', 'L', 'L', 'L', case when random() < 0.1 then 'S' else 'L' end];
   else
     slots := array['C', 'C', 'C', 'UC', case
       when roll < 1.0 / 2000 then 'S'
