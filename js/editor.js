@@ -15,6 +15,7 @@ let filter = { q: '', type: '', color: '', rarity: '' };
 export function initEditor() {
   root().innerHTML = `
   <div class="editor">
+    <div class="ed-top">
     <form class="panel ed-form" autocomplete="off">
       <h2 id="ed-title">Nouvelle carte</h2>
       <div class="field"><label>Type</label>
@@ -89,6 +90,7 @@ export function initEditor() {
       <p class="msg" id="ed-msg" role="status"></p>
     </form>
     <div class="ed-preview"><div id="ed-card" class="big-card"></div></div>
+    </div>
     <section class="panel ed-list">
       <div class="list-head">
         <h2>Toutes les cartes du jeu <span id="ed-count" class="muted"></span></h2>
@@ -102,7 +104,7 @@ export function initEditor() {
       </div>
       <div class="filters">
         <input id="ed-q" placeholder="Rechercher…" type="search">
-        <select id="ed-ftype"><option value="">Tous types</option>${Object.entries(TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>
+        <select id="ed-ftype" aria-label="Genre"><option value="">Tous genres</option>${Object.entries(TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>
         <select id="ed-frarity"><option value="">Toutes raretés</option>${Object.entries(RARITIES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('')}</select>
         <select id="ed-fcolor"><option value="">Toutes couleurs</option>${Object.entries(COLORS).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('')}</select>
         <select id="ed-ftrait" aria-label="Type (famille)"><option value="">Tous les types</option></select>

@@ -91,9 +91,10 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-2); 
 .big-card { max-width: 300px; margin: 0 auto; }
 
 /* ---------- onglet Cartes ---------- */
-.editor { display: grid; grid-template-columns: minmax(320px, 1fr) 300px; gap: 16px; align-items: start; }
+.editor { display: flex; flex-direction: column; gap: 16px; }
+.ed-top { display: grid; grid-template-columns: minmax(320px, 1fr) 300px; gap: 16px; align-items: start; }
 .ed-preview { position: sticky; top: 70px; }
-.ed-list { grid-column: 1 / -1; }
+.ed-list { min-width: 0; }
 .row-btns.sticky { position: sticky; bottom: 0; background: var(--panel); padding: 10px 0 0; }
 .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
 .card-grid.small { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
@@ -259,7 +260,7 @@ details { margin-top: 12px; }
   .top { position: static; }
   .concede { position: static; display: block; margin: 0 auto 6px; }
   .top nav button { padding: 6px 10px; }
-  .editor, .decks, .deck-build, .lobby-actions, .grid2 { grid-template-columns: 1fr; }
+  .ed-top, .decks, .deck-build, .lobby-actions, .grid2 { grid-template-columns: 1fr; }
   .ed-preview { position: static; max-width: 260px; margin: 0 auto; }
   .gside { grid-template-columns: 1fr; }
   .board { --w: 17vw; padding: 6px; }
