@@ -39,7 +39,7 @@ async function reloadAndResume(R, O, who) {
   await g(active, () => __optcg.endTurn()); await A.waitForTimeout(800);
   const before = await snap(R);
   await R.reload();
-  await R.waitForSelector('.who .logout');
+  await R.waitForSelector('.who .me');
   await R.click('[data-tab=play]');
   const offered = await R.waitForSelector('#lb-resume', { timeout: 5000 }).then(() => true).catch(() => false);
   check(`${who} : reprise proposée`, offered);
