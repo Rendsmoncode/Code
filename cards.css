@@ -247,7 +247,7 @@
 .card.t-leader.r-S .attr { top: 31cqw; }
 
 /* ---------- dos de carte ---------- */
-.card.back .frame { background: #0b0c10; }
+.card.back .frame { background: #0b0c10 url("img/dos.svg") center / cover; }
 .card.back { --rim: linear-gradient(160deg, #3a3e4a, #15171d 50%, #3a3e4a); }
 .back-logo {
   position: absolute; inset: 0; display: grid; place-content: center; text-align: center; color: #fff;
