@@ -748,6 +748,8 @@ const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-
 // La carte a-t-elle ce type ? incl : le type contient seulement le mot (« incluant «CP» dans son type »).
 const typeOk = (c, type, incl = false) => String(c?.traits || '').split('/').map(norm).map((t) => t.trim())
   .some((t) => (incl ? t.includes(norm(type).trim()) : t === norm(type).trim()));
+// Jusqu'à 2 types au choix : la carte en a au moins un.
+const typesOk = (c, a, b, incl = false) => typeOk(c, a, incl) || (!!String(b || '').trim() && typeOk(c, b, incl));
 const oppDon = () => (G.opp ? G.opp.donActive + G.opp.donRested + [G.opp.leader, ...G.opp.chars, G.opp.stage].filter(Boolean).reduce((s, i) => s + (i.d || 0), 0) : 0);
 const hasNum = (v) => v !== undefined && v !== '' && v !== null;
 const curCost = (inst, c) => (Number(c?.cost) || 0) + (inst?.cm || 0) + (inst?.cmt || 0) + (inst?.cnx || 0)
@@ -761,7 +763,7 @@ function condOK(c, src) {
   switch (c.k) {
     case 'donAttached': return (src?.d || 0) >= c.n;
     case 'donField': return donTotal() >= c.n;
-    case 'leaderType': return typeOk(L, c.v);
+    case 'leaderType': return typesOk(L, c.v, c.type2);
     case 'leaderName': return norm(L.name) === norm(c.v).trim();
     case 'leaderMulti': return (L.colors || []).length > 1;
     case 'donFieldLE': return donTotal() <= c.n;
@@ -787,8 +789,8 @@ function condOK(c, src) {
       const f = { ...(c.f || {}), ...(c.type ? { type: c.type } : {}) };
       return me.chars.filter((i) => matches(myCard(i), f, i, 'me')).length >= c.n;
     }
-    case 'typeFieldGE': return fieldInsts().filter((i) => (c.self !== 'skip' || i.u !== src?.u) && typeOk(myCard(i), c.type)).length >= c.n;
-    case 'noTypeField': return !fieldInsts().some((i) => (c.self === 'count' || i.u !== src?.u) && typeOk(myCard(i), c.type));
+    case 'typeFieldGE': return fieldInsts().filter((i) => (c.self !== 'skip' || i.u !== src?.u) && typesOk(myCard(i), c.type, c.type2)).length >= c.n;
+    case 'noTypeField': return !fieldInsts().some((i) => (c.self === 'count' || i.u !== src?.u) && typesOk(myCard(i), c.type, c.type2));
     case 'trashGE': return me.trash.length >= c.n;
     case 'myTurn': return myTurn();
     case 'oppTurn': return oppTurn();
@@ -800,7 +802,7 @@ const condsOK = (e, src) => (e.conds || []).every((c) => condOK(c, src));
 // Une carte correspond-elle au filtre ? side : 'me' ou 'opp' (pour la puissance / le coût actuels).
 function matches(c, f = {}, inst = null, side = 'me') {
   if (!c) return false;
-  if (f.type && !typeOk(c, f.type, f.typeIncl === 'yes')) return false;
+  if (f.type && !typesOk(c, f.type, f.type2, f.typeIncl === 'yes')) return false;
   if (f.notName && norm(c.name).includes(norm(f.notName))) return false;
   if (f.color && !(c.colors || []).includes(f.color)) return false;
   if (f.attr && !attributesOf(c).map(norm).includes(norm(f.attr))) return false;

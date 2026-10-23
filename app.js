@@ -20830,7 +20830,7 @@ ${suffix}`;
   var CONDS = {
     donAttached: { label: "DON!! attach\xE9s \xE0 cette carte (min.)", params: [n("n", "DON!!")], text: (p) => `[DON!! x${p.n}]` },
     donField: { label: "DON!! sur votre terrain (min.)", params: [n("n", "DON!!", 5)], text: (p) => `Si vous avez ${p.n} DON!! ou plus sur votre terrain,` },
-    leaderType: { label: "Votre Leader a le type\u2026", params: [{ k: "v", label: "Type", type: "text", def: "" }], text: (p) => `Si votre Leader a le type {${p.v}},` },
+    leaderType: { label: "Votre Leader a le type\u2026", params: [{ k: "v", label: "Type", type: "text", def: "" }, { k: "type2", label: "ou type", type: "text", def: "" }], text: (p) => `Si votre Leader a le type ${typesText(p.v, p.type2)},` },
     leaderName: { label: "Votre Leader est [Nom]", params: [{ k: "v", label: "Nom", type: "text", def: "" }], text: (p) => `Si votre Leader est [${p.v}],` },
     leaderMulti: { label: "Votre Leader est multicolore", params: [], text: () => "Si votre Leader est multicolore," },
     leaderColor: { label: "Votre Leader est de couleur\u2026", params: [{ k: "v", label: "Couleur", type: "sel", def: "rouge", opts: COLORS_FR }], text: (p) => `Si votre Leader est ${p.v},` },
@@ -20873,17 +20873,17 @@ ${suffix}`;
     },
     typeFieldGE: {
       label: "Vous avez X cartes de type\u2026 ou plus sur votre terrain",
-      params: [n("n", "Cartes", 2), { k: "type", label: "Type", type: "text", def: "" }, { k: "self", label: "Cette carte", type: "sel", def: "count", opts: { count: "compte aussi", skip: "ne compte pas" } }],
+      params: [n("n", "Cartes", 2), { k: "type", label: "Type", type: "text", def: "" }, { k: "type2", label: "ou type", type: "text", def: "" }, { k: "self", label: "Cette carte", type: "sel", def: "count", opts: { count: "compte aussi", skip: "ne compte pas" } }],
       text: (p) => {
         const many = p.n > 1;
         const other2 = p.self === "skip" ? many ? "autres " : "autre " : "";
-        return `Si vous avez ${many ? p.n : "une"} ${other2}carte${many ? "s" : ""} de type {${p.type}}${many ? " ou plus" : ""} sur votre terrain,`;
+        return `Si vous avez ${many ? p.n : "une"} ${other2}carte${many ? "s" : ""} de type ${typesText(p.type, p.type2)}${many ? " ou plus" : ""} sur votre terrain,`;
       }
     },
     noTypeField: {
       label: "Vous n'avez aucune carte de type\u2026 sur votre terrain",
-      params: [{ k: "type", label: "Type", type: "text", def: "" }, { k: "self", label: "Cette carte", type: "sel", def: "skip", opts: { skip: "ne compte pas", count: "compte aussi" } }],
-      text: (p) => `Si vous n'avez aucune ${p.self === "count" ? "" : "autre "}carte de type {${p.type}} sur votre terrain,`
+      params: [{ k: "type", label: "Type", type: "text", def: "" }, { k: "type2", label: "ou type", type: "text", def: "" }, { k: "self", label: "Cette carte", type: "sel", def: "skip", opts: { skip: "ne compte pas", count: "compte aussi" } }],
+      text: (p) => `Si vous n'avez aucune ${p.self === "count" ? "" : "autre "}carte de type ${typesText(p.type, p.type2)} sur votre terrain,`
     },
     trashGE: { label: "Votre d\xE9fausse a X cartes ou plus", params: [n("n", "Cartes", 10)], text: (p) => `Si votre d\xE9fausse contient ${p.n} cartes ou plus,` },
     myTurn: { label: "C'est votre tour", params: [], text: () => "Pendant votre tour," },
@@ -21030,10 +21030,13 @@ ${suffix}`;
     allChars: "tous les Personnages",
     leaderAndAll: "Leader et tous les Personnages"
   };
+  var typesText = (a, b) => `{${a}}${b ? ` ou {${b}}` : ""}`;
   function filterText(f = {}, short = false) {
     const parts = [];
     if (f.name) parts.push(`[${f.name}]`);
-    if (f.type) parts.push(f.typeIncl === "yes" ? `incluant \xAB${f.type}\xBB dans son type` : `de type {${f.type}}`);
+    if (f.type) {
+      parts.push(f.typeIncl === "yes" ? `incluant \xAB${f.type}\xBB${f.type2 ? ` ou \xAB${f.type2}\xBB` : ""} dans son type` : `de type ${typesText(f.type, f.type2)}`);
+    }
     if (f.color) parts.push(f.color);
     if (f.attr) parts.push(`d'attribut ${f.attr}`);
     if (f.cardType) parts.push(`de type ${{ character: "Personnage", event: "\xC9v\xE9nement", stage: "Lieu", leader: "Leader" }[f.cardType]}`);
@@ -21703,6 +21706,13 @@ ${suffix}`;
 
   // js/effects-editor.js
   var SECTIONS = { conds: ["Conditions", CONDS], costs: ["Co\xFBts", COSTS], actions: ["Actions", ACTIONS] };
+  var QUICK = [
+    { label: "Piocher", k: "draw", over: { n: 1 } },
+    { label: "Searcher", k: "look", over: { n: 5, take: 1 } },
+    { label: "Ramp", k: "donAdd", over: { n: 1, state: "active" } },
+    { label: "KO", k: "ko" },
+    { label: "Puissance", k: "power", over: { amount: 2e3 } }
+  ];
   var KW_SHOWN = ["blocker", "rush", "rushChar", "double", "banish", "unblockable", "unlimited"];
   function mountEffectsEditor(el, getCard, onChange2) {
     el.addEventListener("change", (e) => handle(e, true));
@@ -21719,7 +21729,10 @@ ${suffix}`;
       const row = b.closest("[data-j]");
       if (act === "add-effect") card.effects.push({ when: "onPlay", once: false, conds: [], costs: [], actions: [] });
       else if (act === "del-effect") card.effects.splice(i, 1);
-      else if (act === "del") card.effects[i][row.dataset.sec].splice(+row.dataset.j, 1);
+      else if (act === "quick") {
+        const q = QUICK[+b.dataset.q];
+        card.effects[i].actions.push({ k: q.k, ...defaults(ACTIONS[q.k].params), ...structuredClone(q.over || {}) });
+      } else if (act === "del") card.effects[i][row.dataset.sec].splice(+row.dataset.j, 1);
       else if (act === "up" && +row.dataset.j > 0) {
         const arr = card.effects[i][row.dataset.sec];
         const j = +row.dataset.j;
@@ -21821,13 +21834,14 @@ ${suffix}`;
       }).join("");
     } else options = Object.entries(defs).map(([k, d]) => `<option value="${k}">${esc(d.label)}</option>`).join("");
     return `<div class="fxe-sec"><div class="fxe-sec-title">${title}</div>${rows}
+    ${sec === "actions" ? `<div class="fxe-quick">${QUICK.filter((q) => !continuous || CONTINUOUS_ACTIONS.includes(q.k)).map((q) => `<button type="button" class="btn small" data-act="quick" data-q="${QUICK.indexOf(q)}" title="${esc(ACTIONS[q.k].label)}">+ ${q.label}</button>`).join("")}</div>` : ""}
     <select data-add="${sec}" class="fxe-add"><option value="">+ Ajouter ${sec === "conds" ? "une condition" : sec === "costs" ? "un co\xFBt" : "une action"}\u2026</option>${options}</select></div>`;
   }
   function paramHTML(p, item) {
     const v = item[p.k];
     if (p.type === "num") return `<label>${esc(p.label)} <input type="number" data-p="${p.k}" value="${esc(v)}"></label>`;
     if (p.type === "text") {
-      const list = ["type", "v"].includes(p.k) && /type/i.test(p.label) ? ' list="all-traits"' : "";
+      const list = ["type", "type2", "v"].includes(p.k) && /type/i.test(p.label) ? ' list="all-traits"' : "";
       return `<label>${esc(p.label)} <input type="text" data-p="${p.k}" value="${esc(v)}"${list}></label>`;
     }
     if (p.type === "sel") return `<label>${esc(p.label)} ${select(p.k, p.opts, v)}</label>`;
@@ -21848,6 +21862,7 @@ ${suffix}`;
     const sel = (k, opts) => select(`${path}.${k}`, opts, f[k] || "").replace("data-p=", `${attr}=`);
     return `<span class="fxe-filter">
     <label>Type <input type="text" ${attr}="${path}.type" value="${esc(f.type || "")}" placeholder="ex. Marine" list="all-traits"></label>
+    <label>ou type <input type="text" ${attr}="${path}.type2" value="${esc(f.type2 || "")}" placeholder="(facultatif)" list="all-traits"></label>
     <label>Le type ${sel("typeIncl", { "": "est exactement", yes: "contient le mot" })}</label>
     <label>Nom <input type="text" ${attr}="${path}.name" value="${esc(f.name || "")}" placeholder="ex. Prisonnier"></label>
     <label>Autre que <input type="text" ${attr}="${path}.notName" value="${esc(f.notName || "")}" placeholder="ex. Garp"></label>
@@ -24049,6 +24064,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   }
   var norm = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
   var typeOk = (c, type, incl = false) => String(c?.traits || "").split("/").map(norm).map((t) => t.trim()).some((t) => incl ? t.includes(norm(type).trim()) : t === norm(type).trim());
+  var typesOk = (c, a, b, incl = false) => typeOk(c, a, incl) || !!String(b || "").trim() && typeOk(c, b, incl);
   var oppDon = () => G.opp ? G.opp.donActive + G.opp.donRested + [G.opp.leader, ...G.opp.chars, G.opp.stage].filter(Boolean).reduce((s, i) => s + (i.d || 0), 0) : 0;
   var hasNum = (v) => v !== void 0 && v !== "" && v !== null;
   var curCost = (inst, c) => (Number(c?.cost) || 0) + (inst?.cm || 0) + (inst?.cmt || 0) + (inst?.cnx || 0) + (inst?.u ? staticSum(inst, "cost") + auraSum(inst, "cost") : 0);
@@ -24063,7 +24079,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       case "donField":
         return donTotal() >= c.n;
       case "leaderType":
-        return typeOk(L, c.v);
+        return typesOk(L, c.v, c.type2);
       case "leaderName":
         return norm(L.name) === norm(c.v).trim();
       case "leaderMulti":
@@ -24103,9 +24119,9 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         return me.chars.filter((i) => matches(myCard(i), f, i, "me")).length >= c.n;
       }
       case "typeFieldGE":
-        return fieldInsts().filter((i) => (c.self !== "skip" || i.u !== src?.u) && typeOk(myCard(i), c.type)).length >= c.n;
+        return fieldInsts().filter((i) => (c.self !== "skip" || i.u !== src?.u) && typesOk(myCard(i), c.type, c.type2)).length >= c.n;
       case "noTypeField":
-        return !fieldInsts().some((i) => (c.self === "count" || i.u !== src?.u) && typeOk(myCard(i), c.type));
+        return !fieldInsts().some((i) => (c.self === "count" || i.u !== src?.u) && typesOk(myCard(i), c.type, c.type2));
       case "trashGE":
         return me.trash.length >= c.n;
       case "myTurn":
@@ -24119,7 +24135,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   var condsOK = (e, src) => (e.conds || []).every((c) => condOK(c, src));
   function matches(c, f = {}, inst = null, side = "me") {
     if (!c) return false;
-    if (f.type && !typeOk(c, f.type, f.typeIncl === "yes")) return false;
+    if (f.type && !typesOk(c, f.type, f.type2, f.typeIncl === "yes")) return false;
     if (f.notName && norm(c.name).includes(norm(f.notName))) return false;
     if (f.color && !(c.colors || []).includes(f.color)) return false;
     if (f.attr && !attributesOf(c).map(norm).includes(norm(f.attr))) return false;
