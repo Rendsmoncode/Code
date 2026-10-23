@@ -11,6 +11,26 @@ const RATES = [
 let opening = null; // { pulls, flipped: Set }
 let busy = false;
 
+// Boosters disponibles et compte à rebours du prochain booster gratuit (calculé localement entre deux synchronisations).
+export function boosterState() {
+  const st = S.status;
+  if (!st) return null;
+  const now = Date.now() + (st.offset || 0);
+  let { free } = st;
+  let next = st.next_free_at ? new Date(st.next_free_at).getTime() : null;
+  // Quand le compte à rebours arrive à zéro, on recalcule localement puis on resynchronise.
+  while (next && next <= now && free < st.free_max) {
+    free++;
+    next = free < st.free_max ? next + 600000 : null;
+    if (!st.syncing) { st.syncing = true; setTimeout(() => refreshStatus().catch(() => {}), 1500); }
+  }
+  return { free, next, total: free + st.gifted, left: next ? Math.max(0, Math.ceil((next - now) / 1000)) : 0 };
+}
+export const mmss = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+
+// Ouvre un booster depuis un autre onglet (accueil).
+export const openFromHome = () => document.querySelector('#tab-boosters .bs-open')?.click();
+
 export function initBoosters() {
   const el = document.getElementById('tab-boosters');
   el.innerHTML = `
@@ -61,23 +81,12 @@ export function initBoosters() {
   renderStage();
 
   function renderHead() {
+    const b = boosterState();
+    if (!b) return;
     const st = S.status;
-    if (!st) return;
-    const now = Date.now() + (st.offset || 0);
-    let { free } = st;
-    let next = st.next_free_at ? new Date(st.next_free_at).getTime() : null;
-    // Quand le compte à rebours arrive à zéro, on recalcule localement puis on resynchronise.
-    while (next && next <= now && free < st.free_max) {
-      free++;
-      next = free < st.free_max ? next + 600000 : null;
-      if (!st.syncing) { st.syncing = true; setTimeout(() => refreshStatus().catch(() => {}), 1500); }
-    }
-    const total = free + st.gifted;
+    const { free, next, total, left } = b;
     q('.bs-count').innerHTML = `<b>${total}</b> booster${total > 1 ? 's' : ''} disponible${total > 1 ? 's' : ''}`;
-    const left = next ? Math.max(0, Math.ceil((next - now) / 1000)) : 0;
-    const mm = String(Math.floor(left / 60)).padStart(2, '0');
-    const ss = String(left % 60).padStart(2, '0');
-    q('.bs-detail').innerHTML = `Gratuits : ${free}/${st.free_max} ${next ? `· prochain dans <b>${mm}:${ss}</b>` : '· réserve pleine'}
+    q('.bs-detail').innerHTML = `Gratuits : ${free}/${st.free_max} ${next ? `· prochain dans <b>${mmss(left)}</b>` : '· réserve pleine'}
       · Offerts : <b>${st.gifted}</b>`;
     q('.bs-open').disabled = busy || total === 0;
   }

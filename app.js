@@ -25523,6 +25523,25 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   ];
   var opening = null;
   var busy2 = false;
+  function boosterState() {
+    const st = S.status;
+    if (!st) return null;
+    const now = Date.now() + (st.offset || 0);
+    let { free } = st;
+    let next = st.next_free_at ? new Date(st.next_free_at).getTime() : null;
+    while (next && next <= now && free < st.free_max) {
+      free++;
+      next = free < st.free_max ? next + 6e5 : null;
+      if (!st.syncing) {
+        st.syncing = true;
+        setTimeout(() => refreshStatus().catch(() => {
+        }), 1500);
+      }
+    }
+    return { free, next, total: free + st.gifted, left: next ? Math.max(0, Math.ceil((next - now) / 1e3)) : 0 };
+  }
+  var mmss = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+  var openFromHome = () => document.querySelector("#tab-boosters .bs-open")?.click();
   function initBoosters() {
     const el = document.getElementById("tab-boosters");
     el.innerHTML = `
@@ -25578,26 +25597,12 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     renderHead();
     renderStage();
     function renderHead() {
+      const b = boosterState();
+      if (!b) return;
       const st = S.status;
-      if (!st) return;
-      const now = Date.now() + (st.offset || 0);
-      let { free } = st;
-      let next = st.next_free_at ? new Date(st.next_free_at).getTime() : null;
-      while (next && next <= now && free < st.free_max) {
-        free++;
-        next = free < st.free_max ? next + 6e5 : null;
-        if (!st.syncing) {
-          st.syncing = true;
-          setTimeout(() => refreshStatus().catch(() => {
-          }), 1500);
-        }
-      }
-      const total = free + st.gifted;
+      const { free, next, total, left } = b;
       q(".bs-count").innerHTML = `<b>${total}</b> booster${total > 1 ? "s" : ""} disponible${total > 1 ? "s" : ""}`;
-      const left = next ? Math.max(0, Math.ceil((next - now) / 1e3)) : 0;
-      const mm = String(Math.floor(left / 60)).padStart(2, "0");
-      const ss = String(left % 60).padStart(2, "0");
-      q(".bs-detail").innerHTML = `Gratuits : ${free}/${st.free_max} ${next ? `\xB7 prochain dans <b>${mm}:${ss}</b>` : "\xB7 r\xE9serve pleine"}
+      q(".bs-detail").innerHTML = `Gratuits : ${free}/${st.free_max} ${next ? `\xB7 prochain dans <b>${mmss(left)}</b>` : "\xB7 r\xE9serve pleine"}
       \xB7 Offerts : <b>${st.gifted}</b>`;
       q(".bs-open").disabled = busy2 || total === 0;
     }
@@ -25831,19 +25836,94 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     render2();
   }
 
+  // js/icons.js
+  var I = {
+    home: '<path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"/>',
+    pack: '<rect x="6" y="3" width="12" height="18" rx="2"/><path d="M6 7h12M6 17h12"/>',
+    cards: '<rect x="4" y="5" width="11" height="15" rx="2"/><path d="M9 3h9a2 2 0 0 1 2 2v12"/>',
+    deck: '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4v17"/>',
+    play: '<path d="M5 5l14 14M19 5L5 19"/>',
+    more: '<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>',
+    gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>',
+    user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>',
+    star: '<path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/>',
+    edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/>',
+    shield: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/>',
+    out: '<path d="M10 4H5v16h5M14 8l4 4-4 4M18 12H9"/>'
+  };
+  var icon = (k) => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${I[k]}</svg>`;
+
+  // js/home.js
+  function initHome(go) {
+    const el = document.getElementById("tab-home");
+    el.innerHTML = `
+  <div class="home">
+    <div class="hm-logo">${logoSVG()}</div>
+    <p class="hm-tag">Le jeu de cartes entre amis</p>
+    <div class="hm-pack" aria-hidden="true">${cardHTML(null)}</div>
+    <div class="hm-count"></div>
+    <p class="hm-next"></p>
+    <div class="hm-acts">
+      <button class="btn main hm-open">${icon("pack")}<span class="pc-only"></span><span class="tel-only">Ouvrir</span></button>
+      <button class="btn ghost hm-play">${icon("play")}Jouer</button>
+    </div>
+    <div class="hm-stats">
+      <button class="hm-stat" data-go="collection"><span>Collection</span><b class="hm-coll"></b><div class="bar"><i></i></div></button>
+      <button class="hm-stat" data-go="decks"><span>Decks</span><b class="hm-decks"></b></button>
+      <button class="hm-stat" data-go="boosters"><span>Boosters</span><b class="hm-boost"></b></button>
+    </div>
+  </div>`;
+    const q = (s) => el.querySelector(s);
+    q(".hm-open").addEventListener("click", () => {
+      go("boosters");
+      openFromHome();
+    });
+    q(".hm-play").addEventListener("click", () => go("play"));
+    el.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => go(b.dataset.go)));
+    function render2() {
+      const b = boosterState();
+      if (b) {
+        q(".hm-count").textContent = `${b.total} booster${b.total > 1 ? "s" : ""}`;
+        q(".hm-next").textContent = b.next ? `Prochain booster gratuit dans ${mmss(b.left)}` : "R\xE9serve de boosters gratuits pleine";
+        q(".hm-open .pc-only").textContent = b.total ? `Ouvrir un booster \xB7 ${b.total}` : "Aucun booster";
+        q(".hm-open").disabled = !b.total;
+        q(".hm-boost").textContent = b.total;
+      }
+      const owned = S.cards.filter((c) => S.collection[c.id]).length;
+      q(".hm-coll").textContent = `${owned} / ${S.cards.length}`;
+      q(".hm-stats .bar i").style.width = `${S.cards.length ? 100 * owned / S.cards.length : 0}%`;
+      q(".hm-decks").textContent = S.decks.length;
+    }
+    onChange(render2);
+    setInterval(() => {
+      if (!el.hidden) render2();
+    }, 1e3);
+    render2();
+  }
+
   // js/app.js
   document.querySelector(".top .brand").innerHTML = logoSVG("", true);
+  document.querySelectorAll("[data-ico]").forEach((b) => b.insertAdjacentHTML("afterbegin", icon(b.dataset.ico)));
+  var menu = document.querySelector(".top .menu");
+  var toggleMenu = (open = menu.hidden) => {
+    menu.hidden = !open;
+  };
+  document.addEventListener("click", (e) => {
+    if (e.target.closest(".menu-btn")) {
+      toggleMenu();
+      return;
+    }
+    if (!e.target.closest(".menu")) toggleMenu(false);
+    else if (e.target.closest("button")) toggleMenu(false);
+  });
   var tabs = document.querySelectorAll("[data-tab]");
   function show(name2) {
-    if (!document.querySelector(`[data-tab=${name2}]:not([hidden])`)) name2 = "boosters";
+    if (!document.querySelector(`[data-tab=${name2}]:not([hidden])`)) name2 = "home";
+    document.body.dataset.tab = name2;
     tabs.forEach((t) => t.setAttribute("aria-selected", String(t.dataset.tab === name2)));
     document.querySelectorAll(".tab").forEach((p) => {
       p.hidden = p.id !== `tab-${name2}`;
     });
-    try {
-      localStorage.setItem("optcgm-tab", name2);
-    } catch {
-    }
   }
   tabs.forEach((t) => t.addEventListener("click", () => show(t.dataset.tab)));
   async function start() {
@@ -25857,13 +25937,12 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     document.querySelectorAll(".admin-only").forEach((t) => {
       t.hidden = !admin;
     });
-    document.querySelector(".who").innerHTML = `<span>${esc(S.status.username)}</span>
-    ${admin ? `<span class="badge ok">${S.status.role === "owner" ? "Propri\xE9taire" : "Admin"}</span>` : ""}
-    <button class="btn ghost small settings-btn" title="Param\xE8tres" aria-label="Param\xE8tres">\u2699</button>
-    <button class="btn ghost small logout">D\xE9connexion</button>`;
+    document.querySelector(".who").innerHTML = `<button class="me menu-btn" aria-label="Menu"><span>${esc(S.status.username)}</span>
+    ${admin ? `<span class="badge ok">${S.status.role === "owner" ? "Propri\xE9taire" : "Admin"}</span>` : ""}<span class="av">${icon("user")}</span></button>`;
     document.querySelector(".logout").addEventListener("click", signOut);
     document.querySelector(".settings-btn").addEventListener("click", openSettings);
     initBoosters();
+    initHome(show);
     initCollection();
     createDeckBuilder({
       el: document.getElementById("tab-decks"),
@@ -25878,11 +25957,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       initEditor();
       initAdmin();
     }
-    let first = "boosters";
-    try {
-      first = localStorage.getItem("optcgm-tab") || first;
-    } catch {
-    }
+    let first = "home";
     if (new URLSearchParams(location.search).get("join")) first = "play";
     show(first);
     maybeAskStarter();

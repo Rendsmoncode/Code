@@ -9,16 +9,28 @@ import { initAdmin } from './admin.js';
 import { openSettings } from './settings.js';
 import { initCredits } from './credits.js';
 import { logoSVG } from './logo.js';
+import { icon } from './icons.js';
+import { initHome } from './home.js';
 
 document.querySelector('.top .brand').innerHTML = logoSVG('', true);
+document.querySelectorAll('[data-ico]').forEach((b) => b.insertAdjacentHTML('afterbegin', icon(b.dataset.ico)));
+
+// Menu (avatar sur ordinateur, « Plus » sur téléphone).
+const menu = document.querySelector('.top .menu');
+const toggleMenu = (open = menu.hidden) => { menu.hidden = !open; };
+document.addEventListener('click', (e) => {
+  if (e.target.closest('.menu-btn')) { toggleMenu(); return; }
+  if (!e.target.closest('.menu')) toggleMenu(false);
+  else if (e.target.closest('button')) toggleMenu(false);
+});
 
 const tabs = document.querySelectorAll('[data-tab]');
 
 function show(name) {
-  if (!document.querySelector(`[data-tab=${name}]:not([hidden])`)) name = 'boosters';
+  if (!document.querySelector(`[data-tab=${name}]:not([hidden])`)) name = 'home';
+  document.body.dataset.tab = name;
   tabs.forEach((t) => t.setAttribute('aria-selected', String(t.dataset.tab === name)));
   document.querySelectorAll('.tab').forEach((p) => { p.hidden = p.id !== `tab-${name}`; });
-  try { localStorage.setItem('optcgm-tab', name); } catch { /* stockage indisponible */ }
 }
 
 tabs.forEach((t) => t.addEventListener('click', () => show(t.dataset.tab)));
@@ -29,14 +41,13 @@ async function start() {
   await refreshStatus();
   const admin = isAdmin();
   document.querySelectorAll('.admin-only').forEach((t) => { t.hidden = !admin; });
-  document.querySelector('.who').innerHTML = `<span>${esc(S.status.username)}</span>
-    ${admin ? `<span class="badge ok">${S.status.role === 'owner' ? 'Propriétaire' : 'Admin'}</span>` : ''}
-    <button class="btn ghost small settings-btn" title="Paramètres" aria-label="Paramètres">⚙</button>
-    <button class="btn ghost small logout">Déconnexion</button>`;
+  document.querySelector('.who').innerHTML = `<button class="me menu-btn" aria-label="Menu"><span>${esc(S.status.username)}</span>
+    ${admin ? `<span class="badge ok">${S.status.role === 'owner' ? 'Propriétaire' : 'Admin'}</span>` : ''}<span class="av">${icon('user')}</span></button>`;
   document.querySelector('.logout').addEventListener('click', signOut);
   document.querySelector('.settings-btn').addEventListener('click', openSettings);
 
   initBoosters();
+  initHome(show);
   initCollection();
   createDeckBuilder({
     el: document.getElementById('tab-decks'), kind: 'decks', owned: true, title: 'Mes decks',
@@ -46,8 +57,7 @@ async function start() {
   initCredits();
   if (admin) { initEditor(); initAdmin(); }
 
-  let first = 'boosters';
-  try { first = localStorage.getItem('optcgm-tab') || first; } catch { /* rien */ }
+  let first = 'home';
   if (new URLSearchParams(location.search).get('join')) first = 'play';
   show(first);
   maybeAskStarter();
