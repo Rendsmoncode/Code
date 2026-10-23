@@ -819,32 +819,36 @@ details { margin-top: 12px; }
   /* noms des piles posés sur la carte (gagne de la hauteur) */
   .game:not(.mobile) .pile .lbl { position: absolute; left: 50%; bottom: 4%; transform: translateX(-50%); margin: 0; padding: 1px 6px; border-radius: 6px; background: #000b; font-size: .65em; white-space: nowrap; pointer-events: none; }
   /* main adverse : dans le coin, hors du flux */
-  /* Disposition en 3 colonnes : à gauche Deck DON!! + DON!!, au centre Vie / Leader / Lieu et les 5 Personnages,
+  /* Disposition en 3 colonnes : à gauche la Vie et les DON!!, au centre le Leader, le Lieu et les 5 Personnages,
      à droite Deck + Défausse. Le bandeau central « Fin du tour » reste entre les deux joueurs. */
   .game:not(.mobile) .side { display: grid; grid-template-columns: minmax(0, 1fr) repeat(5, var(--w)) minmax(0, 1fr); column-gap: 8px; row-gap: 6px; align-items: center; position: relative; }
   .game:not(.mobile) .side .row.base { display: contents; }
   .game:not(.mobile) .side { --cr: 1; --br: 2; }
   .game:not(.mobile) .side.opp { --cr: 2; --br: 1; }
   .game:not(.mobile) .side .chars-row { grid-column: 2 / 7; grid-row: var(--cr); }
-  .game:not(.mobile) .side :is(.p-life, .leader-zone, .stage-zone) { grid-row: var(--br); }
-  .game:not(.mobile) .side .p-life { grid-column: 3; }
+  .game:not(.mobile) .side :is(.leader-zone, .stage-zone) { grid-row: var(--br); }
   .game:not(.mobile) .side .leader-zone { grid-column: 4; justify-self: center; }
   .game:not(.mobile) .side .stage-zone { grid-column: 5; }
-  .game:not(.mobile) .side :is(.p-deck, .p-trash) { grid-column: 7; justify-self: center; }
+  /* Vies tout à gauche (au niveau des Personnages), DON!! en dessous (au niveau du Leader) */
+  .game:not(.mobile) .side .p-life { grid-column: 1; grid-row: var(--cr); justify-self: start; margin-left: 2%; }
+  .game:not(.mobile) .side .don-area { grid-column: 1; grid-row: var(--br); justify-self: start; margin-left: 2%; min-width: 0; max-width: 100%; }
+  .game:not(.mobile) .side .don-deck { width: calc(var(--w) * .8); aspect-ratio: 63 / 88; font-size: .8em; }
+  .game:not(.mobile) .side .don-deck b { font-size: 2em; }
+  .game:not(.mobile) .side .tokens { max-width: calc(var(--w) * 1.6); gap: 5px; }
+  .game:not(.mobile) .side .don { width: calc(var(--w) * .2); height: calc(var(--w) * .28); }
+  /* Deck et Défausse tout à droite */
+  .game:not(.mobile) .side :is(.p-deck, .p-trash) { grid-column: 7; justify-self: end; margin-right: 2%; }
   .game:not(.mobile) .side.me .p-deck, .game:not(.mobile) .side.opp .p-trash { grid-row: 1; }
   .game:not(.mobile) .side.me .p-trash, .game:not(.mobile) .side.opp .p-deck { grid-row: 2; }
   .game:not(.mobile) .side .hand { grid-column: 1 / -1; grid-row: 3; }
-  /* DON!! : grande zone verticale à gauche */
-  .game:not(.mobile) .side .don-area { grid-column: 1; grid-row: 1 / 3; justify-self: center; flex-direction: column; align-items: center; gap: 10px; padding: 10px; min-width: 0; width: min(100%, calc(var(--w) * 2.4)); }
-  .game:not(.mobile) .side .don-deck { width: var(--w); aspect-ratio: 63 / 88; font-size: .8em; }
-  .game:not(.mobile) .side .don-deck b { font-size: 2.2em; }
-  .game:not(.mobile) .side .don-cost { align-items: center; text-align: center; }
-  .game:not(.mobile) .side .tokens { justify-content: center; max-width: none; gap: 5px; }
-  .game:not(.mobile) .side .don { width: calc(var(--w) * .2); height: calc(var(--w) * .28); }
-  .game:not(.mobile) .side.me .don-area { order: -1; }
-  /* main adverse : en haut à gauche, hors du flux */
-  .game:not(.mobile) .ohand { min-height: 0; position: absolute; top: 2px; left: 0; z-index: 2; }
+  /* L'adversaire est en face (plateau tourné, pas en miroir) : ses Vies et DON!! sont à droite pour nous, son Deck à gauche. */
+  .game:not(.mobile) .side.opp :is(.p-life, .don-area) { grid-column: 7; justify-self: end; margin: 0 2% 0 0; }
+  .game:not(.mobile) .side.opp :is(.p-deck, .p-trash) { grid-column: 1; justify-self: start; margin: 0 0 0 2%; }
+  .game:not(.mobile) .side.opp .stage-zone { grid-column: 3; }
+  /* main adverse : dans la case vide à côté de son Leader */
+  .game:not(.mobile) .ohand { min-height: 0; grid-column: 5 / 7; grid-row: 1; justify-self: start; flex-wrap: nowrap; align-self: start; }
   .game:not(.mobile) .ohand .card.mini { width: 20px; }
+  .game:not(.mobile) .ohand > span { white-space: nowrap; }
   /* bandeau central sur une seule ligne */
   .game:not(.mobile) .center { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 14px; padding: 6px 12px; margin: 2px auto; max-width: min(100%, 900px); }
   .game:not(.mobile) .center p { margin: 0; }
