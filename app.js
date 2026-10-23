@@ -22707,7 +22707,8 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     <aside class="panel deck-side">
       <h2>${esc(opts.title)}</h2>
       <div class="dk-list deck-list"></div>
-      <div class="row-btns"><button class="btn primary dk-new">Nouveau deck</button></div>
+      <div class="row-btns"><button class="btn primary dk-new">Nouveau deck</button>
+        <label class="btn ghost">Importer un deck<input class="dk-import" type="file" accept=".json,application/json" hidden></label></div>
       ${opts.intro ? `<p class="muted small">${opts.intro}</p>` : ""}
       <p class="msg dk-msg" role="status"></p>
     </aside>
@@ -22732,6 +22733,28 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       const d = { id: uid(), name: `Deck ${decks().length + 1}`, leader: null, cards: {} };
       curId = d.id;
       save(d);
+    });
+    q(".dk-import").addEventListener("change", async (e) => {
+      const f = e.target.files[0];
+      e.target.value = "";
+      if (!f) return;
+      try {
+        const data = JSON.parse(await f.text());
+        const src = data.deck || data;
+        if (!src.cards || typeof src.cards !== "object") throw new Error("Ce fichier ne contient pas de deck.");
+        const missing = [src.leader, ...Object.keys(src.cards)].filter((id) => id && !S.byId[id]).length;
+        const d = {
+          id: uid(),
+          name: src.name || "Deck import\xE9",
+          leader: S.byId[src.leader] ? src.leader : null,
+          cards: Object.fromEntries(Object.entries(src.cards).filter(([id]) => S.byId[id]))
+        };
+        curId = d.id;
+        await save(d);
+        msg2(missing ? `Deck import\xE9, mais ${missing} carte(s) n'existent pas dans le jeu : importez d'abord ses cartes (onglet Cartes).` : `Deck \xAB ${d.name} \xBB import\xE9.`, !!missing);
+      } catch (err) {
+        msg2(`Import impossible : ${err.message}`);
+      }
     });
     q(".dk-list").addEventListener("click", (e) => {
       const id = e.target.closest("[data-deck]")?.dataset.deck;
@@ -26239,6 +26262,10 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       <div class="gm-boost row-btns"><input class="gm-n" type="number" min="1" max="10000" value="10" aria-label="Boosters">
         <button class="btn" data-do="boost">Donner des boosters</button></div>
     </section>
+    <section class="panel gm-deck row-btns">
+      <label>Deck <select class="gm-decksel" aria-label="Deck"></select></label>
+      <button class="btn" data-do="deck">Donner toutes les cartes de ce deck au joueur</button>
+    </section>
     <p class="msg gm-msg" role="status"></p>
     <section class="panel">
       <h3>Cartes</h3>
@@ -26270,6 +26297,9 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       q(".gm-player").innerHTML = players.map((p) => `<option value="${esc(p.username)}">${esc(p.username)}${p.username === S.status.username ? " (moi)" : ""} \xB7 ${p.boosters} boosters offerts</option>`).join("");
       if (player) q(".gm-player").value = player;
       player = q(".gm-player").value;
+    }
+    function loadDecks() {
+      q(".gm-decksel").innerHTML = S.decks.length ? S.decks.map((d) => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join("") : `<option value="">Aucun deck (cr\xE9ez ou importez-en un dans l'onglet Decks)</option>`;
     }
     async function loadColl() {
       coll = player ? await gmCollection(player) : {};
@@ -26335,6 +26365,26 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         msg2(`${n3} booster${n3 > 1 ? "s" : ""} donn\xE9${n3 > 1 ? "s" : ""} \xE0 ${player}.`);
         await loadPlayers();
       }
+      if (act === "deck") {
+        const d2 = S.decks.find((x) => x.id === q(".gm-decksel").value);
+        if (!d2) {
+          msg2("Choisissez un deck.", true);
+          return;
+        }
+        const need = { ...d2.cards || {} };
+        if (d2.leader) need[d2.leader] = Math.max(need[d2.leader] || 0, 1);
+        let given = 0;
+        for (const [id, n3] of Object.entries(need)) {
+          const miss = n3 - (coll[id] || 0);
+          if (miss > 0 && S.byId[id]) {
+            coll[id] = await gmAddCard(player, id, miss);
+            given += miss;
+          }
+        }
+        msg2(given ? `${given} carte(s) donn\xE9e(s) \xE0 ${player} : le deck \xAB ${d2.name} \xBB est complet.` : `${player} a d\xE9j\xE0 toutes les cartes de \xAB ${d2.name} \xBB.`);
+        renderList2();
+        await sync();
+      }
       if (act === "reset") {
         if (!confirm(`Vider toute la collection de ${player} ? Elle sera sauvegard\xE9e et tu pourras la rendre \xE0 tout moment.`)) return;
         await gmResetCollection(player);
@@ -26353,6 +26403,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       }
     }));
     new MutationObserver(() => {
+      if (!el.hidden) loadDecks();
       if (!el.hidden && !loaded) {
         loaded = true;
         run(async () => {

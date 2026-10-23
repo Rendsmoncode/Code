@@ -16,6 +16,10 @@ export function initGM() {
       <div class="gm-boost row-btns"><input class="gm-n" type="number" min="1" max="10000" value="10" aria-label="Boosters">
         <button class="btn" data-do="boost">Donner des boosters</button></div>
     </section>
+    <section class="panel gm-deck row-btns">
+      <label>Deck <select class="gm-decksel" aria-label="Deck"></select></label>
+      <button class="btn" data-do="deck">Donner toutes les cartes de ce deck au joueur</button>
+    </section>
     <p class="msg gm-msg" role="status"></p>
     <section class="panel">
       <h3>Cartes</h3>
@@ -46,6 +50,11 @@ export function initGM() {
     q('.gm-player').innerHTML = players.map((p) => `<option value="${esc(p.username)}">${esc(p.username)}${p.username === S.status.username ? ' (moi)' : ''} · ${p.boosters} boosters offerts</option>`).join('');
     if (player) q('.gm-player').value = player;
     player = q('.gm-player').value;
+  }
+
+  function loadDecks() {
+    q('.gm-decksel').innerHTML = S.decks.length ? S.decks.map((d) => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join('')
+      : '<option value="">Aucun deck (créez ou importez-en un dans l\'onglet Decks)</option>';
   }
 
   async function loadColl() {
@@ -113,6 +122,20 @@ export function initGM() {
       msg(`${n} booster${n > 1 ? 's' : ''} donné${n > 1 ? 's' : ''} à ${player}.`);
       await loadPlayers();
     }
+    if (act === 'deck') {
+      // Donne seulement ce qui manque au joueur pour avoir le deck complet (Leader compris).
+      const d = S.decks.find((x) => x.id === q('.gm-decksel').value);
+      if (!d) { msg('Choisissez un deck.', true); return; }
+      const need = { ...(d.cards || {}) };
+      if (d.leader) need[d.leader] = Math.max(need[d.leader] || 0, 1);
+      let given = 0;
+      for (const [id, n] of Object.entries(need)) {
+        const miss = n - (coll[id] || 0);
+        if (miss > 0 && S.byId[id]) { coll[id] = await gmAddCard(player, id, miss); given += miss; }
+      }
+      msg(given ? `${given} carte(s) donnée(s) à ${player} : le deck « ${d.name} » est complet.` : `${player} a déjà toutes les cartes de « ${d.name} ».`);
+      renderList(); await sync();
+    }
     if (act === 'reset') {
       if (!confirm(`Vider toute la collection de ${player} ? Elle sera sauvegardée et tu pourras la rendre à tout moment.`)) return;
       await gmResetCollection(player);
@@ -129,6 +152,7 @@ export function initGM() {
 
   // Chargement à la première ouverture de l'onglet (évite des requêtes inutiles au démarrage).
   new MutationObserver(() => {
+    if (!el.hidden) loadDecks();
     if (!el.hidden && !loaded) { loaded = true; run(async () => { await loadPlayers(); await loadColl(); await renderBackups(); }); }
   }).observe(el, { attributes: true, attributeFilter: ['hidden'] });
 }

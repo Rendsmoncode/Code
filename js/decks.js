@@ -18,7 +18,8 @@ export function createDeckBuilder(opts) {
     <aside class="panel deck-side">
       <h2>${esc(opts.title)}</h2>
       <div class="dk-list deck-list"></div>
-      <div class="row-btns"><button class="btn primary dk-new">Nouveau deck</button></div>
+      <div class="row-btns"><button class="btn primary dk-new">Nouveau deck</button>
+        <label class="btn ghost">Importer un deck<input class="dk-import" type="file" accept=".json,application/json" hidden></label></div>
       ${opts.intro ? `<p class="muted small">${opts.intro}</p>` : ''}
       <p class="msg dk-msg" role="status"></p>
     </aside>
@@ -35,6 +36,23 @@ export function createDeckBuilder(opts) {
     const d = { id: uid(), name: `Deck ${decks().length + 1}`, leader: null, cards: {} };
     curId = d.id;
     save(d);
+  });
+  // Import d'un deck exporté (fichier .json) : les cartes doivent déjà exister dans le jeu.
+  q('.dk-import').addEventListener('change', async (e) => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    try {
+      const data = JSON.parse(await f.text());
+      const src = data.deck || data;
+      if (!src.cards || typeof src.cards !== 'object') throw new Error('Ce fichier ne contient pas de deck.');
+      const missing = [src.leader, ...Object.keys(src.cards)].filter((id) => id && !S.byId[id]).length;
+      const d = { id: uid(), name: src.name || 'Deck importé', leader: S.byId[src.leader] ? src.leader : null,
+        cards: Object.fromEntries(Object.entries(src.cards).filter(([id]) => S.byId[id])) };
+      curId = d.id;
+      await save(d);
+      msg(missing ? `Deck importé, mais ${missing} carte(s) n'existent pas dans le jeu : importez d'abord ses cartes (onglet Cartes).` : `Deck « ${d.name} » importé.`, !!missing);
+    } catch (err) { msg(`Import impossible : ${err.message}`); }
   });
   q('.dk-list').addEventListener('click', (e) => {
     const id = e.target.closest('[data-deck]')?.dataset.deck;
