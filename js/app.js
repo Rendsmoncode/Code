@@ -6,6 +6,7 @@ import { createDeckBuilder } from './decks.js';
 import { initPlay } from './game.js';
 import { initBoosters, initCollection } from './boosters.js';
 import { initAdmin } from './admin.js';
+import { openSettings } from './settings.js';
 
 const tabs = document.querySelectorAll('[data-tab]');
 
@@ -26,8 +27,10 @@ async function start() {
   document.querySelectorAll('.admin-only').forEach((t) => { t.hidden = !admin; });
   document.querySelector('.who').innerHTML = `<span>${esc(S.status.username)}</span>
     ${admin ? `<span class="badge ok">${S.status.role === 'owner' ? 'Propriétaire' : 'Admin'}</span>` : ''}
+    <button class="btn ghost small settings-btn" title="Paramètres" aria-label="Paramètres">⚙</button>
     <button class="btn ghost small logout">Déconnexion</button>`;
   document.querySelector('.logout').addEventListener('click', signOut);
+  document.querySelector('.settings-btn').addEventListener('click', openSettings);
 
   initBoosters();
   initCollection();

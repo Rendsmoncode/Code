@@ -22540,6 +22540,56 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     };
   }
 
+  // js/settings.js
+  var THEMES = {
+    pocket: { name: "Pocket clair", desc: "Blanc, a\xE9r\xE9, couleurs douces." },
+    nuit: { name: "Pocket nuit", desc: "La m\xEAme douceur sur fond bleu nuit." },
+    duel: { name: "Duel", desc: "Noir profond, grille holographique, traits fins." },
+    manga: { name: "Manga", desc: "Papier blanc, encre noire, une touche de rouge." },
+    lagon: { name: "Lagon", desc: "L'adversaire en mer, vous sur la plage." }
+  };
+  var KEY = "optcgm-theme";
+  function getTheme() {
+    try {
+      const t = localStorage.getItem(KEY);
+      if (THEMES[t]) return t;
+    } catch {
+    }
+    return "pocket";
+  }
+  function setTheme(t) {
+    try {
+      localStorage.setItem(KEY, t);
+    } catch {
+    }
+    window.dispatchEvent(new CustomEvent("optcgm-theme", { detail: t }));
+  }
+  function openSettings() {
+    document.querySelector(".overlay.settings")?.remove();
+    const o = document.createElement("div");
+    o.className = "overlay settings";
+    const cur2 = getTheme();
+    o.innerHTML = `<div class="dialog" role="dialog" aria-label="Param\xE8tres">
+    <h3>Param\xE8tres</h3>
+    <p class="small muted">Ambiance du plateau de jeu sur t\xE9l\xE9phone.</p>
+    <div class="theme-list">${Object.entries(THEMES).map(([k, t]) => `<button type="button" class="theme-opt ${k === cur2 ? "on" : ""}" data-theme="${k}" aria-pressed="${k === cur2}">
+      <img src="img/themes/${k}.webp" alt="" loading="lazy"><b>${esc(t.name)}</b><span>${esc(t.desc)}</span></button>`).join("")}</div>
+    <div class="row-btns"><button type="button" class="btn primary" data-close>Fermer</button></div></div>`;
+    document.body.append(o);
+    o.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-theme]");
+      if (b) {
+        setTheme(b.dataset.theme);
+        o.querySelectorAll("[data-theme]").forEach((x) => {
+          x.classList.toggle("on", x === b);
+          x.setAttribute("aria-pressed", x === b);
+        });
+        return;
+      }
+      if (e.target.closest("[data-close]") || e.target === o) o.remove();
+    });
+  }
+
   // js/game.js
   var root2 = () => document.getElementById("tab-play");
   var G = null;
@@ -22607,6 +22657,15 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       if (!G) renderLobby();
     });
     renderLobby();
+    window.addEventListener("optcgm-theme", () => {
+      if (G) render();
+    });
+    matchMedia(MOBILE).addEventListener?.("change", () => {
+      if (G) {
+        root2().innerHTML = "";
+        render();
+      }
+    });
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && G?.select) {
         G.select = null;
@@ -24672,6 +24731,69 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     const hand = mine ? `<div class="row hand" aria-label="Votre main">${d.hand.map((i) => `<div class="hcard" data-u="${i.u}" data-side="me" data-zone="hand" data-cid="${i.c}" tabindex="0">${cardHTML(myCard(i))}</div>`).join("") || '<span class="muted">Main vide</span>'}</div>` : `<div class="row ohand"><span class="muted small">Main : ${d.hand}</span>${'<div class="card back mini"><div class="frame"></div></div>'.repeat(d.hand)}</div>`;
     return `<div class="side ${side}">${mine ? field + base + hand : hand + base + field}</div>`;
   }
+  var MOBILE = "(max-width: 760px)";
+  var isMobile = () => matchMedia(MOBILE).matches;
+  function lifeTopOf(side) {
+    const mine = side === "me";
+    const d = mine ? G.me : G.opp;
+    const up = mine ? d.life.map((i) => i.fu ? i.c : null) : d.lifeUp || [];
+    const top = up.at(-1);
+    return top ? { ...(mine ? G.myCards : G.oppCards)[top], c: top } : null;
+  }
+  function mpile(kind, side, n2, label, top) {
+    return `<div class="mpile p-${kind}" data-pile="${kind}" data-side="${side}" ${top ? `data-cid="${top.c || ""}"` : ""} tabindex="0" role="button" aria-label="${label} (${n2})">
+    ${top ? `<div class="mtop">${cardHTML(top)}</div>` : `<div class="stack${n2 ? "" : " empty"}"></div>`}<b class="cnt">${n2}</b><span class="lab">${label}</span></div>`;
+  }
+  function mdons(side) {
+    const d = side === "me" ? G.me : G.opp;
+    const a = d.donActive;
+    const t = d.donActive + d.donRested;
+    return `<div class="mdons" data-pile="don" data-side="${side}" tabindex="0" role="button" aria-label="DON!! : ${a} actifs sur ${t}">
+    ${Array.from({ length: t }, (_, i) => `<i class="${i < a ? "on" : ""}"></i>`).join("")}<span><b>${a}</b>/${t} DON!!</span></div>`;
+  }
+  function mside(side) {
+    const mine = side === "me";
+    const d = mine ? G.me : G.opp;
+    if (!d?.leader) return `<section class="mside ${side} empty"><p class="small">${mine ? "" : "En attente de l'adversaire\u2026"}</p></section>`;
+    const n2 = (x) => mine ? x.length : x;
+    const free = '<div class="slot free"></div>';
+    const chars = Array.from({ length: 5 }, (_, i) => d.chars[i] ? slot(d.chars[i], side, "chars") : free).join("");
+    const lead = `<div class="mrow">${d.stage ? slot(d.stage, side, "stage") : free}<div class="mlead">${slot(d.leader, side, "leader")}</div><div class="slot free ghost"></div></div>`;
+    const ch = `<div class="mrow">${chars}</div>`;
+    const tr = d.trash.at(-1);
+    const trTop = tr ? { ...mine ? myCard(tr) : oppCard(tr), c: tr.c } : null;
+    return `<section class="mside ${side}">
+    <div class="mrail">${mpile("life", side, n2(d.life), "Vie", lifeTopOf(side))}</div>
+    <div class="mfield">${mine ? ch + lead : lead + ch}</div>
+    <div class="mrail">${mpile("deck", side, n2(d.deck), "Deck")}${mpile("trash", side, d.trash.length, "D\xE9fausse", trTop)}</div></section>`;
+  }
+  function mobileBoardHTML() {
+    const o = G.opp;
+    const mt = myTurn();
+    const panel = G.phase !== "play" || G.battle || G.manual || G.oppManual || G.disconnected;
+    let turn = G.phase === "play" ? `${mt ? "\xC0 vous" : `Tour de ${esc(G.oppName)}`} \xB7 Tour ${G.turn.count}` : "";
+    if (G.select?.kind === "attack") turn = G.select.onlyChars ? "Cible : un Personnage repos\xE9" : "Cible : Leader ou Personnage repos\xE9";
+    const oh = o?.hand || 0;
+    const chat = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.5 7.2L4 20l1-4.4A8 8 0 1 1 21 12z"/></svg>';
+    const h = G.me.hand;
+    const step = h.length > 1 ? Math.min(12, 64 / (h.length - 1)) : 0;
+    const rot = Math.min(6, 36 / Math.max(1, h.length));
+    const hand = h.map((i, idx) => {
+      const k = idx - (h.length - 1) / 2;
+      return `<div class="hcard" data-u="${i.u}" data-side="me" data-zone="hand" data-cid="${i.c}" tabindex="0" style="--tx:${k * step}vw;--rot:${k * rot}deg;--ty:${Math.abs(k) * 4}px">${cardHTML(myCard(i))}</div>`;
+    }).join("");
+    return `
+    <header class="mtop"><div class="ohand" aria-label="Main adverse : ${oh} cartes">${'<span class="bk"></span>'.repeat(Math.min(oh, 10))}<span class="n">${oh}</span></div>${o?.leader ? mdons("opp") : ""}</header>
+    ${mside("opp")}
+    <nav class="mbar">${turn ? `<span class="turn ${mt ? "mine" : ""}"><span class="dot"></span>${turn}</span>` : '<span class="turn"></span>'}
+      <button type="button" class="ico" data-do="m-log" aria-label="Journal et chat">${chat}</button>
+      <button type="button" class="ico" data-do="m-menu" aria-label="Menu">\u22EF</button>
+      ${G.phase === "play" && mt && !G.battle && !G.select ? '<button type="button" class="end" data-do="end">Fin du tour</button>' : ""}
+      ${panel ? `<div class="mpanel">${centerHTML()}</div>` : ""}</nav>
+    ${mside("me")}
+    <div class="mydon">${G.me.leader ? mdons("me") : ""}<span class="lab">Deck DON!! ${G.me.donDeck}</span></div>
+    <div class="fan">${hand}</div>`;
+  }
   function centerHTML() {
     const t = G.turn;
     const b = G.battle;
@@ -24807,14 +24929,18 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       <div class="board" id="gm-board"></div>
       <aside class="gside">
         <div class="panel preview" id="gm-preview"></div>
-        <div class="panel logp"><h3>Journal</h3><ul id="gm-log" class="log"></ul>
+        <div class="panel logp"><h3>Journal <button type="button" class="btn small ghost mb-close" data-do="m-log">Fermer</button></h3><ul id="gm-log" class="log"></ul>
           <form id="gm-chat" class="row-btns"><input placeholder="Message\u2026" maxlength="200" aria-label="Message"><button class="btn small">Envoyer</button></form></div>
       </aside>
       <div id="gm-viewer"></div><div id="gm-reveals" class="reveals"></div>
     </div>`;
       bindBoard(r);
     }
-    r.querySelector("#gm-board").innerHTML = `
+    const mobile = isMobile();
+    r.querySelector(".game").classList.toggle("mobile", mobile);
+    const board = r.querySelector("#gm-board");
+    board.className = mobile ? `mboard t-${getTheme()}` : "board";
+    board.innerHTML = mobile ? mobileBoardHTML() : `
     <div class="names"><span>${esc(G.oppName)}</span></div>
     ${sideHTML("opp")}${centerHTML()}${sideHTML("me")}
     <div class="names"><span>${esc(G.name)} (vous)</span></div>`;
@@ -24828,6 +24954,30 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   }
   function bindBoard(r) {
     r.addEventListener("click", onBoardClick);
+    let timer = null;
+    let start2 = null;
+    r.addEventListener("pointerdown", (e) => {
+      const el = e.target.closest("[data-cid]");
+      longPressed = false;
+      if (!el?.dataset.cid || e.pointerType === "mouse") return;
+      start2 = [e.clientX, e.clientY];
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        longPressed = true;
+        closeMenu();
+        zoomCard(el);
+      }, 420);
+    });
+    r.addEventListener("pointermove", (e) => {
+      if (start2 && Math.hypot(e.clientX - start2[0], e.clientY - start2[1]) > 10) clearTimeout(timer);
+    });
+    for (const ev of ["pointerup", "pointercancel"]) r.addEventListener(ev, () => {
+      clearTimeout(timer);
+      start2 = null;
+    });
+    r.addEventListener("contextmenu", (e) => {
+      if (e.target.closest(".mboard")) e.preventDefault();
+    });
     r.addEventListener("change", (e) => {
       const f = e.target.dataset.flag;
       if (f && G.battle) {
@@ -24860,7 +25010,12 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       render();
     });
   }
+  var longPressed = false;
   async function onBoardClick(e) {
+    if (longPressed) {
+      longPressed = false;
+      return;
+    }
     const doEl = e.target.closest("[data-do]");
     if (doEl) return doAction(doEl.dataset.do, doEl);
     const vu = e.target.closest("[data-vu]");
@@ -24954,6 +25109,18 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       case "v-close":
         G.viewer = null;
         return render();
+      case "m-log":
+        return root2().querySelector(".game")?.classList.toggle("show-log");
+      case "m-menu": {
+        const rect = el.getBoundingClientRect();
+        const it = [
+          { label: "\u{1F4AC} Journal et chat", fn: () => root2().querySelector(".game")?.classList.add("show-log") },
+          { label: "\u2699 Ambiance du plateau", fn: openSettings }
+        ];
+        if (G.phase === "play" && !G.manual && (myTurn() || G.battle?.role === "def")) it.push({ label: "\u270B Effet manuel", fn: chooseManualCard });
+        if (G.phase === "play") it.push({ label: "Abandonner", fn: () => doAction("concede"), sep: true });
+        return showMenu(it, rect.left - 120, rect.bottom + 4);
+      }
       case "r-close":
         G.reveals = G.reveals.filter((r) => r.id !== el.dataset.rid);
         return render();
@@ -25311,8 +25478,10 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     });
     document.querySelector(".who").innerHTML = `<span>${esc(S.status.username)}</span>
     ${admin ? `<span class="badge ok">${S.status.role === "owner" ? "Propri\xE9taire" : "Admin"}</span>` : ""}
+    <button class="btn ghost small settings-btn" title="Param\xE8tres" aria-label="Param\xE8tres">\u2699</button>
     <button class="btn ghost small logout">D\xE9connexion</button>`;
     document.querySelector(".logout").addEventListener("click", signOut);
+    document.querySelector(".settings-btn").addEventListener("click", openSettings);
     initBoosters();
     initCollection();
     createDeckBuilder({

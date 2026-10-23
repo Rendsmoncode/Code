@@ -1,5 +1,8 @@
-Polices utilisées pour les cartes, toutes sous licence libre SIL Open Font License 1.1 :
+Polices utilisées, toutes sous licence libre SIL Open Font License 1.1 :
 - Cinzel (Natanael Gama), https://fonts.google.com/specimen/Cinzel
 - Crimson Pro (Jacques Le Bailly), https://fonts.google.com/specimen/Crimson+Pro
 - Anton (Vernon Adams), https://fonts.google.com/specimen/Anton
-Fichiers issus des paquets @fontsource (sous-ensemble latin).
+- Nunito (Vernon Adams), https://fonts.google.com/specimen/Nunito
+- Chakra Petch (Cadson Demak), https://fonts.google.com/specimen/Chakra+Petch
+- Archivo Black (Omnibus-Type), https://fonts.google.com/specimen/Archivo+Black
+Cartes : paquets @fontsource ; plateau téléphone : Google Fonts (sous-ensemble latin).

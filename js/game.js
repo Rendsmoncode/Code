@@ -7,6 +7,7 @@ import {
 } from './cards.js';
 import { WHEN, CONTINUOUS_ACTIONS, effectText, effectsText } from './effects.js';
 import * as net from './net.js';
+import { getTheme, openSettings } from './settings.js';
 
 const root = () => document.getElementById('tab-play');
 let G = null;
@@ -67,6 +68,9 @@ export function initPlay() {
   if (p.get('local')) lobby.mode = 'local';
   onChange(() => { if (!G) renderLobby(); });
   renderLobby();
+  // Changement d'ambiance ou passage téléphone ↔ ordinateur : on redessine le plateau.
+  window.addEventListener('optcgm-theme', () => { if (G) render(); });
+  matchMedia(MOBILE).addEventListener?.('change', () => { if (G) { root().innerHTML = ''; render(); } });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && G?.select) { G.select = null; render(); }
   });
@@ -1718,6 +1722,73 @@ function sideHTML(side) {
   return `<div class="side ${side}">${mine ? field + base + hand : hand + base + field}</div>`;
 }
 
+// ---------- plateau téléphone (disposition H1 + ambiances) ----------
+const MOBILE = '(max-width: 760px)';
+const isMobile = () => matchMedia(MOBILE).matches;
+// Carte du dessus de la Vie si elle est face visible (vue par les deux joueurs).
+function lifeTopOf(side) {
+  const mine = side === 'me';
+  const d = mine ? G.me : G.opp;
+  const up = mine ? d.life.map((i) => (i.fu ? i.c : null)) : (d.lifeUp || []);
+  const top = up.at(-1);
+  return top ? { ...(mine ? G.myCards : G.oppCards)[top], c: top } : null;
+}
+function mpile(kind, side, n, label, top) {
+  return `<div class="mpile p-${kind}" data-pile="${kind}" data-side="${side}" ${top ? `data-cid="${top.c || ''}"` : ''} tabindex="0" role="button" aria-label="${label} (${n})">
+    ${top ? `<div class="mtop">${cardHTML(top)}</div>` : `<div class="stack${n ? '' : ' empty'}"></div>`}<b class="cnt">${n}</b><span class="lab">${label}</span></div>`;
+}
+function mdons(side) {
+  const d = side === 'me' ? G.me : G.opp;
+  const a = d.donActive;
+  const t = d.donActive + d.donRested;
+  return `<div class="mdons" data-pile="don" data-side="${side}" tabindex="0" role="button" aria-label="DON!! : ${a} actifs sur ${t}">
+    ${Array.from({ length: t }, (_, i) => `<i class="${i < a ? 'on' : ''}"></i>`).join('')}<span><b>${a}</b>/${t} DON!!</span></div>`;
+}
+function mside(side) {
+  const mine = side === 'me';
+  const d = mine ? G.me : G.opp;
+  if (!d?.leader) return `<section class="mside ${side} empty"><p class="small">${mine ? '' : 'En attente de l\'adversaire…'}</p></section>`;
+  const n = (x) => (mine ? x.length : x);
+  const free = '<div class="slot free"></div>';
+  const chars = Array.from({ length: 5 }, (_, i) => (d.chars[i] ? slot(d.chars[i], side, 'chars') : free)).join('');
+  const lead = `<div class="mrow">${d.stage ? slot(d.stage, side, 'stage') : free}<div class="mlead">${slot(d.leader, side, 'leader')}</div><div class="slot free ghost"></div></div>`;
+  const ch = `<div class="mrow">${chars}</div>`;
+  const tr = d.trash.at(-1);
+  const trTop = tr ? { ...(mine ? myCard(tr) : oppCard(tr)), c: tr.c } : null;
+  return `<section class="mside ${side}">
+    <div class="mrail">${mpile('life', side, n(d.life), 'Vie', lifeTopOf(side))}</div>
+    <div class="mfield">${mine ? ch + lead : lead + ch}</div>
+    <div class="mrail">${mpile('deck', side, n(d.deck), 'Deck')}${mpile('trash', side, d.trash.length, 'Défausse', trTop)}</div></section>`;
+}
+function mobileBoardHTML() {
+  const o = G.opp;
+  const mt = myTurn();
+  // Pendant un combat, une phase de préparation ou un effet manuel : le panneau habituel s'ouvre au-dessus de la barre.
+  const panel = G.phase !== 'play' || G.battle || G.manual || G.oppManual || G.disconnected;
+  let turn = G.phase === 'play' ? `${mt ? 'À vous' : `Tour de ${esc(G.oppName)}`} · Tour ${G.turn.count}` : '';
+  if (G.select?.kind === 'attack') turn = G.select.onlyChars ? 'Cible : un Personnage reposé' : 'Cible : Leader ou Personnage reposé';
+  const oh = o?.hand || 0;
+  const chat = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.5 7.2L4 20l1-4.4A8 8 0 1 1 21 12z"/></svg>';
+  const h = G.me.hand;
+  const step = h.length > 1 ? Math.min(12, 64 / (h.length - 1)) : 0;
+  const rot = Math.min(6, 36 / Math.max(1, h.length));
+  const hand = h.map((i, idx) => {
+    const k = idx - (h.length - 1) / 2;
+    return `<div class="hcard" data-u="${i.u}" data-side="me" data-zone="hand" data-cid="${i.c}" tabindex="0" style="--tx:${k * step}vw;--rot:${k * rot}deg;--ty:${Math.abs(k) * 4}px">${cardHTML(myCard(i))}</div>`;
+  }).join('');
+  return `
+    <header class="mtop"><div class="ohand" aria-label="Main adverse : ${oh} cartes">${'<span class="bk"></span>'.repeat(Math.min(oh, 10))}<span class="n">${oh}</span></div>${o?.leader ? mdons('opp') : ''}</header>
+    ${mside('opp')}
+    <nav class="mbar">${turn ? `<span class="turn ${mt ? 'mine' : ''}"><span class="dot"></span>${turn}</span>` : '<span class="turn"></span>'}
+      <button type="button" class="ico" data-do="m-log" aria-label="Journal et chat">${chat}</button>
+      <button type="button" class="ico" data-do="m-menu" aria-label="Menu">⋯</button>
+      ${G.phase === 'play' && mt && !G.battle && !G.select ? '<button type="button" class="end" data-do="end">Fin du tour</button>' : ''}
+      ${panel ? `<div class="mpanel">${centerHTML()}</div>` : ''}</nav>
+    ${mside('me')}
+    <div class="mydon">${G.me.leader ? mdons('me') : ''}<span class="lab">Deck DON!! ${G.me.donDeck}</span></div>
+    <div class="fan">${hand}</div>`;
+}
+
 function centerHTML() {
   const t = G.turn;
   const b = G.battle;
@@ -1860,14 +1931,18 @@ function render() {
       <div class="board" id="gm-board"></div>
       <aside class="gside">
         <div class="panel preview" id="gm-preview"></div>
-        <div class="panel logp"><h3>Journal</h3><ul id="gm-log" class="log"></ul>
+        <div class="panel logp"><h3>Journal <button type="button" class="btn small ghost mb-close" data-do="m-log">Fermer</button></h3><ul id="gm-log" class="log"></ul>
           <form id="gm-chat" class="row-btns"><input placeholder="Message…" maxlength="200" aria-label="Message"><button class="btn small">Envoyer</button></form></div>
       </aside>
       <div id="gm-viewer"></div><div id="gm-reveals" class="reveals"></div>
     </div>`;
     bindBoard(r);
   }
-  r.querySelector('#gm-board').innerHTML = `
+  const mobile = isMobile();
+  r.querySelector('.game').classList.toggle('mobile', mobile);
+  const board = r.querySelector('#gm-board');
+  board.className = mobile ? `mboard t-${getTheme()}` : 'board';
+  board.innerHTML = mobile ? mobileBoardHTML() : `
     <div class="names"><span>${esc(G.oppName)}</span></div>
     ${sideHTML('opp')}${centerHTML()}${sideHTML('me')}
     <div class="names"><span>${esc(G.name)} (vous)</span></div>`;
@@ -1882,6 +1957,20 @@ function render() {
 
 function bindBoard(r) {
   r.addEventListener('click', onBoardClick);
+  // Appui long (écran tactile) : la carte s'affiche en grand.
+  let timer = null;
+  let start = null;
+  r.addEventListener('pointerdown', (e) => {
+    const el = e.target.closest('[data-cid]');
+    longPressed = false; // un appui long sans clic final ne doit pas bloquer le toucher suivant
+    if (!el?.dataset.cid || e.pointerType === 'mouse') return;
+    start = [e.clientX, e.clientY];
+    clearTimeout(timer);
+    timer = setTimeout(() => { longPressed = true; closeMenu(); zoomCard(el); }, 420);
+  });
+  r.addEventListener('pointermove', (e) => { if (start && Math.hypot(e.clientX - start[0], e.clientY - start[1]) > 10) clearTimeout(timer); });
+  for (const ev of ['pointerup', 'pointercancel']) r.addEventListener(ev, () => { clearTimeout(timer); start = null; });
+  r.addEventListener('contextmenu', (e) => { if (e.target.closest('.mboard')) e.preventDefault(); });
   r.addEventListener('change', (e) => {
     const f = e.target.dataset.flag;
     if (f && G.battle) { G.battle[f] = e.target.checked; render(); }
@@ -1909,7 +1998,9 @@ function bindBoard(r) {
   });
 }
 
+let longPressed = false;
 async function onBoardClick(e) {
+  if (longPressed) { longPressed = false; return; }
   const doEl = e.target.closest('[data-do]');
   if (doEl) return doAction(doEl.dataset.do, doEl);
   const vu = e.target.closest('[data-vu]');
@@ -1977,6 +2068,17 @@ function doAction(a, el) {
       return renderLobby();
     case 'v-shuffle': shuffle(G.me.deck); log('mélange son deck.'); G.viewer = null; return commit();
     case 'v-close': G.viewer = null; return render();
+    case 'm-log': return root().querySelector('.game')?.classList.toggle('show-log');
+    case 'm-menu': {
+      const rect = el.getBoundingClientRect();
+      const it = [
+        { label: '💬 Journal et chat', fn: () => root().querySelector('.game')?.classList.add('show-log') },
+        { label: '⚙ Ambiance du plateau', fn: openSettings },
+      ];
+      if (G.phase === 'play' && !G.manual && (myTurn() || G.battle?.role === 'def')) it.push({ label: '✋ Effet manuel', fn: chooseManualCard });
+      if (G.phase === 'play') it.push({ label: 'Abandonner', fn: () => doAction('concede'), sep: true });
+      return showMenu(it, rect.left - 120, rect.bottom + 4);
+    }
     case 'r-close': G.reveals = G.reveals.filter((r) => r.id !== el.dataset.rid); return render();
     default: return undefined;
   }
