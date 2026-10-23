@@ -145,7 +145,7 @@ function paramHTML(p, item) {
   const v = item[p.k];
   if (p.type === 'num') return `<label>${esc(p.label)} <input type="number" data-p="${p.k}" value="${esc(v)}"></label>`;
   if (p.type === 'text') {
-    const list = ['type', 'v'].includes(p.k) && /type/i.test(p.label) ? ' list="all-traits"' : '';
+    const list = ['type', 'type2', 'v'].includes(p.k) && /type/i.test(p.label) ? ' list="all-traits"' : '';
     return `<label>${esc(p.label)} <input type="text" data-p="${p.k}" value="${esc(v)}"${list}></label>`;
   }
   if (p.type === 'sel') return `<label>${esc(p.label)} ${select(p.k, p.opts, v)}</label>`;
@@ -168,6 +168,7 @@ function filterHTML(path, f, attr = 'data-p') {
   const sel = (k, opts) => select(`${path}.${k}`, opts, f[k] || '').replace('data-p=', `${attr}=`);
   return `<span class="fxe-filter">
     <label>Type <input type="text" ${attr}="${path}.type" value="${esc(f.type || '')}" placeholder="ex. Marine" list="all-traits"></label>
+    <label>ou type <input type="text" ${attr}="${path}.type2" value="${esc(f.type2 || '')}" placeholder="(facultatif)" list="all-traits"></label>
     <label>Le type ${sel('typeIncl', { '': 'est exactement', yes: 'contient le mot' })}</label>
     <label>Nom <input type="text" ${attr}="${path}.name" value="${esc(f.name || '')}" placeholder="ex. Prisonnier"></label>
     <label>Autre que <input type="text" ${attr}="${path}.notName" value="${esc(f.notName || '')}" placeholder="ex. Garp"></label>

@@ -58,7 +58,7 @@ export const KEYWORDS_AUTO = {
 export const CONDS = {
   donAttached: { label: 'DON!! attachés à cette carte (min.)', params: [n('n', 'DON!!')], text: (p) => `[DON!! x${p.n}]` },
   donField: { label: 'DON!! sur votre terrain (min.)', params: [n('n', 'DON!!', 5)], text: (p) => `Si vous avez ${p.n} DON!! ou plus sur votre terrain,` },
-  leaderType: { label: 'Votre Leader a le type…', params: [{ k: 'v', label: 'Type', type: 'text', def: '' }], text: (p) => `Si votre Leader a le type {${p.v}},` },
+  leaderType: { label: 'Votre Leader a le type…', params: [{ k: 'v', label: 'Type', type: 'text', def: '' }, { k: 'type2', label: 'ou type', type: 'text', def: '' }], text: (p) => `Si votre Leader a le type ${typesText(p.v, p.type2)},` },
   leaderName: { label: 'Votre Leader est [Nom]', params: [{ k: 'v', label: 'Nom', type: 'text', def: '' }], text: (p) => `Si votre Leader est [${p.v}],` },
   leaderMulti: { label: 'Votre Leader est multicolore', params: [], text: () => 'Si votre Leader est multicolore,' },
   leaderColor: { label: 'Votre Leader est de couleur…', params: [{ k: 'v', label: 'Couleur', type: 'sel', def: 'rouge', opts: COLORS_FR }], text: (p) => `Si votre Leader est ${p.v},` },
@@ -96,17 +96,17 @@ export const CONDS = {
   },
   typeFieldGE: {
     label: 'Vous avez X cartes de type… ou plus sur votre terrain',
-    params: [n('n', 'Cartes', 2), { k: 'type', label: 'Type', type: 'text', def: '' }, { k: 'self', label: 'Cette carte', type: 'sel', def: 'count', opts: { count: 'compte aussi', skip: 'ne compte pas' } }],
+    params: [n('n', 'Cartes', 2), { k: 'type', label: 'Type', type: 'text', def: '' }, { k: 'type2', label: 'ou type', type: 'text', def: '' }, { k: 'self', label: 'Cette carte', type: 'sel', def: 'count', opts: { count: 'compte aussi', skip: 'ne compte pas' } }],
     text: (p) => {
       const many = p.n > 1;
       const other = p.self === 'skip' ? (many ? 'autres ' : 'autre ') : '';
-      return `Si vous avez ${many ? p.n : 'une'} ${other}carte${many ? 's' : ''} de type {${p.type}}${many ? ' ou plus' : ''} sur votre terrain,`;
+      return `Si vous avez ${many ? p.n : 'une'} ${other}carte${many ? 's' : ''} de type ${typesText(p.type, p.type2)}${many ? ' ou plus' : ''} sur votre terrain,`;
     },
   },
   noTypeField: {
     label: 'Vous n\'avez aucune carte de type… sur votre terrain',
-    params: [{ k: 'type', label: 'Type', type: 'text', def: '' }, { k: 'self', label: 'Cette carte', type: 'sel', def: 'skip', opts: { skip: 'ne compte pas', count: 'compte aussi' } }],
-    text: (p) => `Si vous n'avez aucune ${p.self === 'count' ? '' : 'autre '}carte de type {${p.type}} sur votre terrain,`,
+    params: [{ k: 'type', label: 'Type', type: 'text', def: '' }, { k: 'type2', label: 'ou type', type: 'text', def: '' }, { k: 'self', label: 'Cette carte', type: 'sel', def: 'skip', opts: { skip: 'ne compte pas', count: 'compte aussi' } }],
+    text: (p) => `Si vous n'avez aucune ${p.self === 'count' ? '' : 'autre '}carte de type ${typesText(p.type, p.type2)} sur votre terrain,`,
   },
   trashGE: { label: 'Votre défausse a X cartes ou plus', params: [n('n', 'Cartes', 10)], text: (p) => `Si votre défausse contient ${p.n} cartes ou plus,` },
   myTurn: { label: 'C\'est votre tour', params: [], text: () => 'Pendant votre tour,' },
@@ -229,10 +229,15 @@ export const WHO = {
   self: 'cette carte', leader: 'Leader', chars: 'Personnage(s)', leaderOrChar: 'Leader ou Personnage', allChars: 'tous les Personnages', leaderAndAll: 'Leader et tous les Personnages',
 };
 
+// « {A} » ou « {A} ou {B} » (jusqu'à 2 types au choix).
+export const typesText = (a, b) => `{${a}}${b ? ` ou {${b}}` : ''}`;
+
 export function filterText(f = {}, short = false) {
   const parts = [];
   if (f.name) parts.push(`[${f.name}]`);
-  if (f.type) parts.push(f.typeIncl === 'yes' ? `incluant «${f.type}» dans son type` : `de type {${f.type}}`);
+  if (f.type) {
+    parts.push(f.typeIncl === 'yes' ? `incluant «${f.type}»${f.type2 ? ` ou «${f.type2}»` : ''} dans son type` : `de type ${typesText(f.type, f.type2)}`);
+  }
   if (f.color) parts.push(f.color);
   if (f.attr) parts.push(`d'attribut ${f.attr}`);
 
