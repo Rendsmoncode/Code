@@ -7,6 +7,7 @@ import { initPlay } from './game.js';
 import { initBoosters, initCollection } from './boosters.js';
 import { initAdmin } from './admin.js';
 import { openSettings } from './settings.js';
+import { initCredits } from './credits.js';
 
 const tabs = document.querySelectorAll('[data-tab]');
 
@@ -39,6 +40,7 @@ async function start() {
     intro: 'Vous ne pouvez utiliser que les cartes que vous possédez.',
   });
   initPlay();
+  initCredits();
   if (admin) { initEditor(); initAdmin(); }
 
   let first = 'boosters';
