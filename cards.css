@@ -258,3 +258,100 @@
 .card.mini .back-logo { display: none; }
 .card.empty-pile { background: transparent; border: 2px dashed #ffffff30; }
 .card.empty-pile .frame { display: none; }
+
+/* =====================================================================
+   Style « Éditorial » : pleine illustration, chiffres condensés (Anton),
+   petites mentions espacées (Chakra Petch), filets fins, et la couleur
+   de la carte en grand dégradé derrière le nom pour la reconnaître d'un coup d'œil.
+   Aucun élément n'est plus grand que dans l'ancien style.
+   ===================================================================== */
+@font-face { font-family: "Chakra Petch"; font-weight: 700; font-display: swap; src: url("fonts/chakra-petch-latin-700-normal.woff2") format("woff2"); }
+@font-face { font-family: "Nunito"; font-weight: 600 800; font-display: swap; src: url("fonts/nunito-latin-700-normal.woff2") format("woff2"); }
+.card.card:not(.back) { --rc: #8b93a3; --gold: #d9b45a; border-radius: 2.4%/1.7%; }
+.card.card:not(.back).r-UC { --rc: #7cc8ff; }
+.card.card:not(.back).r-R { --rc: #c3a6ff; }
+.card.card:not(.back).r-SR { --rc: #ff7ac8; }
+.card.card:not(.back).r-UR { --rc: #ff9a3c; }
+.card.card:not(.back).r-L { --rc: #f2c14e; }
+.card.card:not(.back) .foil { display: none; }
+.card.card:not(.back).r-S .foil { display: block; }
+.card.card:not(.back) .art::after { content: ""; position: absolute; inset: 0;
+  background: linear-gradient(180deg, #000c 0, transparent 22%, transparent 45%, #000e 74%), linear-gradient(90deg, #0006, transparent 30%); }
+.card.card:not(.back) .cost::before, .card.card:not(.back) .cost::after, .card.card:not(.back) .life::before, .card.card:not(.back) .life::after, .card.card:not(.back) .pow::before, .card.card:not(.back) .pow::after { display: none; }
+.card.card:not(.back) .cost, .card.card:not(.back) .life, .card.card:not(.back) .pow { filter: none; text-shadow: 0 .3cqw 1.2cqw #000; font-family: Anton, sans-serif; font-weight: 400; }
+.card.card:not(.back) .nm { font: 400 7.2cqw/1 Anton, sans-serif; letter-spacing: .04em; text-shadow: 0 .3cqw 1.4cqw #000; }
+.card.card:not(.back) .nm.long { font-size: 6.2cqw; }
+.card.card:not(.back) .nm.xlong { font-size: 5.2cqw; }
+.card.card:not(.back) .traits { font: 700 2.4cqw/1 "Chakra Petch", sans-serif; font-style: normal; letter-spacing: .3em; text-transform: uppercase; }
+.card.card:not(.back) .info { font-family: Nunito, sans-serif; font-weight: 600; font-size: calc(3.8cqw * var(--info-fs, 1)); line-height: 1.28; }
+.card.card:not(.back) .info-in { text-shadow: 0 .2cqw .8cqw #000; }
+.card.card:not(.back) .tl { font: 700 calc(2.3cqw * var(--info-fs, 1))/1.2 "Chakra Petch", sans-serif; letter-spacing: .32em; }
+.card.card:not(.back) .kw { font: 700 calc(2.4cqw * var(--info-fs, 1))/1.55 "Chakra Petch", sans-serif; letter-spacing: .08em; border-radius: 0; padding: 0 1.2cqw; }
+.card.card:not(.back) .attr span { font: 700 2.5cqw/1 "Chakra Petch", sans-serif; letter-spacing: .2em; }
+.card.card:not(.back) .ctr { font-family: Anton, sans-serif; font-weight: 400; }
+.card.card:not(.back) .ctr::before { font: 700 2cqw/1 "Chakra Petch", sans-serif; letter-spacing: .26em; }
+.card.card:not(.back) .rar { font: 700 2.4cqw/1 "Chakra Petch", sans-serif; letter-spacing: .14em; }
+.card.card:not(.back) .lead-tag { font: 700 3cqw/1 "Chakra Petch", sans-serif; letter-spacing: .32em; text-shadow: none; }
+.card.card:not(.back) .life span::after { font: 700 2cqw/1 "Chakra Petch", sans-serif; letter-spacing: .2em; }
+.card.card:not(.back) .frame { box-shadow: 0 0 0 .4cqw #000, 0 1.4cqw 4cqw #000c; }
+.card.card:not(.back) .frame::after { padding: .5cqw; background: linear-gradient(160deg, #fff3, var(--rc) 30%, #0000 55%, var(--rc) 85%, #fff3); }
+.card.card:not(.back).r-S .frame::after { background: var(--rim); padding: .8cqw; }
+.card.card:not(.back) .frame::before { content: ""; position: absolute; z-index: 4; left: 0; top: 18%; bottom: 18%; width: .9cqw; pointer-events: none;
+  background: linear-gradient(180deg, transparent, var(--c1l) 20%, var(--c1) 80%, transparent); box-shadow: 0 0 2.5cqw var(--c1); }
+.card.card:not(.back) .cost, .card.card:not(.back) .life { left: 5cqw; top: 3.4cqw; width: auto; height: auto; display: block; font-size: 12cqw; line-height: 1; color: #fff; }
+.card.card:not(.back) .cost::before { content: "COÛT"; display: block; position: static; inset: auto; border-radius: 0; background: none; -webkit-mask: none; mask: none;
+  font: 700 2cqw/1 "Chakra Petch", sans-serif; letter-spacing: .3em; color: var(--c1l); margin-bottom: 1cqw; }
+.card.card:not(.back) .cost span { display: block; }
+.card.card:not(.back) .cost span::after { content: ""; display: block; width: 7cqw; height: .5cqw; margin-top: 1cqw; background: var(--c1l); box-shadow: 0 0 1.5cqw var(--c1); transform: skewX(-30deg); }
+.card.card:not(.back) .life { left: auto; top: auto; right: 5cqw; bottom: 4cqw; font-size: 10cqw; color: #ff6a5a; }
+.card.card:not(.back) .life span::after { position: static; transform: none; display: block; text-align: right; color: #ffb3a8; margin-top: .6cqw; }
+.card.card:not(.back) .pow { right: 5cqw; top: 3.4cqw; width: auto; height: auto; display: block; text-align: right; font-size: 8.8cqw; color: #fff; }
+.card.card:not(.back) .pow::before { content: "PUISSANCE"; display: block; position: static; inset: auto; clip-path: none; background: none;
+  font: 700 2cqw/1 "Chakra Petch", sans-serif; letter-spacing: .3em; color: #ffffffa0; margin-bottom: 1cqw; }
+.card.card:not(.back) .pow span::after { content: ""; display: block; height: .3cqw; margin-top: 1cqw; background: linear-gradient(90deg, transparent, #fff); }
+.card.card:not(.back) .attr { top: 21.5cqw; right: 5cqw; }
+.card.card:not(.back) .attr span { background: none; clip-path: none; padding: 0; color: #ffffffd0; gap: 1.4cqw; text-shadow: 0 .2cqw .8cqw #000; }
+.card.card:not(.back) .attr span::before { width: 3.6cqw; height: 3.6cqw; background: var(--c1l); }
+.card.card:not(.back) .ctr { left: 5cqw; top: 27cqw; background: none; clip-path: none; padding: 0; color: #fff; font-size: 4.4cqw; writing-mode: vertical-rl;
+  border-left: .35cqw solid var(--c1l); padding-left: 1.4cqw; text-shadow: 0 .2cqw .8cqw #000; }
+.card.card:not(.back) .ctr::before { color: #ffffffa0; }
+.card.card:not(.back) .info::before { display: none; }
+.card.card:not(.back) .info { left: 5cqw; right: 5cqw; bottom: 17cqw; text-align: left; }
+.card.card:not(.back) .info::after { background: none; backdrop-filter: none; clip-path: none; box-shadow: none; border-top: .3cqw solid #ffffff30; }
+.card.card:not(.back) .info-in { padding: 2.4cqw 0 0; }
+.card.card:not(.back) .tl { color: var(--c1l); }
+.card.card:not(.back) .kw { background: none; color: #fff; box-shadow: inset 0 0 0 .25cqw #ffffff80; }
+.card.card:not(.back) .kw.trig { background: var(--gold); color: #111; box-shadow: none; }
+.card.card:not(.back) .nm { left: 5cqw; right: 5cqw; bottom: 8.6cqw; text-align: left; }
+.card.card:not(.back).t-leader .nm { right: 22cqw; padding-left: 0; left: 5cqw; }
+.card.card:not(.back) .nm span::after { content: ""; display: block; height: .3cqw; margin-top: 1.4cqw; background: linear-gradient(90deg, var(--c1l), var(--c2) 45%, transparent); }
+.card.card:not(.back) .traits { left: 5cqw; right: 20cqw; bottom: 4.4cqw; text-align: left; color: #ffffffa8; }
+.card.card:not(.back).t-leader .traits { left: 5cqw; }
+.card.card:not(.back) .rar { right: 5cqw; bottom: 4.4cqw; background: none; clip-path: none; padding: 0; color: var(--rc); }
+.card.card:not(.back).t-leader:not(.r-S) .rar { right: 5cqw; left: auto; top: auto; bottom: 17.5cqw; }
+.card.card:not(.back) .lead-tag { left: 5cqw; top: 3.6cqw; padding: 0; background: none; clip-path: none; box-shadow: none; color: var(--c1l); }
+.card.card:not(.back).t-leader .cost { display: none; }
+.card.card:not(.back) .art::after { background:
+  linear-gradient(0deg, color-mix(in srgb, var(--c1) 60%, transparent), transparent 42%),
+  linear-gradient(180deg, #000c 0, transparent 22%, transparent 50%, #000a 78%), linear-gradient(90deg, #0006, transparent 30%); }
+.card.card:not(.back) .info::before { display: block; left: -5cqw; right: -5cqw; bottom: -17cqw; height: 34cqw; z-index: -2; box-shadow: none;
+  background: linear-gradient(90deg, var(--c1) 0 50%, var(--c2) 50% 100%);
+  -webkit-mask: linear-gradient(0deg, #000 0, #000 40%, #0008 70%, transparent); mask: linear-gradient(0deg, #000 0, #000 40%, #0008 70%, transparent); }
+.card.card:not(.back) .nm span { text-shadow: 0 .3cqw 0 #0006, 0 0 2cqw #0008; }
+.card.card:not(.back) .nm span::after { background: linear-gradient(90deg, #fff, #ffffff60 60%, transparent); height: .4cqw; }
+.card.card:not(.back) .traits { color: #ffffffd8; text-shadow: 0 .2cqw .6cqw #0009; }
+.card.card:not(.back) .rar { color: #fff; text-shadow: 0 .2cqw .6cqw #000; }
+.card.card:not(.back) .frame::before { width: 1.4cqw; top: 8%; bottom: 0; background: linear-gradient(180deg, transparent, var(--c1l) 25%, var(--c1)); }
+
+/* Sceau 1ON1 : médaillon noir et or d'origine, « ON » plus petit que les « 1 »,
+   posé à cheval sur le haut de la carte, au centre. */
+.card .seal {
+  position: absolute; z-index: 8; left: 50%; top: -5cqw; transform: translateX(-50%); pointer-events: none;
+  display: flex; align-items: baseline; padding: 1.4cqw 3cqw 1cqw; white-space: nowrap;
+  font: 400 8cqw/1 "Anton", sans-serif; color: #ffe08a; letter-spacing: .04em; border-radius: 2.4cqw;
+  background: radial-gradient(circle at 50% 25%, #3a3a3a, #000); border: .8cqw solid #e8c46a;
+  text-shadow: 0 0 1.5cqw #f7f052aa; box-shadow: 0 0 2.5cqw #f7f052aa, inset 0 0 1.5cqw #e8c46a66, 0 .8cqw 1.6cqw #000c;
+}
+.card .seal small { font-size: 5cqw; margin: 0 .5cqw; letter-spacing: .06em; }
+.card.r-S .rar { display: none; }
+.card.mini .seal { display: none; }

@@ -144,6 +144,7 @@ export function cardHTML(card, o = {}) {
       <div class="rar" title="${RARITIES[r].label}">${RARITIES[r].short}</div>
       <div class="foil"></div>
     </div>
+    ${r === 'S' ? '<div class="seal" aria-hidden="true">1<small>ON</small>1</div>' : ''}
   </div>`;
 }
 
