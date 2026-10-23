@@ -807,12 +807,31 @@ details { margin-top: 12px; }
   main:has(.game:not(.mobile)) { padding-block: 6px; }
   .game:not(.mobile) { grid-template-columns: minmax(0, 1fr) clamp(260px, 25vw, 380px); height: calc(100dvh - 74px); align-items: stretch; gap: 10px; }
   .game:not(.mobile) .board {
-    --wb: clamp(56px, min(calc((100dvh - 250px) / 6.2), calc((100vw - 470px) / 10.6)), 130px); --w: var(--wb);
+    --wb: clamp(56px, min(calc((100dvh - 210px) / 3.6), calc((100cqw - 100px) / 10)), 170px); --w: var(--wb); container-type: inline-size;
     display: flex; flex-direction: column; justify-content: center; overflow: hidden; padding: 6px 10px 0; min-height: 0;
   }
   .game:not(.mobile) .names { display: none; }
   .game:not(.mobile) .side { gap: 6px; padding: 2px 0; }
-  .game:not(.mobile) .side.opp { --w: calc(var(--wb) * .8); }
+  /* Une seule ligne par joueur : Vie, Leader, 5 Personnages, Lieu, Deck, Défausse ; DON!! à côté de la main. */
+  .game:not(.mobile) .side { display: grid; grid-template-columns: repeat(10, var(--w)); justify-content: center; column-gap: 8px; row-gap: 6px; align-items: center; }
+  .game:not(.mobile) .side .row.base, .game:not(.mobile) .side .row.chars-row { display: contents; }
+  .game:not(.mobile) .side { --fr: 1; --hr: 2; }
+  .game:not(.mobile) .side.opp { --fr: 2; --hr: 1; }
+  .game:not(.mobile) .side :is(.p-life, .leader-zone, .chars-row > *, .stage-zone, .p-deck, .p-trash) { grid-row: var(--fr); }
+  .game:not(.mobile) .side .p-life { grid-column: 1; }
+  .game:not(.mobile) .side .leader-zone { grid-column: 2; }
+  .game:not(.mobile) .side .chars-row > :nth-child(1) { grid-column: 3; }
+  .game:not(.mobile) .side .chars-row > :nth-child(2) { grid-column: 4; }
+  .game:not(.mobile) .side .chars-row > :nth-child(3) { grid-column: 5; }
+  .game:not(.mobile) .side .chars-row > :nth-child(4) { grid-column: 6; }
+  .game:not(.mobile) .side .chars-row > :nth-child(5) { grid-column: 7; }
+  .game:not(.mobile) .side .stage-zone { grid-column: 8; }
+  .game:not(.mobile) .side .p-deck { grid-column: 9; }
+  .game:not(.mobile) .side .p-trash { grid-column: 10; }
+  .game:not(.mobile) .side .don-area { grid-row: var(--hr); grid-column: 1 / 4; justify-self: start; align-self: start; max-width: 100%; }
+  .game:not(.mobile) .side :is(.hand, .ohand) { grid-row: var(--hr); grid-column: 4 / -1; flex-wrap: nowrap; }
+  .game:not(.mobile) .side.me .hand .hcard { flex: 0 1 var(--w); min-width: 0; }
+  .game:not(.mobile) .side.opp .don-area { align-self: end; }
   .game:not(.mobile) .row { gap: 8px; }
   .game:not(.mobile) .leader-zone .slot { width: var(--w); }
   .game:not(.mobile) .pile .lbl { font-size: .65em; margin-top: 0; }
