@@ -60,7 +60,7 @@ check('connecté sous son pseudo', (await mat.textContent('.who')).includes('mat
 check('pas de choix de deck (déjà reçu)', !(await mat.$('.starters')));
 check('jeton retiré de l\'adresse', !mat.url().includes('invite='));
 await mat.click('[data-tab=boosters]'); await mat.waitForTimeout(300);
-check('10 boosters offerts, réserve gratuite à 0', (await mat.textContent('.bs-count')).includes('10 boosters') && (await mat.textContent('.bs-detail')).includes('Gratuits : 0'), (await mat.textContent('.bs-detail')).replace(/\s+/g, ' '));
+check('10 boosters offerts, réserve gratuite à 0', (await mat.textContent('.bs-count')).includes('10 boosters') && (await mat.textContent('.bs-detail')).includes('dont 10 offerts'), (await mat.textContent('.bs-detail')).replace(/\s+/g, ' '));
 await mat.click('[data-tab=decks]'); await mat.click('.deck-item'); await mat.waitForTimeout(300);
 check('son deck est prêt et valide', (await mat.textContent('.dk-status')).includes('Deck valide'), (await mat.textContent('.dk-status')).replace(/\s+/g, ' ').trim());
 const src = await mat.getAttribute('.dk-leader img', 'src');
