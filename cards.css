@@ -89,6 +89,7 @@
     repeating-linear-gradient(135deg, #ffffff0a 0 2cqw, transparent 2cqw 4cqw),
     linear-gradient(160deg, var(--c1), var(--c1d) 55%, var(--c1k));
 }
+.card .art .art-logo { position: absolute; left: 27%; top: 13%; width: 46%; color: #fff; opacity: .28; }
 .card .nm, .card .cost, .card .life, .card .lead-tag, .card .pow, .card .ctr, .card .attr, .card .info, .card .rar { position: absolute; z-index: 3; }
 .card .nm { z-index: 4; }
 .card .nm span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -257,6 +258,7 @@
   position: absolute; inset: 0; display: grid; place-content: center; text-align: center; color: #fff;
   font: 900 9cqw/1 "Cinzel", serif; letter-spacing: .05em; text-shadow: 0 .6cqw 1.2cqw #000;
 }
+.back-logo svg { width: 62%; margin: 0 auto; filter: drop-shadow(0 .6cqw 1.2cqw #000); }
 .back-logo small { display: block; font-size: 5cqw; color: #f5d27a; letter-spacing: .3em; margin-top: 1cqw; }
 .card.mini .back-logo { display: none; }
 .card.empty-pile { background: transparent; border: 2px dashed #ffffff30; }

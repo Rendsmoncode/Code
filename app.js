@@ -14908,8 +14908,8 @@ ${suffix}`;
       const result = await this.initializePromise;
       const queue = (_a = this._pendingInitNotifications) !== null && _a !== void 0 ? _a : [];
       this._pendingInitNotifications = null;
-      for (const n2 of queue) {
-        await this._notifyAllSubscribers(n2.event, n2.session, n2.broadcast);
+      for (const n3 of queue) {
+        await this._notifyAllSubscribers(n3.event, n3.session, n3.broadcast);
       }
       return result;
     }
@@ -21127,6 +21127,20 @@ ${suffix}`;
     return o;
   }
 
+  // js/logo.js
+  var CROWN = "M31 60 C31 46 36 37 50 37 C64 37 69 46 69 60 Z";
+  var BRIM = '<ellipse cx="50" cy="62" rx="42" ry="8"/>';
+  var GAPS = '<path d="M29 52 C40 55.5 60 55.5 71 52" stroke-width="3.4"/><path d="M30 60 C40 63.5 60 63.5 70 60" stroke-width="2.4"/>';
+  var WORD = 'x="51" y="84" text-anchor="middle" font-family="Archivo Black, sans-serif" font-size="13.5" textLength="68" lengthAdjust="spacing"';
+  var n2 = 0;
+  function hat(id, tr, col = "currentColor", band = "") {
+    return `<g transform="${tr}"><mask id="${id}"><rect x="-50" y="-50" width="200" height="200" fill="#fff"/><g stroke="#000" fill="none" stroke-linecap="round">${GAPS}</g></mask><g mask="url(#${id})" fill="${col}"><path d="${CROWN}"/>${BRIM}</g>${band ? `<path d="M30.6 51.2 C40 54.4 60 54.4 69.4 51.2 L69.1 49 C60 52.2 40 52.2 30.9 49 Z" fill="${band}"/>` : ""}</g>`;
+  }
+  function logoSVG(cls = "") {
+    const k = "nk" + ++n2;
+    return `<svg class="${cls}" viewBox="8 20 84 81" role="img" aria-label="Nakama TCG"><mask id="${k}w"><rect x="-50" y="-50" width="200" height="200" fill="#fff"/><text ${WORD} fill="#000" stroke="#000" stroke-width="5" stroke-linejoin="round">NAKAMA</text></mask>${hat(k + "h", "translate(50 38) scale(.95) translate(-50 -53.5)")}<path d="M20 62 L82 96 M82 62 L20 96" stroke="currentColor" stroke-width="5" stroke-linecap="round" fill="none" mask="url(#${k}w)"/><text ${WORD} fill="currentColor">NAKAMA</text></svg>`;
+  }
+
   // js/cards.js
   var COLORS = {
     rouge: { label: "Rouge", hex: "#c8302c" },
@@ -21216,16 +21230,16 @@ ${suffix}`;
     return esc(txt).replace(/\[([^\]]+)\]/g, '<span class="kw">$1</span>').replace(/\n/g, "<br>");
   }
   function shade(hex, amt) {
-    const n2 = parseInt(hex.slice(1), 16);
+    const n3 = parseInt(hex.slice(1), 16);
     const ch = (v) => Math.round(amt > 0 ? v + (255 - v) * amt : v * (1 + amt));
-    return `rgb(${ch(n2 >> 16)}, ${ch(n2 >> 8 & 255)}, ${ch(n2 & 255)})`;
+    return `rgb(${ch(n3 >> 16)}, ${ch(n3 >> 8 & 255)}, ${ch(n3 & 255)})`;
   }
   var imageResolver = (url) => url;
   function setImageResolver(fn) {
     imageResolver = fn;
   }
   function cardHTML(card, o = {}) {
-    if (!card) return `<div class="card back ${o.cls || ""}" ${o.attrs || ""}><div class="frame"><div class="back-logo">OPTCG<small>Maison</small></div></div></div>`;
+    if (!card) return `<div class="card back ${o.cls || ""}" ${o.attrs || ""}><div class="frame"><div class="back-logo">${logoSVG()}</div></div></div>`;
     const t = card.type;
     const fighter = t === "leader" || t === "character";
     const cost = t === "leader" ? `<div class="lead-tag">Leader</div><div class="life" title="Vie"><span>${esc(card.life)}</span></div>` : `<div class="cost" title="Co\xFBt"><span>${esc(card.cost ?? 0)}</span></div>`;
@@ -21247,7 +21261,7 @@ ${suffix}`;
     const hex = (card.colors?.length ? card.colors : ["noir"]).map((c) => COLORS[c]?.hex || "#555");
     const len = (card.name || "").length;
     const a = card.art || {};
-    const artImg = card.image ? `<img src="${esc(imageResolver(card.image))}" alt="" draggable="false" style="transform:translate(${Number(a.x) || 0}%, ${Number(a.y) || 0}%) scale(${Number(a.z) || 1})">` : "";
+    const artImg = card.image ? `<img src="${esc(imageResolver(card.image))}" alt="" draggable="false" style="transform:translate(${Number(a.x) || 0}%, ${Number(a.y) || 0}%) scale(${Number(a.z) || 1})">` : logoSVG("art-logo");
     const c2 = hex[1] || hex[0];
     const bx = card.box;
     const boxVars = bx ? `;--info-l:${bx.l}cqw;--info-r:${100 - bx.l - bx.w}cqw;--info-b:${bx.b * 1.397}cqw;--info-fs:${bx.fs || 1}` : "";
@@ -21493,17 +21507,17 @@ ${suffix}`;
     else if (!owned && leader.rarity === "S") errs.push(`\xAB ${leader.name} \xBB est une 1on1 : interdite dans un deck pr\xE9construit.`);
     let total = 0;
     const perCode = {};
-    for (const [id, n2] of Object.entries(deck.cards || {})) {
+    for (const [id, n3] of Object.entries(deck.cards || {})) {
       const c = S.byId[id];
       if (!c) {
         errs.push("Une carte du deck n'existe plus.");
         continue;
       }
-      total += n2;
+      total += n3;
       const key2 = c.code || c.id;
-      perCode[key2] = (perCode[key2] || 0) + n2;
+      perCode[key2] = (perCode[key2] || 0) + n3;
       if (perCode[key2] > 4 && !c.keywords?.includes("unlimited")) errs.push(`\xAB ${c.name} \xBB : 4 exemplaires maximum.`);
-      if (owned && n2 > (S.collection[id] || 0)) errs.push(`\xAB ${c.name} \xBB : vous n'en poss\xE9dez que ${S.collection[id] || 0}.`);
+      if (owned && n3 > (S.collection[id] || 0)) errs.push(`\xAB ${c.name} \xBB : vous n'en poss\xE9dez que ${S.collection[id] || 0}.`);
       if (c.type === "leader") errs.push(`\xAB ${c.name} \xBB est un Leader : il ne va pas dans le deck.`);
       if (!owned && c.rarity === "S") errs.push(`\xAB ${c.name} \xBB est une 1on1 : interdite dans un deck pr\xE9construit.`);
       if (leader && !c.colors.some((x) => leader.colors.includes(x))) {
@@ -21530,9 +21544,9 @@ ${suffix}`;
     return check(await sb.from("profiles").select("username, role, boosters, created_at").order("username"));
   }
   async function giveBoosters(target, amount) {
-    const n2 = check(await sb.rpc("admin_give_boosters", { target: target || null, amount }));
+    const n3 = check(await sb.rpc("admin_give_boosters", { target: target || null, amount }));
     await refreshStatus();
-    return n2;
+    return n3;
   }
   var inviteLink = (token) => `${location.origin}${location.pathname}?invite=${token}`;
   async function inviteInfo(token) {
@@ -21565,7 +21579,7 @@ ${suffix}`;
     function render2() {
       el.innerHTML = `
     <form class="panel auth-box" autocomplete="on">
-      <h1>OPTCG <span>Maison</span></h1>
+      <h1 class="brand">${logoSVG()}</h1>
       <div class="seg" role="tablist">
         <button type="button" data-mode="in" class="${mode === "in" ? "on" : ""}">Se connecter</button>
         <button type="button" data-mode="up" class="${mode === "up" ? "on" : ""}">Cr\xE9er un compte</button>
@@ -22337,19 +22351,19 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       if (save) {
         save.disabled = true;
         const keep = items.filter((it) => it.keep && it.cands[it.sel]);
-        let n2 = 0;
+        let n3 = 0;
         try {
           for (const it of keep) {
             const hit = it.cands[it.sel];
-            out(`Envoi ${n2 + 1} / ${keep.length} : ${it.c.name}\u2026`);
+            out(`Envoi ${n3 + 1} / ${keep.length} : ${it.c.name}\u2026`);
             const image = await cropToCard(hit.thumb);
             await saveCards([{ ...it.c, image, art: void 0, credit: { author: hit.author, license: hit.license, file: hit.file, source: hit.page } }]);
-            n2++;
+            n3++;
           }
-          out(`${n2} photo(s) enregistr\xE9e(s).`);
-          msg(`${n2} photo(s) ajout\xE9e(s) depuis Wikimedia Commons.`);
+          out(`${n3} photo(s) enregistr\xE9e(s).`);
+          msg(`${n3} photo(s) ajout\xE9e(s) depuis Wikimedia Commons.`);
         } catch (err) {
-          out(`Erreur apr\xE8s ${n2} photo(s) : ${err.message || err}`, true);
+          out(`Erreur apr\xE8s ${n3} photo(s) : ${err.message || err}`, true);
         }
         save.disabled = false;
       }
@@ -22391,17 +22405,17 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       if (!go) return;
       go.disabled = true;
       const out = o.querySelector(".ii-msg");
-      let n2 = 0;
+      let n3 = 0;
       try {
         for (const p of ok) {
-          out.textContent = `Envoi ${n2 + 1} / ${ok.length} : ${p.c.name}\u2026`;
+          out.textContent = `Envoi ${n3 + 1} / ${ok.length} : ${p.c.name}\u2026`;
           await saveCards([{ ...p.c, image: await resizeImage(p.f) }]);
-          n2++;
+          n3++;
         }
-        out.textContent = `${n2} image(s) enregistr\xE9e(s).`;
-        msg(`${n2} image(s) import\xE9e(s).`);
+        out.textContent = `${n3} image(s) enregistr\xE9e(s).`;
+        msg(`${n3} image(s) import\xE9e(s).`);
       } catch (err) {
-        out.textContent = `Erreur apr\xE8s ${n2} image(s) : ${err.message || err}`;
+        out.textContent = `Erreur apr\xE8s ${n3} image(s) : ${err.message || err}`;
         out.classList.add("err");
       }
       go.remove();
@@ -22781,7 +22795,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       const l = S.byId[d.leader];
       main.querySelector(".dk-leader").innerHTML = l ? `<button class="grid-card" data-act="unleader" title="Retirer le Leader">${cardHTML(l)}</button>` : '<p class="muted small">Cliquez sur un Leader dans la liste de droite.</p>';
       const entries = Object.entries(d.cards).filter(([id]) => S.byId[id]).sort(([a], [b]) => S.byId[a].cost - S.byId[b].cost || S.byId[a].name.localeCompare(S.byId[b].name));
-      main.querySelector(".dk-content").innerHTML = entries.length ? entries.map(([id, n2]) => `<button class="grid-card" data-act="rm" data-id="${id}">${cardHTML(S.byId[id])}<span class="qty">\xD7${n2}</span></button>`).join("") : '<p class="muted small">Vide.</p>';
+      main.querySelector(".dk-content").innerHTML = entries.length ? entries.map(([id, n3]) => `<button class="grid-card" data-act="rm" data-id="${id}">${cardHTML(S.byId[id])}<span class="qty">\xD7${n3}</span></button>`).join("") : '<p class="muted small">Vide.</p>';
       renderPool();
     }
     function renderPool() {
@@ -23394,7 +23408,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     const me = G.me;
     const leaderId = G.deckDef.leader;
     me.leader = { u: uid(), c: leaderId, r: false, d: 0, m: 0 };
-    me.deck = shuffle(Object.entries(G.deckDef.cards).flatMap(([c, n2]) => Array.from({ length: n2 }, () => ({ u: uid(), c, r: false, d: 0, m: 0 }))));
+    me.deck = shuffle(Object.entries(G.deckDef.cards).flatMap(([c, n3]) => Array.from({ length: n3 }, () => ({ u: uid(), c, r: false, d: 0, m: 0 }))));
     me.hand = me.deck.splice(0, 5);
     G.phase = "mulligan";
     commit();
@@ -23408,8 +23422,8 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       me.hand = me.deck.splice(0, 5);
       log("fait un mulligan.");
     } else log("garde sa main.");
-    const n2 = Number(myCard(me.leader).life) || 5;
-    for (let i = 0; i < n2 && me.deck.length; i++) me.life.push(me.deck.shift());
+    const n3 = Number(myCard(me.leader).life) || 5;
+    for (let i = 0; i < n3 && me.deck.length; i++) me.life.push(me.deck.shift());
     G.phase = "ready";
     G.meReady = true;
     send({ t: "ready" });
@@ -23448,10 +23462,10 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       }
       me.hand.push(me.deck.shift());
     }
-    const n2 = Math.min(first ? 1 : 2, me.donDeck);
-    me.donDeck -= n2;
-    me.donActive += n2;
-    log(`${first ? "ne pioche pas (1er tour)" : "pioche 1 carte"} et re\xE7oit ${n2} DON!!.`);
+    const n3 = Math.min(first ? 1 : 2, me.donDeck);
+    me.donDeck -= n3;
+    me.donActive += n3;
+    log(`${first ? "ne pioche pas (1er tour)" : "pioche 1 carte"} et re\xE7oit ${n3} DON!!.`);
     commit();
     await fireAll("startOfTurn");
   }
@@ -23734,8 +23748,8 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     send({ t: "battleEnd" });
     commit();
   }
-  async function takeDamage(n2, banish) {
-    for (let k = 0; k < n2; k++) {
+  async function takeDamage(n3, banish) {
+    for (let k = 0; k < n3; k++) {
       const me = G.me;
       if (!me.life.length) {
         lose("Son Leader a \xE9t\xE9 touch\xE9 sans carte Vie restante.");
@@ -24099,9 +24113,9 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       if (byOpp) await fireAll("onOwnLeaveOpp", null, c);
     }
   }
-  async function lifeToHand(n2, pos = "top") {
+  async function lifeToHand(n3, pos = "top") {
     const me = G.me;
-    for (let k = 0; k < n2 && me.life.length; k++) {
+    for (let k = 0; k < n3 && me.life.length; k++) {
       let p = pos;
       if (p === "either" && me.life.length > 1) {
         p = await ask(
@@ -24113,7 +24127,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       const i = p === "bottom" ? me.life[0] : me.life.at(-1);
       move(i.u, "hand");
     }
-    log(`ajoute ${n2} de ses Vies \xE0 sa main.`);
+    log(`ajoute ${n3} de ses Vies \xE0 sa main.`);
   }
   function canPay(costs, src) {
     const me = G.me;
@@ -24139,20 +24153,20 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         me.donActive -= c.n;
         me.donRested += c.n;
       } else if (c.k === "donReturn") {
-        let n2 = c.n;
+        let n3 = c.n;
         const take = (k) => {
-          const x = Math.min(n2, me[k]);
+          const x = Math.min(n3, me[k]);
           me[k] -= x;
-          n2 -= x;
+          n3 -= x;
         };
         take("donActive");
         take("donRested");
         for (const i of fieldInsts()) {
-          const x = Math.min(n2, i.d || 0);
+          const x = Math.min(n3, i.d || 0);
           i.d -= x;
-          n2 -= x;
+          n3 -= x;
         }
-        me.donDeck += c.n - n2;
+        me.donDeck += c.n - n3;
       } else if (c.k === "discard") {
         const ok = (i) => matches(myCard(i), c.f || {});
         const picked = await pickMany(`Co\xFBt : d\xE9faussez ${c.n} carte(s)`, me.hand, myCard, { min: c.n, max: c.n, selectable: ok, cancel: false });
@@ -24269,8 +24283,8 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         break;
       }
       case "discard": {
-        const n2 = Math.min(a.n, me.hand.length);
-        const picked = a.random === "yes" ? shuffle([...me.hand]).slice(0, n2) : await pickMany(title(`d\xE9faussez ${n2} carte(s)`), me.hand, myCard, { min: n2, max: n2, cancel: false });
+        const n3 = Math.min(a.n, me.hand.length);
+        const picked = a.random === "yes" ? shuffle([...me.hand]).slice(0, n3) : await pickMany(title(`d\xE9faussez ${n3} carte(s)`), me.hand, myCard, { min: n3, max: n3, cancel: false });
         for (const i of picked) {
           move(i.u, "trash");
           reveal(i, "D\xE9fauss\xE9e");
@@ -24396,27 +24410,27 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         break;
       }
       case "donAdd": {
-        const n2 = Math.min(a.n, me.donDeck);
-        me.donDeck -= n2;
-        if (a.state === "active") me.donActive += n2;
-        else me.donRested += n2;
-        log(`ajoute ${n2} DON!! ${a.state === "active" ? "actif(s)" : "repos\xE9(s)"}.`);
+        const n3 = Math.min(a.n, me.donDeck);
+        me.donDeck -= n3;
+        if (a.state === "active") me.donActive += n3;
+        else me.donRested += n3;
+        log(`ajoute ${n3} DON!! ${a.state === "active" ? "actif(s)" : "repos\xE9(s)"}.`);
         break;
       }
       case "donAttach": {
         const [x] = await chooseTargets({ ...t, n: 1 }, src, title("\xE0 qui attacher les DON!!"));
         if (!x) break;
-        const n2 = Math.min(a.n, me.donRested);
-        me.donRested -= n2;
-        x.d = (x.d || 0) + n2;
-        log(`attache ${n2} DON!! repos\xE9(s) \xE0 ${name(myCard(x))}.`);
+        const n3 = Math.min(a.n, me.donRested);
+        me.donRested -= n3;
+        x.d = (x.d || 0) + n3;
+        log(`attache ${n3} DON!! repos\xE9(s) \xE0 ${name(myCard(x))}.`);
         break;
       }
       case "donUntap": {
-        const n2 = Math.min(a.n, me.donRested);
-        me.donRested -= n2;
-        me.donActive += n2;
-        log(`redresse ${n2} DON!!.`);
+        const n3 = Math.min(a.n, me.donRested);
+        me.donRested -= n3;
+        me.donActive += n3;
+        log(`redresse ${n3} DON!!.`);
         break;
       }
       case "donOppReturn":
@@ -24532,9 +24546,9 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         for (const x of insts) applyMod(x, { k: m.op, amount: m.amount, dur: m.dur, kw: m.kw, by: m.by2 }, true);
         break;
       case "discard": {
-        const n2 = Math.min(m.n, me.hand.length);
-        if (!n2) break;
-        const picked = await pickMany(`Votre adversaire vous fait d\xE9fausser ${n2} carte(s)${by}`, me.hand, myCard, { min: n2, max: n2, cancel: false });
+        const n3 = Math.min(m.n, me.hand.length);
+        if (!n3) break;
+        const picked = await pickMany(`Votre adversaire vous fait d\xE9fausser ${n3} carte(s)${by}`, me.hand, myCard, { min: n3, max: n3, cancel: false });
         for (const i of picked) {
           move(i.u, "trash");
           reveal(i, "D\xE9fauss\xE9e");
@@ -24543,16 +24557,16 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         break;
       }
       case "donReturn": {
-        let n2 = m.n;
+        let n3 = m.n;
         const take = (k) => {
-          const x = Math.min(n2, me[k]);
+          const x = Math.min(n3, me[k]);
           me[k] -= x;
           me.donDeck += x;
-          n2 -= x;
+          n3 -= x;
         };
         take("donActive");
         take("donRested");
-        log(`renvoie ${m.n - n2} DON!! dans son deck DON!!${by}.`);
+        log(`renvoie ${m.n - n3} DON!! dans son deck DON!!${by}.`);
         break;
       }
       case "restDon": {
@@ -24774,14 +24788,14 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         commit();
       }, { cls: "hl" });
       act("Regarder les cartes du dessus\u2026", async () => {
-        const n2 = await ask(
+        const n3 = await ask(
           "Regarder le dessus du deck",
           "<p>Combien de cartes ?</p>",
           [1, 2, 3, 4, 5, 6, 7].map((v) => ({ label: String(v), value: v })).concat({ label: "Annuler", value: null, cls: "ghost" })
         );
-        if (!n2) return;
-        log(`regarde les ${n2} cartes du dessus de son deck.`);
-        openViewer("deck", n2);
+        if (!n3) return;
+        log(`regarde les ${n3} cartes du dessus de son deck.`);
+        openViewer("deck", n3);
       });
       act("Chercher dans tout le deck", () => {
         log("cherche dans son deck.");
@@ -24977,12 +24991,12 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         }
         const k = e.target.closest("[data-k]")?.dataset.k;
         if (k === void 0) return;
-        const n2 = +k;
-        if (chosen.has(n2)) chosen.delete(n2);
+        const n3 = +k;
+        if (chosen.has(n3)) chosen.delete(n3);
         else if (max === 1) {
           chosen.clear();
-          chosen.add(n2);
-        } else if (chosen.size < max) chosen.add(n2);
+          chosen.add(n3);
+        } else if (chosen.size < max) chosen.add(n3);
         draw();
       });
     });
@@ -25043,10 +25057,10 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     return `<div class="${cls.join(" ")}" data-u="${inst.u}" data-side="${side}" data-zone="${zone}" data-cid="${inst.c}" tabindex="0">
     ${cardHTML(c, { power: pw })}${inst.d ? `<span class="don-badge" title="DON!! attach\xE9s">+${inst.d} DON</span>` : ""}</div>`;
   }
-  function pile(kind, side, n2, label, top) {
-    const face = top ? cardHTML(top) : n2 ? cardHTML(null) : '<div class="card empty-pile"></div>';
-    return `<div class="pile p-${kind}" data-pile="${kind}" data-side="${side}" ${top ? `data-cid="${top.c || ""}"` : ""} tabindex="0" role="button" aria-label="${label} (${n2})">
-    ${face}<span class="count">${n2}</span><span class="lbl">${label}</span></div>`;
+  function pile(kind, side, n3, label, top) {
+    const face = top ? cardHTML(top) : n3 ? cardHTML(null) : '<div class="card empty-pile"></div>';
+    return `<div class="pile p-${kind}" data-pile="${kind}" data-side="${side}" ${top ? `data-cid="${top.c || ""}"` : ""} tabindex="0" role="button" aria-label="${label} (${n3})">
+    ${face}<span class="count">${n3}</span><span class="lbl">${label}</span></div>`;
   }
   function donArea(side, d) {
     const tokens = Array.from({ length: d.donActive }, () => '<span class="don"></span>').join("") + Array.from({ length: d.donRested }, () => '<span class="don rested"></span>').join("");
@@ -25059,17 +25073,17 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     const mine = side === "me";
     const d = mine ? G.me : G.opp;
     if (!d || !d.leader) return `<div class="side ${side} empty"><p class="muted">${mine ? "" : "En attente de l'adversaire\u2026"}</p></div>`;
-    const n2 = (x) => mine ? x.length : x;
+    const n3 = (x) => mine ? x.length : x;
     const chars = Array.from({ length: 5 }, (_, i) => d.chars[i] ? slot(d.chars[i], side, "chars") : '<div class="slot free"></div>').join("");
     const lifeUp = mine ? d.life.map((i) => i.fu ? i.c : null) : d.lifeUp || [];
     const getC = mine ? (id) => G.myCards[id] : (id) => G.oppCards[id];
     const upCount = lifeUp.filter(Boolean).length;
     const lifeTop = lifeUp.at(-1) ? { ...getC(lifeUp.at(-1)), c: lifeUp.at(-1) } : null;
     const base = `<div class="row base">
-      ${pile("life", side, n2(d.life), upCount ? `Vie \xB7 ${upCount} visible${upCount > 1 ? "s" : ""}` : "Vie", lifeTop)}
+      ${pile("life", side, n3(d.life), upCount ? `Vie \xB7 ${upCount} visible${upCount > 1 ? "s" : ""}` : "Vie", lifeTop)}
       <div class="leader-zone">${slot(d.leader, side, "leader")}</div>
       <div class="stage-zone">${d.stage ? slot(d.stage, side, "stage") : '<div class="slot free stage-free"><span>Lieu</span></div>'}</div>
-      ${pile("deck", side, n2(d.deck), "Deck")}
+      ${pile("deck", side, n3(d.deck), "Deck")}
       ${pile("trash", side, d.trash.length, "D\xE9fausse", d.trash.at(-1) ? { ...mine ? myCard(d.trash.at(-1)) : oppCard(d.trash.at(-1)), c: d.trash.at(-1).c } : null)}
       ${donArea(side, d)}
     </div>`;
@@ -25086,9 +25100,9 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     const top = up.at(-1);
     return top ? { ...(mine ? G.myCards : G.oppCards)[top], c: top } : null;
   }
-  function mpile(kind, side, n2, label, top) {
-    return `<div class="mpile p-${kind}" data-pile="${kind}" data-side="${side}" ${top ? `data-cid="${top.c || ""}"` : ""} tabindex="0" role="button" aria-label="${label} (${n2})">
-    ${top ? `<div class="mtop">${cardHTML(top)}</div>` : `<div class="stack${n2 ? "" : " empty"}"></div>`}<b class="cnt">${n2}</b><span class="lab">${label}</span></div>`;
+  function mpile(kind, side, n3, label, top) {
+    return `<div class="mpile p-${kind}" data-pile="${kind}" data-side="${side}" ${top ? `data-cid="${top.c || ""}"` : ""} tabindex="0" role="button" aria-label="${label} (${n3})">
+    ${top ? `<div class="mtop">${cardHTML(top)}</div>` : `<div class="stack${n3 ? "" : " empty"}"></div>`}<b class="cnt">${n3}</b><span class="lab">${label}</span></div>`;
   }
   function mdons(side) {
     const d = side === "me" ? G.me : G.opp;
@@ -25101,7 +25115,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     const mine = side === "me";
     const d = mine ? G.me : G.opp;
     if (!d?.leader) return `<section class="mside ${side} empty"><p class="small">${mine ? "" : "En attente de l'adversaire\u2026"}</p></section>`;
-    const n2 = (x) => mine ? x.length : x;
+    const n3 = (x) => mine ? x.length : x;
     const free = '<div class="slot free"></div>';
     const chars = Array.from({ length: 5 }, (_, i) => d.chars[i] ? slot(d.chars[i], side, "chars") : free).join("");
     const lead = `<div class="mrow">${d.stage ? slot(d.stage, side, "stage") : free}<div class="mlead">${slot(d.leader, side, "leader")}</div><div class="slot free ghost"></div></div>`;
@@ -25109,9 +25123,9 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     const tr = d.trash.at(-1);
     const trTop = tr ? { ...mine ? myCard(tr) : oppCard(tr), c: tr.c } : null;
     return `<section class="mside ${side}">
-    <div class="mrail">${mpile("life", side, n2(d.life), "Vie", lifeTopOf(side))}</div>
+    <div class="mrail">${mpile("life", side, n3(d.life), "Vie", lifeTopOf(side))}</div>
     <div class="mfield">${mine ? ch + lead : lead + ch}</div>
-    <div class="mrail">${mpile("deck", side, n2(d.deck), "Deck")}${mpile("trash", side, d.trash.length, "D\xE9fausse", trTop)}</div></section>`;
+    <div class="mrail">${mpile("deck", side, n3(d.deck), "Deck")}${mpile("trash", side, d.trash.length, "D\xE9fausse", trTop)}</div></section>`;
   }
   function mobileBoardHTML() {
     const o = G.opp;
@@ -25520,7 +25534,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     </section>
     <section class="bs-stage"></section>
     <details class="panel small bs-rates"><summary>Contenu d'un booster</summary>
-      <ul>${RATES.map(([n2, r]) => `<li><b>${n2}</b> : ${r}</li>`).join("")}</ul>
+      <ul>${RATES.map(([n3, r]) => `<li><b>${n3}</b> : ${r}</li>`).join("")}</ul>
       <p class="muted">Une carte <b>1on1</b> n'existe qu'en un seul exemplaire dans tout le jeu : le premier qui la tire est le seul \xE0 l'avoir.</p>
       <p class="muted">1 booster gratuit toutes les 10 minutes (6 en r\xE9serve au maximum), plus les boosters offerts par les admins.</p>
     </details>
@@ -25640,10 +25654,10 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       }).join("");
       const list = S.cards.filter((c) => (!filter2.rarity || c.rarity === filter2.rarity) && (!filter2.type || c.type === filter2.type) && (filter2.own !== "yes" || S.collection[c.id]) && (filter2.own !== "no" || !S.collection[c.id]) && (!filter2.q || `${c.name} ${c.code} ${c.traits} ${c.effect}`.toLowerCase().includes(filter2.q))).sort((a, b) => RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity));
       q(".cl-grid").innerHTML = list.map((c) => {
-        const n2 = S.collection[c.id] || 0;
+        const n3 = S.collection[c.id] || 0;
         const owner = c.rarity === "S" ? S.oneOfOne[c.id] : null;
         const tag = c.rarity === "S" ? `<span class="one-owner">${owner ? `Poss\xE9d\xE9e par ${esc(owner)}` : "Encore \xE0 prendre !"}</span>` : "";
-        return `<div class="grid-card ${n2 ? "" : "missing"}" title="${esc(c.name)}">${cardHTML(c)}${n2 ? `<span class="qty">\xD7${n2}</span>` : ""}${tag}</div>`;
+        return `<div class="grid-card ${n3 ? "" : "missing"}" title="${esc(c.name)}">${cardHTML(c)}${n3 ? `<span class="qty">\xD7${n3}</span>` : ""}${tag}</div>`;
       }).join("") || '<p class="muted">Aucune carte.</p>';
     }
   }
@@ -25704,10 +25718,10 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     q(".ad-give").addEventListener("submit", async (e) => {
       e.preventDefault();
       const target = q(".ad-target").value;
-      const n2 = +q(".ad-n").value;
+      const n3 = +q(".ad-n").value;
       try {
-        const count = await giveBoosters(target === "*" ? null : target, n2);
-        msg2(`${n2} booster${n2 > 1 ? "s" : ""} donn\xE9${n2 > 1 ? "s" : ""} \xE0 ${target === "*" ? `${count} joueur${count > 1 ? "s" : ""}` : target}.`);
+        const count = await giveBoosters(target === "*" ? null : target, n3);
+        msg2(`${n3} booster${n3 > 1 ? "s" : ""} donn\xE9${n3 > 1 ? "s" : ""} \xE0 ${target === "*" ? `${count} joueur${count > 1 ? "s" : ""}` : target}.`);
         refresh();
       } catch (err) {
         msg2(err.message, true);
@@ -25817,6 +25831,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   }
 
   // js/app.js
+  document.querySelector(".top .brand").innerHTML = logoSVG();
   var tabs = document.querySelectorAll("[data-tab]");
   function show(name2) {
     if (!document.querySelector(`[data-tab=${name2}]:not([hidden])`)) name2 = "boosters";

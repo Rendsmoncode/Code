@@ -1,6 +1,7 @@
 // Écran de connexion / création de compte, et choix du deck préconstruit.
 import { S, signIn, signUp, claimStarter, validateDeck, inviteInfo } from './store.js';
 import { esc, cardHTML } from './cards.js';
+import { logoSVG } from './logo.js';
 
 export async function showAuth() {
   let mode = 'in';
@@ -15,7 +16,7 @@ export async function showAuth() {
   function render() {
     el.innerHTML = `
     <form class="panel auth-box" autocomplete="on">
-      <h1>OPTCG <span>Maison</span></h1>
+      <h1 class="brand">${logoSVG()}</h1>
       <div class="seg" role="tablist">
         <button type="button" data-mode="in" class="${mode === 'in' ? 'on' : ''}">Se connecter</button>
         <button type="button" data-mode="up" class="${mode === 'up' ? 'on' : ''}">Créer un compte</button>

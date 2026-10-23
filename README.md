@@ -1,4 +1,4 @@
-# OPTCG Maison
+# Nakama TCG
 
 Simulateur de jeu de cartes **dans le navigateur**, avec les règles du One Piece Card Game, mais avec **vos propres cartes**.
 

@@ -8,6 +8,9 @@ import { initBoosters, initCollection } from './boosters.js';
 import { initAdmin } from './admin.js';
 import { openSettings } from './settings.js';
 import { initCredits } from './credits.js';
+import { logoSVG } from './logo.js';
+
+document.querySelector('.top .brand').innerHTML = logoSVG();
 
 const tabs = document.querySelectorAll('[data-tab]');
 
