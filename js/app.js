@@ -11,6 +11,7 @@ import { initCredits } from './credits.js';
 import { logoSVG } from './logo.js';
 import { icon } from './icons.js';
 import { initHome } from './home.js';
+import { initAchievements } from './achievements.js';
 
 document.querySelector('.top .brand').innerHTML = logoSVG('', true);
 document.querySelectorAll('[data-ico]').forEach((b) => b.insertAdjacentHTML('afterbegin', icon(b.dataset.ico)));
@@ -55,6 +56,7 @@ async function start() {
   });
   initPlay();
   initCredits();
+  initAchievements();
   if (admin) { initEditor(); initAdmin(); }
 
   let first = 'home';

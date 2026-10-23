@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Nakama TCG</title>
   <link rel="icon" href="img/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=mvl0u5hu">
-  <link rel="stylesheet" href="cards.css?v=mvl0u5hu">
+  <link rel="stylesheet" href="style.css?v=mvl1b0cj">
+  <link rel="stylesheet" href="cards.css?v=mvl1b0cj">
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <!-- app.js est généré depuis js/ par : npm run build -->
-  <script src="app.js?v=mvl0u5hu" defer></script>
+  <script src="app.js?v=mvl1b0cj" defer></script>
 </head>
 <body>
   <header class="top">
@@ -20,11 +20,13 @@
       <button role="tab" data-tab="collection" data-ico="cards">Collection</button>
       <button role="tab" data-tab="decks" data-ico="deck">Decks</button>
       <button role="tab" data-tab="play" data-ico="play">Jouer</button>
+      <button role="tab" data-tab="achievements" data-ico="trophy" class="pc-only">Succès</button>
       <button class="tel-only menu-btn" data-ico="more">Plus</button>
     </nav>
     <div class="who"></div>
     <div class="menu" hidden>
       <button data-tab="boosters" data-ico="pack" class="tel-only">Boosters</button>
+      <button data-tab="achievements" data-ico="trophy" class="tel-only">Succès</button>
       <button data-tab="credits" data-ico="star">Crédits photo</button>
       <button data-tab="cards" data-ico="edit" class="admin-only" hidden>Cartes</button>
       <button data-tab="admin" data-ico="shield" class="admin-only" hidden>Admin</button>
@@ -38,6 +40,7 @@
     <section class="tab" id="tab-collection" role="tabpanel" hidden></section>
     <section class="tab" id="tab-decks" role="tabpanel" hidden></section>
     <section class="tab" id="tab-play" role="tabpanel" hidden></section>
+    <section class="tab" id="tab-achievements" role="tabpanel" hidden></section>
     <section class="tab" id="tab-credits" role="tabpanel" hidden></section>
     <section class="tab" id="tab-cards" role="tabpanel" hidden></section>
     <section class="tab" id="tab-admin" role="tabpanel" hidden></section>

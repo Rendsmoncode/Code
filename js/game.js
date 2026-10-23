@@ -8,6 +8,7 @@ import {
 import { WHEN, CONTINUOUS_ACTIONS, effectText, effectsText } from './effects.js';
 import * as net from './net.js';
 import { getTheme, openSettings } from './settings.js';
+import { recordGame } from './achievements.js';
 
 const root = () => document.getElementById('tab-play');
 let G = null;
@@ -179,10 +180,10 @@ function connect(isHost, code, resumed = null) {
       retries = 0;
       lobby.status = 'playing';
       if (G.phase === 'hello') {
-        send({ t: 'hello', name: G.name, cards: G.myCards });
+        send({ t: 'hello', name: G.name, user: S.status?.username, cards: G.myCards });
         if (!again) sys('Connecté. Échange des decks…');
       } else {
-        send({ t: 'resume', name: G.name, cards: G.myCards, view: pub(), turn: G.turn });
+        send({ t: 'resume', name: G.name, user: S.status?.username, cards: G.myCards, view: pub(), turn: G.turn });
       }
       render();
     },
@@ -234,6 +235,7 @@ function onMsg(m) {
   switch (m.t) {
     case 'resume': {
       G.oppName = m.name || G.oppName;
+      G.oppUser = m.user || G.oppUser;
       G.oppCards = m.cards || G.oppCards;
       G.opp = m.view;
       if ((m.turn?.count || 0) > (G.turn?.count || 0)) G.turn = m.turn;
@@ -247,6 +249,7 @@ function onMsg(m) {
     case 'hello':
       if (G.phase !== 'hello') { sys('Votre adversaire a relancé une nouvelle partie de son côté : la partie en cours ne peut pas reprendre.'); break; }
       G.oppName = m.name || 'Adversaire';
+      G.oppUser = m.user || null;
       G.oppCards = m.cards || {};
       G.oppHello = true;
       sys(`${G.oppName} a rejoint la partie.`);
@@ -273,7 +276,7 @@ function onMsg(m) {
     case 'attack': G.battle = { ...m.b, role: 'def' }; render(); fireAll('onOppAttack'); return;
     case 'battleUpd': if (G.battle) Object.assign(G.battle, m.b); break;
     case 'battleEnd': G.battle = null; G.select = null; endBattleMods(); break;
-    case 'gameover': G.phase = 'over'; G.winner = m.winner; G.overReason = m.reason; clearSave(); break;
+    case 'gameover': G.phase = 'over'; G.winner = m.winner; G.overReason = m.reason; clearSave(); saveResult(); break;
     case 'rematch': resetMatch(); return;
     default: break;
   }
@@ -426,15 +429,23 @@ function lose(reason) {
   G.battle = null;
   log(`a perdu : ${reason}`);
   clearSave();
+  saveResult();
   send({ t: 'gameover', winner: G.winner, reason });
   send({ t: 'view', v: pub() });
   render();
 }
 
+// Résultat de la partie pour les succès (pas en mode local : ce sont deux onglets du même joueur).
+function saveResult() {
+  if (G.recorded || lobby.mode === 'local') return;
+  G.recorded = true;
+  recordGame({ won: G.winner === G.role, opponent: G.oppUser, livesLeft: G.me.life.length, perfect: !G.dmg });
+}
+
 function resetMatch() {
   Object.assign(G, {
     phase: 'hello', coinWinner: null, first: null, turn: { player: null, count: 0 }, me: emptySide(), opp: null,
-    meReady: false, oppReady: false, battle: null, select: null, winner: null, reveals: [], manual: null, oppManual: null,
+    meReady: false, oppReady: false, battle: null, select: null, winner: null, reveals: [], manual: null, oppManual: null, recorded: false, dmg: 0,
   });
   sys('Nouvelle partie !');
   if (G.role === 'host') coinFlip();
@@ -668,6 +679,7 @@ async function takeDamage(n, banish) {
     const me = G.me;
     if (!me.life.length) { lose('Son Leader a été touché sans carte Vie restante.'); return true; }
     const inst = me.life.pop();
+    G.dmg = (G.dmg || 0) + 1; // Vies perdues par des dégâts (succès « Victoire parfaite »)
     delete inst.fu;
     const c = myCard(inst);
     if (banish) {
@@ -1171,7 +1183,9 @@ async function doFx(a, ctx) {
       const ok = (i) => matches(myCard(i), a.f || {});
       const picked = (await pickMany(title(`prenez jusqu'à ${a.take} carte(s)`), top, myCard, { max: a.take, selectable: ok })) || [];
       for (const i of picked) { move(i.u, 'hand'); reveal(i, 'Ajoutée à la main'); }
-      for (const i of top.filter((x) => !picked.includes(x))) move(i.u, a.rest === 'trash' ? 'trash' : 'deck', 'bottom');
+      for (const i of top.filter((x) => !picked.includes(x))) {
+        if (a.rest === 'life') move(i.u, 'life', 'top'); else move(i.u, a.rest === 'trash' ? 'trash' : 'deck', 'bottom');
+      }
       log(`regarde ${top.length} carte(s) du dessus de son deck${picked.length ? ` et prend ${picked.map((i) => name(myCard(i))).join(', ')}` : ''}.`);
       break;
     }

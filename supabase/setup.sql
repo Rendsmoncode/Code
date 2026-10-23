@@ -1,5 +1,5 @@
 -- =====================================================================
--- OPTCG Maison : configuration de la base Supabase
+-- Nakama TCG : configuration de la base Supabase
 -- À copier-coller en entier dans Supabase > SQL Editor > New query > Run.
 -- Le script peut être relancé sans risque : il ne supprime aucune donnée.
 -- =====================================================================
@@ -61,6 +61,32 @@ create table if not exists public.invites (
   created_at timestamptz not null default now(),
   used_by uuid references public.profiles on delete set null,
   used_at timestamptz
+);
+
+-- Statistiques de chaque joueur pour les succès. Les boosters sont comptés par le serveur,
+-- les parties sont déclarées par le jeu à la fin de chaque match.
+create table if not exists public.stats (
+  user_id uuid primary key references public.profiles on delete cascade,
+  boosters_opened int not null default 0,
+  dry_streak int not null default 0,       -- boosters d'affilée sans SR ou mieux
+  max_dry_streak int not null default 0,
+  god_packs int not null default 0,
+  best_batch int not null default 0,       -- plus grand nombre de boosters ouverts d'un coup
+  two_legends boolean not null default false,
+  games int not null default 0,
+  wins int not null default 0,
+  win_streak int not null default 0,
+  best_win_streak int not null default 0,
+  perfect_wins int not null default 0,     -- victoires sans perdre de Vie
+  comeback_wins int not null default 0,    -- victoires avec 0 Vie restante
+  beaten text[] not null default '{}'      -- pseudos des amis battus
+);
+
+create table if not exists public.achievements (
+  user_id uuid not null references public.profiles on delete cascade,
+  code text not null,
+  unlocked_at timestamptz not null default now(),
+  primary key (user_id, code)
 );
 
 -- ---------- Fonctions utilitaires ----------
@@ -179,15 +205,18 @@ end $$;
 
 -- Ouvre un booster de 5 cartes : 3 Communes, 1 Peu commune, 1 Rare ou mieux.
 -- Dernière carte : 1 SR sur 4, 1 UR sur 15, 1 LR sur 50, 1 « 1on1 » sur 2 000, sinon Rare.
+-- God Pack : 1 booster sur 1 000 ne contient que des cartes SR ou mieux (SR 60 %, UR 30 %, LR 10 %).
 create or replace function public.open_booster() returns json
 language plpgsql security definer set search_path = public as $$
 declare
   p public.profiles;
   roll float := random();
+  god boolean := random() < 1.0 / 1000;
   slots text[];
   r text;
   cid text;
   is_new boolean;
+  lucky boolean;
   result json[] := '{}';
 begin
   select * into p from public.profiles where id = auth.uid() for update;
@@ -201,12 +230,20 @@ begin
   else
     raise exception 'Aucun booster disponible pour le moment.';
   end if;
-  slots := array['C', 'C', 'C', 'UC', case
-    when roll < 1.0 / 2000 then 'S'
-    when roll < 1.0 / 2000 + 1.0 / 50 then 'L'
-    when roll < 1.0 / 2000 + 1.0 / 50 + 1.0 / 15 then 'UR'
-    when roll < 1.0 / 2000 + 1.0 / 50 + 1.0 / 15 + 1.0 / 4 then 'SR'
-    else 'R' end];
+  if god then
+    slots := '{}';
+    for i in 1..5 loop
+      roll := random();
+      slots := slots || case when roll < 0.1 then 'L' when roll < 0.4 then 'UR' else 'SR' end;
+    end loop;
+  else
+    slots := array['C', 'C', 'C', 'UC', case
+      when roll < 1.0 / 2000 then 'S'
+      when roll < 1.0 / 2000 + 1.0 / 50 then 'L'
+      when roll < 1.0 / 2000 + 1.0 / 50 + 1.0 / 15 then 'UR'
+      when roll < 1.0 / 2000 + 1.0 / 50 + 1.0 / 15 + 1.0 / 4 then 'SR'
+      else 'R' end];
+  end if;
   foreach r in array slots loop
     -- Verrou : deux joueurs ne peuvent pas tirer la même 1on1 au même instant.
     if r = 'S' then perform pg_advisory_xact_lock(hashtext('optcg-one-of-one')); end if;
@@ -215,10 +252,47 @@ begin
     is_new := not exists (select 1 from public.collection where user_id = p.id and card_id = cid);
     insert into public.collection (user_id, card_id, qty) values (p.id, cid, 1)
       on conflict (user_id, card_id) do update set qty = public.collection.qty + 1;
-    result := result || json_build_object('id', cid, 'new', is_new);
+    result := result || json_build_object('id', cid, 'new', is_new, 'god', god);
   end loop;
+  -- Statistiques pour les succès (boosters ouverts, série sans SR ou mieux, God Packs).
+  lucky := god or slots[5] in ('SR', 'UR', 'L', 'S');
+  insert into public.stats (user_id) values (p.id) on conflict do nothing;
+  update public.stats set
+    boosters_opened = boosters_opened + 1,
+    god_packs = god_packs + god::int,
+    dry_streak = case when lucky then 0 else dry_streak + 1 end,
+    max_dry_streak = greatest(max_dry_streak, case when lucky then 0 else dry_streak + 1 end)
+    where user_id = p.id;
   return array_to_json(result);
 end $$;
+
+-- Ouvre jusqu'à 10 boosters d'un coup. S'il n'en reste plus en route, on rend ceux déjà ouverts.
+create or replace function public.open_boosters(n int) returns json
+language plpgsql security definer set search_path = public as $$
+declare
+  res jsonb := '[]';
+  legends int;
+begin
+  if n < 1 or n > 10 then raise exception 'On peut ouvrir de 1 à 10 boosters à la fois.'; end if;
+  for k in 1..n loop
+    begin
+      res := res || public.open_booster()::jsonb;
+    exception when others then
+      if k = 1 then raise; end if;
+      exit;
+    end;
+  end loop;
+  select count(*) into legends from jsonb_array_elements(res) e join public.cards c on c.id = e->>'id' where c.rarity = 'L';
+  update public.stats set best_batch = greatest(best_batch, jsonb_array_length(res) / 5), two_legends = two_legends or legends >= 2
+    where user_id = auth.uid();
+  return res;
+end $$;
+
+-- Une carte 1on1 est révélée à tous dès qu'un joueur l'a tirée.
+create or replace function public.is_revealed(cid text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.collection where card_id = cid);
+$$;
 
 -- Qui possède chaque carte 1on1 (visible par tous).
 create or replace function public.one_of_one_owners() returns table (card_id text, username text)
@@ -335,6 +409,13 @@ alter table public.starter_decks enable row level security;
 alter table public.collection enable row level security;
 alter table public.decks enable row level security;
 alter table public.invites enable row level security;
+alter table public.stats enable row level security;
+alter table public.achievements enable row level security;
+
+drop policy if exists "mes stats" on public.stats;
+create policy "mes stats" on public.stats for select to authenticated using (user_id = auth.uid());
+drop policy if exists "mes succes" on public.achievements;
+create policy "mes succes" on public.achievements for select to authenticated using (user_id = auth.uid());
 
 drop policy if exists "invitations admin" on public.invites;
 create policy "invitations admin" on public.invites for all to authenticated
@@ -343,8 +424,10 @@ create policy "invitations admin" on public.invites for all to authenticated
 drop policy if exists "profils visibles" on public.profiles;
 create policy "profils visibles" on public.profiles for select to authenticated using (true);
 
+-- Les cartes 1on1 restent secrètes tant que personne ne les a tirées (sauf pour les admins).
 drop policy if exists "cartes visibles" on public.cards;
-create policy "cartes visibles" on public.cards for select to authenticated using (true);
+create policy "cartes visibles" on public.cards for select to authenticated using (
+  rarity <> 'S' or public.is_admin() or public.is_revealed(id));
 drop policy if exists "cartes admin" on public.cards;
 create policy "cartes admin" on public.cards for all to authenticated
   using (public.is_admin()) with check (public.is_admin());
@@ -362,18 +445,102 @@ drop policy if exists "mes decks" on public.decks;
 create policy "mes decks" on public.decks for all to authenticated
   using (user_id = auth.uid()) with check (user_id = auth.uid());
 
+-- =====================================================================
+-- Succès
+-- =====================================================================
+
+-- Fin de partie déclarée par le jeu (chaque joueur déclare son propre résultat).
+create or replace function public.record_game(won boolean, opponent text, lives_left int, perfect boolean) returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  me text;
+  opp text;
+begin
+  select username into me from public.profiles where id = auth.uid();
+  select username into opp from public.profiles where username = lower(opponent);
+  if me is null or opp is null or opp = me then return; end if;
+  insert into public.stats (user_id) values (auth.uid()) on conflict do nothing;
+  update public.stats set
+    games = games + 1,
+    wins = wins + won::int,
+    win_streak = case when won then win_streak + 1 else 0 end,
+    best_win_streak = greatest(best_win_streak, case when won then win_streak + 1 else 0 end),
+    perfect_wins = perfect_wins + (won and perfect)::int,
+    comeback_wins = comeback_wins + (won and lives_left = 0)::int,
+    beaten = case when won and not (opp = any(beaten)) then beaten || opp else beaten end
+    where user_id = auth.uid();
+end $$;
+
+-- Vérifie tous les succès du joueur, enregistre les nouveaux et donne les boosters en récompense.
+-- Renvoie la liste des succès débloqués à l'instant. (Les mêmes codes sont décrits dans js/achievements.js.)
+create or replace function public.check_achievements() returns json
+language plpgsql security definer set search_path = public as $$
+declare
+  uid uuid := auth.uid();
+  s public.stats;
+  owned int; total int; own_c int; tot_c int; own_r int; tot_r int; legs int; ones int; urs int;
+  theme boolean;
+  rec record;
+  gain int := 0;
+  fresh json[] := '{}';
+begin
+  insert into public.stats (user_id) values (uid) on conflict do nothing;
+  select * into s from public.stats where user_id = uid;
+  select count(*) filter (where k.in_boosters and k.rarity <> 'S'),
+         count(*) filter (where k.in_boosters and k.rarity = 'C'), count(*) filter (where k.in_boosters and k.rarity = 'R'),
+         count(*) filter (where k.rarity = 'L'), count(*) filter (where k.rarity = 'S'), count(*) filter (where k.rarity = 'UR')
+    into owned, own_c, own_r, legs, ones, urs
+    from public.collection c join public.cards k on k.id = c.card_id where c.user_id = uid;
+  select count(*) filter (where rarity <> 'S'), count(*) filter (where rarity = 'C'), count(*) filter (where rarity = 'R')
+    into total, tot_c, tot_r from public.cards where in_boosters;
+  -- Un thème (type) d'au moins 5 cartes entièrement possédé.
+  select exists (
+    select 1 from public.cards k, unnest(string_to_array(k.data->>'traits', '/')) t
+    where k.in_boosters and k.rarity <> 'S'
+    group by trim(t) having count(*) >= 5
+      and bool_and(exists (select 1 from public.collection c where c.user_id = uid and c.card_id = k.id))) into theme;
+
+  for rec in select * from (values
+    ('win1', s.wins >= 1, 1), ('win10', s.wins >= 10, 3), ('win20', s.wins >= 20, 5),
+    ('games10', s.games >= 10, 2), ('games50', s.games >= 50, 5),
+    ('perfect', s.perfect_wins >= 1, 3), ('comeback', s.comeback_wins >= 1, 3),
+    ('streak3', s.best_win_streak >= 3, 3), ('streak5', s.best_win_streak >= 5, 5),
+    ('friends5', coalesce(array_length(s.beaten, 1), 0) >= 5, 5),
+    ('own25', owned >= 25, 1), ('own50', owned >= 50, 2), ('own100', owned >= 100, 3), ('own200', owned >= 200, 5),
+    ('set50', total > 0 and owned * 2 >= total, 3), ('set100', total > 0 and owned >= total, 10),
+    ('allC', tot_c > 0 and own_c >= tot_c, 3), ('allR', tot_r > 0 and own_r >= tot_r, 5),
+    ('leg1', legs >= 1, 2), ('leg5', legs >= 5, 5), ('secret', ones >= 1, 10), ('theme', theme, 3),
+    ('all', total > 0 and owned >= total, 0),
+    ('open1', s.boosters_opened >= 1, 1), ('open10', s.boosters_opened >= 10, 1), ('open50', s.boosters_opened >= 50, 2),
+    ('open100', s.boosters_opened >= 100, 3), ('open500', s.boosters_opened >= 500, 5),
+    ('open1000', s.boosters_opened >= 1000, 8), ('open2000', s.boosters_opened >= 2000, 10),
+    ('firstUR', urs >= 1, 1), ('firstL', legs >= 1, 2), ('firstS', ones >= 1, 10),
+    ('batch10', s.best_batch >= 10, 2), ('twoL', s.two_legends, 5), ('dry20', s.max_dry_streak >= 20, 3),
+    ('god', s.god_packs >= 1, 10)
+  ) as v(code, ok, reward) loop
+    if rec.ok and not exists (select 1 from public.achievements a where a.user_id = uid and a.code = rec.code) then
+      insert into public.achievements (user_id, code) values (uid, rec.code);
+      gain := gain + rec.reward;
+      fresh := fresh || json_build_object('code', rec.code, 'reward', rec.reward);
+    end if;
+  end loop;
+  if gain > 0 then update public.profiles set boosters = boosters + gain where id = uid; end if;
+  return array_to_json(fresh);
+end $$;
+
 -- ---------- Droits d'accès (l'exposition automatique des tables est désactivée) ----------
 
 revoke all on all tables in schema public from anon;
 grant usage on schema public to authenticated;
-grant select on public.profiles, public.collection to authenticated;
+grant select on public.profiles, public.collection, public.stats, public.achievements to authenticated;
 grant select, insert, update, delete on public.cards, public.starter_decks, public.decks to authenticated;
 grant select, delete on public.invites to authenticated;
 
 revoke execute on all functions in schema public from public, anon, authenticated;
 grant execute on function public.is_admin(), public.booster_status(), public.open_booster(), public.one_of_one_owners(),
   public.claim_starter(text), public.admin_give_boosters(text, int), public.admin_set_role(text, text),
-  public.admin_create_invite(text, text, int)
+  public.admin_create_invite(text, text, int), public.is_revealed(text), public.open_boosters(int),
+  public.record_game(boolean, text, int, boolean), public.check_achievements()
   to authenticated;
 grant usage on schema public to anon;
 grant execute on function public.invite_info(text) to anon, authenticated;

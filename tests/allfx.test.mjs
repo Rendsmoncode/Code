@@ -82,6 +82,7 @@ await act('draw', [{ k: 'draw', n: 2 }], async () => [s1.hand === s0.hand + 2, `
 await act('discard', [{ k: 'discard', n: 1 }], async () => [s1.hand === s0.hand - 1 && s1.trash === s0.trash + 1, `main ${s0.hand}->${s1.hand}`]);
 await act('oppDiscard', [{ k: 'oppDiscard', n: 1 }], async () => [b1.hand === b0.hand - 1, `B main ${b0.hand}->${b1.hand}`], { wait: 1200 });
 await act('look', [{ k: 'look', n: 3, take: 1, rest: 'bottom', f: {} }], async () => [s1.hand === s0.hand + 1 && s1.deck === s0.deck - 1, `main +${s1.hand - s0.hand}`]);
+await act('look (reste dans la Vie)', [{ k: 'look', n: 3, take: 1, rest: 'life', f: {} }], async () => [s1.hand === s0.hand + 1 && s1.deck === s0.deck - 3 && s1.life === s0.life + 2, `main +${s1.hand - s0.hand}, vie +${s1.life - s0.life}`]);
 await act('search', [{ k: 'search', f: {} }], async () => [s1.hand === s0.hand + 1, '']);
 await act('mill', [{ k: 'mill', n: 2 }], async () => [s1.trash === s0.trash + 2 && s1.deck === s0.deck - 2, '']);
 await act('playFree', [{ k: 'playFree', max: 5, from: 'hand', f: {} }], async () => [s1.chars === s0.chars + 1, `persos ${s0.chars}->${s1.chars}`]);

@@ -150,8 +150,8 @@ export const ACTIONS = {
   oppDiscard: { label: 'L\'adversaire défausse', params: [n('n', 'Cartes')], text: (p) => `votre adversaire défausse ${p.n} carte${p.n > 1 ? 's' : ''} de sa main` },
   look: {
     label: 'Regarder le dessus du deck et prendre', params: [n('n', 'Cartes regardées', 5), n('take', 'Cartes prises (max)', 1), FILTER,
-      { k: 'rest', label: 'Le reste', type: 'sel', def: 'bottom', opts: { bottom: 'sous le deck', trash: 'à la défausse' } }],
-    text: (p) => `regardez les ${p.n} cartes du dessus de votre deck, révélez jusqu'à ${p.take} carte${p.take > 1 ? 's' : ''}${filterText(p.f, true)} et ajoutez-la à votre main, puis placez le reste ${p.rest === 'trash' ? 'dans votre défausse' : 'sous votre deck dans l\'ordre de votre choix'}`,
+      { k: 'rest', label: 'Le reste', type: 'sel', def: 'bottom', opts: { bottom: 'sous le deck', trash: 'à la défausse', life: 'dans la Vie' } }],
+    text: (p) => `regardez les ${p.n} cartes du dessus de votre deck, révélez jusqu'à ${p.take} carte${p.take > 1 ? 's' : ''}${filterText(p.f, true)} et ajoutez-la à votre main, puis placez le reste ${{ trash: 'dans votre défausse', life: 'sur le dessus de votre Vie, face cachée' }[p.rest] || 'sous votre deck dans l\'ordre de votre choix'}`,
   },
   search: { label: 'Chercher une carte dans le deck', params: [FILTER], text: (p) => `cherchez dans votre deck 1 carte${filterText(p.f, true)}, ajoutez-la à votre main, puis mélangez votre deck` },
   trashToHand: {

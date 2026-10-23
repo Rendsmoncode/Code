@@ -39,9 +39,10 @@ export function initHome(go) {
       q('.hm-open').disabled = !b.total;
       q('.hm-boost').textContent = b.total;
     }
-    const owned = S.cards.filter((c) => S.collection[c.id]).length;
-    q('.hm-coll').textContent = `${owned} / ${S.cards.length}`;
-    q('.hm-stats .bar i').style.width = `${S.cards.length ? (100 * owned) / S.cards.length : 0}%`;
+    const cards = S.cards.filter((c) => c.rarity !== 'S' || S.oneOfOne[c.id]); // 1on1 secrètes
+    const owned = cards.filter((c) => S.collection[c.id]).length;
+    q('.hm-coll').textContent = `${owned} / ${cards.length}`;
+    q('.hm-stats .bar i').style.width = `${cards.length ? (100 * owned) / cards.length : 0}%`;
     q('.hm-decks').textContent = S.decks.length;
   }
   onChange(render);

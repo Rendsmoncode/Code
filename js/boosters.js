@@ -2,11 +2,12 @@
 import { S, openBoosters, refreshStatus, onChange } from './store.js';
 import { RARITIES, RARITY_ORDER, TYPES, esc, cardHTML } from './cards.js';
 import { logoSVG } from './logo.js';
+import { refreshAchievements } from './achievements.js';
 
 const RATES = [
   ['3 cartes', 'Commune'],
   ['1 carte', 'Peu commune'],
-  ['1 carte', 'Rare ou mieux : 1 Super rare (SR) tous les 4 boosters, 1 Ultra rare (UR) tous les 15, 1 Légendaire (LR) tous les 50, 1 « 1on1 » tous les 2 000'],
+  ['1 carte', 'Rare ou mieux : 1 Super rare (SR) tous les 4 boosters, 1 Ultra rare (UR) tous les 15, 1 Légendaire (LR) tous les 50'],
 ];
 
 let busy = false;
@@ -57,7 +58,6 @@ export function initBoosters() {
     </section>
     <details class="bs-rates"><summary>Contenu d'un booster</summary>
       <ul>${RATES.map(([n, r]) => `<li><b>${n}</b> : ${r}</li>`).join('')}</ul>
-      <p class="muted">Une carte <b>1on1</b> n'existe qu'en un seul exemplaire dans tout le jeu : le premier qui la tire est le seul à l'avoir.</p>
       <p class="muted">1 booster gratuit toutes les 10 minutes (6 en réserve au maximum), plus les boosters offerts par les admins.</p>
     </details>
   </div>`;
@@ -77,7 +77,7 @@ export function initBoosters() {
       pack.classList.add('tear');
       await wait(650);
       pack.classList.remove('tear');
-      reveal([...pulls].sort((x, y) => rank(x.id) - rank(y.id)));
+      reveal([...pulls].sort((x, y) => rank(x.id) - rank(y.id)), pulls.some((p) => p.god));
     } catch (e) {
       q('.bs-msg').textContent = e.message;
       q('.bs-msg').classList.add('err');
@@ -120,7 +120,7 @@ export function initBoosters() {
   }
 
   // Ouverture plein écran : une carte à la fois, on touche la carte pour passer à la suivante.
-  function reveal(pulls) {
+  function reveal(pulls, god = false) {
     const ov = document.createElement('div');
     ov.className = 'bx';
     ov.innerHTML = `<div class="bx-fx"></div><div class="bx-stage"></div><div class="bx-info"></div><div class="bx-hint"></div>
@@ -162,6 +162,7 @@ export function initBoosters() {
 
     // Récapitulatif : les doublons sont regroupés (×2, ×3…), dans l'ordre des raretés.
     function summary() {
+      if (!done) refreshAchievements(); // après les révélations, pour ne rien gâcher
       done = true;
       ov.className = `bx done${pulls.length > 5 ? ' many' : ''}`;
       ov.querySelector('.bx-fx').innerHTML = '';
@@ -184,6 +185,18 @@ export function initBoosters() {
       lock = false;
     }
 
+    // God Pack : annonce spéciale avant la première carte.
+    async function start() {
+      if (god) {
+        lock = true;
+        ov.classList.add('fx-S', 'fx-god', 'intro');
+        ov.querySelector('.bx-fx').innerHTML = `${fxHTML('S')}<div class="fx-godtxt">GOD PACK</div>`;
+        await wait(2800);
+        lock = false;
+      }
+      next();
+    }
+
     ov.addEventListener('click', (e) => {
       const d = e.target.closest('[data-do]')?.dataset.do;
       if (d === 'all') { summary(); return; }
@@ -196,7 +209,7 @@ export function initBoosters() {
       }
       if (!ov.classList.contains('done')) next();
     });
-    next();
+    start();
   }
 }
 
@@ -234,14 +247,17 @@ export function initCollection() {
   render();
 
   function render() {
-    const owned = S.cards.filter((c) => S.collection[c.id]);
-    q('.cl-progress').textContent = `${owned.length} / ${S.cards.length} cartes différentes`;
+    // Une 1on1 reste invisible tant que personne ne l'a tirée (même pour les admins, hors éditeur).
+    const cards = S.cards.filter((c) => c.rarity !== 'S' || S.oneOfOne[c.id]);
+    const owned = cards.filter((c) => S.collection[c.id]);
+    q('.cl-progress').textContent = `${owned.length} / ${cards.length} cartes différentes`;
+    q('.cl-rarity option[value=S]').hidden = !cards.some((c) => c.rarity === 'S');
     q('.cl-rarities').innerHTML = RARITY_ORDER.map((r) => {
-      const all = S.cards.filter((c) => c.rarity === r).length;
+      const all = cards.filter((c) => c.rarity === r).length;
       const have = owned.filter((c) => c.rarity === r).length;
       return all ? `<span class="rar-chip r-${r}">${RARITIES[r].label} ${have}/${all}</span>` : '';
     }).join('');
-    const list = S.cards.filter((c) => (!filter.rarity || c.rarity === filter.rarity)
+    const list = cards.filter((c) => (!filter.rarity || c.rarity === filter.rarity)
       && (!filter.type || c.type === filter.type)
       && (filter.own !== 'yes' || S.collection[c.id])
       && (filter.own !== 'no' || !S.collection[c.id])
@@ -250,7 +266,7 @@ export function initCollection() {
     q('.cl-grid').innerHTML = list.map((c) => {
       const n = S.collection[c.id] || 0;
       const owner = c.rarity === 'S' ? S.oneOfOne[c.id] : null;
-      const tag = c.rarity === 'S' ? `<span class="one-owner">${owner ? `Possédée par ${esc(owner)}` : 'Encore à prendre !'}</span>` : '';
+      const tag = owner ? `<span class="one-owner">Possédée par ${esc(owner)}</span>` : '';
       return `<div class="grid-card ${n ? '' : 'missing'}" title="${esc(c.name)}">${cardHTML(c)}${n ? `<span class="qty">×${n}</span>` : ''}${tag}</div>`;
     }).join('') || '<p class="muted">Aucune carte.</p>';
   }

@@ -9,7 +9,7 @@ const EMAIL_DOMAIN = 'joueurs.optcg-maison.fr'; // adresses internes : les joueu
 export const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 export const S = {
-  user: null, status: null, cards: [], byId: {}, collection: {}, decks: [], starters: [], oneOfOne: {},
+  user: null, status: null, cards: [], byId: {}, collection: {}, decks: [], starters: [], oneOfOne: {}, stats: null, achievements: {},
 };
 export const isAdmin = () => ['admin', 'owner'].includes(S.status?.role);
 export const isOwner = () => S.status?.role === 'owner';
@@ -227,20 +227,55 @@ export function validateDeck(deck, { owned = true } = {}) {
 }
 
 // ---------- boosters ----------
-// Ouvre n boosters d'affilée (10 au maximum). Si l'un échoue, on garde les cartes déjà tirées.
+// Ouvre n boosters d'un coup (10 au maximum). Si l'un échoue, on garde les cartes déjà tirées.
 export async function openBoosters(n = 1) {
-  const pulls = [];
+  n = Math.max(1, Math.min(10, n));
+  let pulls = [];
   let error = null;
-  for (let i = 0; i < Math.min(10, n); i++) {
-    try { pulls.push(...check(await sb.rpc('open_booster'))); } catch (e) { error = e; break; }
-  }
+  const many = await sb.rpc('open_boosters', { n });
+  if (!many.error) pulls = many.data || [];
+  else if (/open_boosters/.test(many.error.message || '')) {
+    // Script SQL pas encore relancé : on ouvre les boosters un par un.
+    for (let i = 0; i < n; i++) {
+      try { pulls.push(...check(await sb.rpc('open_booster'))); } catch (e) { error = e; break; }
+    }
+  } else error = new Error(many.error.message);
   if (!pulls.length && error) throw error;
+  if (pulls.length < n * 5 && !error) error = new Error('Plus assez de boosters.');
+  // Une carte 1on1 tirée devient visible : on recharge les cartes pour l'afficher.
+  if (pulls.some((p) => !S.byId[p.id])) {
+    S.cards = check(await sb.from('cards').select('*')).map(fromRow);
+    await signImages(S.cards.map((c) => oldImagePath(c.image)));
+    reindex();
+  }
   await refreshCollection();
   if (pulls.some((p) => S.byId[p.id]?.rarity === 'S')) {
     S.oneOfOne = Object.fromEntries((check(await sb.rpc('one_of_one_owners')) || []).map((r) => [r.card_id, r.username]));
   }
   await refreshStatus();
   return { pulls, error };
+}
+
+// ---------- succès ----------
+// Statistiques du joueur (null si le script SQL n'a pas encore été relancé).
+export async function loadStats() {
+  const r = await sb.from('stats').select('*').maybeSingle();
+  const a = await sb.from('achievements').select('code, unlocked_at');
+  S.stats = r.error ? null : r.data || {};
+  S.achievements = a.error ? {} : Object.fromEntries((a.data || []).map((x) => [x.code, x.unlocked_at]));
+  return S.stats;
+}
+
+// Vérifie les succès côté serveur : renvoie ceux débloqués à l'instant (les boosters gagnés sont déjà crédités).
+export async function checkAchievements() {
+  const r = await sb.rpc('check_achievements');
+  if (r.error) return [];
+  return r.data || [];
+}
+
+export async function recordGameResult(won, opponent, livesLeft, perfect) {
+  const r = await sb.rpc('record_game', { won, opponent: opponent || '', lives_left: livesLeft, perfect });
+  return !r.error;
 }
 
 export async function claimStarter(id) {

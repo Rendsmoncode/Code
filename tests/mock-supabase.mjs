@@ -1,7 +1,7 @@
 // Faux serveur Supabase en mémoire, utilisé par les tests (aucune donnée réelle).
 // Faux serveur Supabase en mémoire, branché via page.route.
 export function makeMock() {
-  const st = { users: {}, profiles: {}, cards: {}, starters: {}, coll: {}, decks: {}, tokens: {}, invites: {} };
+  const st = { users: {}, profiles: {}, cards: {}, starters: {}, coll: {}, decks: {}, tokens: {}, invites: {}, stats: {}, ach: {} };
   const grantStarter = (uid, sid) => {
     const s = st.starters[sid]; if (!s) return;
     add(uid, s.leader, 1); for (const [k, v] of Object.entries(s.cards)) add(uid, k, v);
@@ -38,9 +38,20 @@ export function makeMock() {
     if (path.startsWith('/rest/v1/rpc/')) {
       const fn = path.split('/').pop();
       if (fn === 'booster_status') return json(route, status(p));
-      if (fn === 'open_booster') { if (p.free > 0) p.free--; else if (p.boosters > 0) p.boosters--; else return json(route, { message: 'Aucun booster disponible pour le moment.' }, 400);
-        const roll = Math.random(); const slots = ['C', 'C', 'C', 'UC', st.force || (roll < 0.3 ? 'S' : roll < 0.6 ? 'L' : 'R')];
-        return json(route, slots.map((r) => { const id = pick(r); const isNew = !st.coll[uid]?.[id]; add(uid, id, 1); return { id, new: isNew }; })); }
+      const stats = () => (st.stats[uid] ||= { boosters_opened: 0, best_batch: 0, wins: 0, games: 0, best_win_streak: 0, win_streak: 0, perfect_wins: 0, comeback_wins: 0, beaten: [], god_packs: 0, max_dry_streak: 0, two_legends: false });
+      const openOne = () => { if (p.free > 0) p.free--; else if (p.boosters > 0) p.boosters--; else return null;
+        const roll = Math.random(); const god = st.god === true; const slots = god ? ['SR', 'UR', 'SR', 'L', 'UR'] : ['C', 'C', 'C', 'UC', st.force || (roll < 0.3 ? 'S' : roll < 0.6 ? 'L' : 'R')];
+        stats().boosters_opened++; if (god) { stats().god_packs++; st.god = false; }
+        return slots.map((r) => { const id = pick(r); const isNew = !st.coll[uid]?.[id]; add(uid, id, 1); return { id, new: isNew, god }; }); };
+      if (fn === 'open_booster') { const r = openOne(); return r ? json(route, r) : json(route, { message: 'Aucun booster disponible pour le moment.' }, 400); }
+      if (fn === 'open_boosters') { const out = []; for (let i = 0; i < body.n; i++) { const r = openOne(); if (!r) { if (!i) return json(route, { message: 'Aucun booster disponible pour le moment.' }, 400); break; } out.push(...r); }
+        stats().best_batch = Math.max(stats().best_batch, out.length / 5); return json(route, out); }
+      if (fn === 'record_game') { const s = stats(); s.games++; if (body.won) { s.wins++; s.win_streak++; } else s.win_streak = 0; s.best_win_streak = Math.max(s.best_win_streak, s.win_streak); return json(route, null); }
+      if (fn === 'check_achievements') { const s = stats(); const own = Object.keys(st.coll[uid] || {}).map((id) => st.cards[id]); const ach = (st.ach[uid] ||= {});
+        const rules = [['open1', s.boosters_opened >= 1, 1], ['open10', s.boosters_opened >= 10, 1], ['batch10', s.best_batch >= 10, 2], ['win1', s.wins >= 1, 1], ['god', s.god_packs >= 1, 10],
+          ['firstUR', own.some((c) => c.rarity === 'UR'), 1], ['firstL', own.some((c) => c.rarity === 'L'), 2], ['leg1', own.some((c) => c.rarity === 'L'), 2], ['own25', own.length >= 25, 1]];
+        const fresh = rules.filter(([c, ok]) => ok && !ach[c]).map(([code, , reward]) => { ach[code] = new Date().toISOString(); p.boosters += reward; return { code, reward }; });
+        return json(route, fresh); }
       if (fn === 'claim_starter') { const s = st.starters[body.starter_id]; add(uid, s.leader, 1); for (const [k, v] of Object.entries(s.cards)) add(uid, k, v); const id = 'deck-' + Date.now(); st.decks[id] = { id, user_id: uid, name: s.name, leader: s.leader, cards: s.cards }; p.starter_claimed = true; return json(route, id); }
       if (fn === 'admin_give_boosters') { if (!['admin', 'owner'].includes(p.role)) return json(route, { message: 'Réservé aux admins.' }, 400); const t = Object.values(st.profiles).filter((x) => body.target == null || x.username === body.target); t.forEach((x) => { x.boosters += body.amount; }); return json(route, t.length); }
       if (fn === 'one_of_one_owners') return json(route, []);
@@ -62,6 +73,8 @@ export function makeMock() {
       if (m === 'DELETE') { delete st.invites[url.searchParams.get('token').replace('eq.', '')]; return route.fulfill({ status: 204 }); }
       return json(route, Object.values(st.invites));
     }
+    if (table === 'stats') { const v = st.stats[uid] || null; return single ? (v ? json(route, v) : json(route, null)) : json(route, v ? [v] : []); }
+    if (table === 'achievements') return json(route, Object.entries(st.ach[uid] || {}).map(([code, unlocked_at]) => ({ code, unlocked_at })));
     if (table === 'collection') return json(route, Object.entries(st.coll[uid] || {}).map(([card_id, qty]) => ({ card_id, qty })));
     if (map[table]) {
       const store = map[table];

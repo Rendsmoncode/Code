@@ -20927,9 +20927,9 @@ ${suffix}`;
         n("n", "Cartes regard\xE9es", 5),
         n("take", "Cartes prises (max)", 1),
         FILTER,
-        { k: "rest", label: "Le reste", type: "sel", def: "bottom", opts: { bottom: "sous le deck", trash: "\xE0 la d\xE9fausse" } }
+        { k: "rest", label: "Le reste", type: "sel", def: "bottom", opts: { bottom: "sous le deck", trash: "\xE0 la d\xE9fausse", life: "dans la Vie" } }
       ],
-      text: (p) => `regardez les ${p.n} cartes du dessus de votre deck, r\xE9v\xE9lez jusqu'\xE0 ${p.take} carte${p.take > 1 ? "s" : ""}${filterText(p.f, true)} et ajoutez-la \xE0 votre main, puis placez le reste ${p.rest === "trash" ? "dans votre d\xE9fausse" : "sous votre deck dans l'ordre de votre choix"}`
+      text: (p) => `regardez les ${p.n} cartes du dessus de votre deck, r\xE9v\xE9lez jusqu'\xE0 ${p.take} carte${p.take > 1 ? "s" : ""}${filterText(p.f, true)} et ajoutez-la \xE0 votre main, puis placez le reste ${{ trash: "dans votre d\xE9fausse", life: "sur le dessus de votre Vie, face cach\xE9e" }[p.rest] || "sous votre deck dans l'ordre de votre choix"}`
     },
     search: { label: "Chercher une carte dans le deck", params: [FILTER], text: (p) => `cherchez dans votre deck 1 carte${filterText(p.f, true)}, ajoutez-la \xE0 votre main, puis m\xE9langez votre deck` },
     trashToHand: {
@@ -21325,7 +21325,9 @@ ${suffix}`;
     collection: {},
     decks: [],
     starters: [],
-    oneOfOne: {}
+    oneOfOne: {},
+    stats: null,
+    achievements: {}
   };
   var isAdmin = () => ["admin", "owner"].includes(S.status?.role);
   var isOwner = () => S.status?.role === "owner";
@@ -21529,23 +21531,50 @@ ${suffix}`;
     return { ok: errs.length === 0, errs: [...new Set(errs)], total };
   }
   async function openBoosters(n3 = 1) {
-    const pulls = [];
+    n3 = Math.max(1, Math.min(10, n3));
+    let pulls = [];
     let error = null;
-    for (let i = 0; i < Math.min(10, n3); i++) {
-      try {
-        pulls.push(...check(await sb.rpc("open_booster")));
-      } catch (e) {
-        error = e;
-        break;
+    const many = await sb.rpc("open_boosters", { n: n3 });
+    if (!many.error) pulls = many.data || [];
+    else if (/open_boosters/.test(many.error.message || "")) {
+      for (let i = 0; i < n3; i++) {
+        try {
+          pulls.push(...check(await sb.rpc("open_booster")));
+        } catch (e) {
+          error = e;
+          break;
+        }
       }
-    }
+    } else error = new Error(many.error.message);
     if (!pulls.length && error) throw error;
+    if (pulls.length < n3 * 5 && !error) error = new Error("Plus assez de boosters.");
+    if (pulls.some((p) => !S.byId[p.id])) {
+      S.cards = check(await sb.from("cards").select("*")).map(fromRow);
+      await signImages(S.cards.map((c) => oldImagePath(c.image)));
+      reindex();
+    }
     await refreshCollection();
     if (pulls.some((p) => S.byId[p.id]?.rarity === "S")) {
       S.oneOfOne = Object.fromEntries((check(await sb.rpc("one_of_one_owners")) || []).map((r) => [r.card_id, r.username]));
     }
     await refreshStatus();
     return { pulls, error };
+  }
+  async function loadStats() {
+    const r = await sb.from("stats").select("*").maybeSingle();
+    const a = await sb.from("achievements").select("code, unlocked_at");
+    S.stats = r.error ? null : r.data || {};
+    S.achievements = a.error ? {} : Object.fromEntries((a.data || []).map((x) => [x.code, x.unlocked_at]));
+    return S.stats;
+  }
+  async function checkAchievements() {
+    const r = await sb.rpc("check_achievements");
+    if (r.error) return [];
+    return r.data || [];
+  }
+  async function recordGameResult(won, opponent, livesLeft, perfect) {
+    const r = await sb.rpc("record_game", { won, opponent: opponent || "", lives_left: livesLeft, perfect });
+    return !r.error;
   }
   async function claimStarter(id) {
     check(await sb.rpc("claim_starter", { starter_id: id }));
@@ -21586,8 +21615,8 @@ ${suffix}`;
     const el = document.createElement("div");
     el.className = "auth";
     document.body.append(el);
-    render2();
-    function render2() {
+    render3();
+    function render3() {
       el.innerHTML = `
     <form class="panel auth-box" autocomplete="on">
       <h1 class="brand">${logoSVG()}</h1>
@@ -21613,7 +21642,7 @@ ${suffix}`;
       const m = e.target.closest("[data-mode]")?.dataset.mode;
       if (m && m !== mode) {
         mode = m;
-        render2();
+        render3();
       }
     });
     el.addEventListener("submit", async (e) => {
@@ -21690,7 +21719,7 @@ ${suffix}`;
         const j = +row.dataset.j;
         [arr[j - 1], arr[j]] = [arr[j], arr[j - 1]];
       } else return;
-      render2();
+      render3();
       onChange2();
     });
     function handle(e, structural) {
@@ -21711,7 +21740,7 @@ ${suffix}`;
         const sec = t.dataset.add;
         const k = t.value;
         if (k) eff[sec].push({ k, ...defaults(SECTIONS[sec][1][k].params) });
-        render2();
+        render3();
         onChange2();
         return;
       }
@@ -21725,11 +21754,11 @@ ${suffix}`;
         const item = eff[row.dataset.sec][+row.dataset.j];
         setPath(item, t.dataset.p, t.type === "number" ? t.value === "" ? "" : Number(t.value) : t.value);
       }
-      if (structural) render2();
+      if (structural) render3();
       else block2.querySelector(".fxe-text").textContent = effectText(eff, card);
       onChange2();
     }
-    function render2() {
+    function render3() {
       const card = getCard();
       card.effects || (card.effects = []);
       card.keywords || (card.keywords = []);
@@ -21740,8 +21769,8 @@ ${suffix}`;
       ${card.effects.map((eff, i) => blockHTML(eff, i, card)).join("")}
       <button type="button" class="btn" data-act="add-effect">+ Ajouter un effet automatique</button>`;
     }
-    render2();
-    return { render: render2 };
+    render3();
+    return { render: render3 };
   }
   function blockHTML(eff, i, card) {
     const w = WHEN[eff.when] || {};
@@ -22690,7 +22719,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         msg2("");
       } catch (e) {
         msg2(e.message);
-        render2();
+        render3();
       }
     };
     q(".dk-new").addEventListener("click", () => {
@@ -22702,13 +22731,13 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       const id = e.target.closest("[data-deck]")?.dataset.deck;
       if (id) {
         curId = id;
-        render2();
+        render3();
       }
     });
     q(".dk-main").addEventListener("click", onMainClick);
     q(".dk-main").addEventListener("input", onMainInput);
-    onChange(render2);
-    render2();
+    onChange(render3);
+    render3();
     async function onMainClick(e) {
       const d = cur2();
       const t = e.target.closest("[data-act]");
@@ -22754,7 +22783,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         renderPool();
       }
     }
-    function render2() {
+    function render3() {
       q(".dk-list").innerHTML = decks().length ? decks().map((d2) => {
         const v2 = validateDeck(d2, { owned });
         const l2 = S.byId[d2.leader];
@@ -22961,6 +22990,156 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     });
   }
 
+  // js/icons.js
+  var I = {
+    home: '<path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"/>',
+    pack: '<rect x="6" y="3" width="12" height="18" rx="2"/><path d="M6 7h12M6 17h12"/>',
+    cards: '<rect x="4" y="5" width="11" height="15" rx="2"/><path d="M9 3h9a2 2 0 0 1 2 2v12"/>',
+    deck: '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4v17"/>',
+    play: '<path d="M5 5l14 14M19 5L5 19"/>',
+    more: '<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>',
+    gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>',
+    user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>',
+    star: '<path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/>',
+    edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/>',
+    shield: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/>',
+    out: '<path d="M10 4H5v16h5M14 8l4 4-4 4M18 12H9"/>',
+    trophy: '<path d="M7 4h10v5a5 5 0 0 1-10 0zM7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3M12 14v4M8 21h8M9 18h6"/>',
+    lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>'
+  };
+  var icon = (k) => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${I[k]}</svg>`;
+
+  // js/achievements.js
+  var CATS = { battle: "Bataille", coll: "Collection", open: "Ouverture" };
+  var N = (n3, t) => (m) => [m[n3] || 0, t];
+  var ACHIEVEMENTS = [
+    { code: "win1", cat: "battle", name: "Premi\xE8re victoire", desc: "Gagner une partie.", reward: 1, prog: N("wins", 1) },
+    { code: "win10", cat: "battle", name: "10 victoires", desc: "Gagner 10 parties.", reward: 3, prog: N("wins", 10) },
+    { code: "win20", cat: "battle", name: "20 victoires", desc: "Gagner 20 parties.", reward: 5, prog: N("wins", 20) },
+    { code: "games10", cat: "battle", name: "Habitu\xE9", desc: "Jouer 10 parties.", reward: 2, prog: N("games", 10) },
+    { code: "games50", cat: "battle", name: "V\xE9t\xE9ran", desc: "Jouer 50 parties.", reward: 5, prog: N("games", 50) },
+    { code: "perfect", cat: "battle", name: "Victoire parfaite", desc: "Gagner sans perdre une seule Vie.", reward: 3, prog: N("perfect_wins", 1) },
+    { code: "comeback", cat: "battle", name: "Remontada", desc: "Gagner avec 0 Vie restante.", reward: 3, prog: N("comeback_wins", 1) },
+    { code: "streak3", cat: "battle", name: "En forme", desc: "Gagner 3 parties d'affil\xE9e.", reward: 3, prog: N("best_win_streak", 3) },
+    { code: "streak5", cat: "battle", name: "Inarr\xEAtable", desc: "Gagner 5 parties d'affil\xE9e.", reward: 5, prog: N("best_win_streak", 5) },
+    { code: "friends5", cat: "battle", name: "Tourn\xE9e des nakamas", desc: "Battre 5 amis diff\xE9rents.", reward: 5, prog: N("beaten", 5) },
+    { code: "own25", cat: "coll", name: "Collectionneur", desc: "Poss\xE9der 25 cartes diff\xE9rentes.", reward: 1, prog: N("owned", 25) },
+    { code: "own50", cat: "coll", name: "Classeur", desc: "Poss\xE9der 50 cartes diff\xE9rentes.", reward: 2, prog: N("owned", 50) },
+    { code: "own100", cat: "coll", name: "Biblioth\xE8que", desc: "Poss\xE9der 100 cartes diff\xE9rentes.", reward: 3, prog: N("owned", 100) },
+    { code: "own200", cat: "coll", name: "Archiviste", desc: "Poss\xE9der 200 cartes diff\xE9rentes.", reward: 5, prog: N("owned", 200) },
+    { code: "set50", cat: "coll", name: "SB01 \xE0 moiti\xE9", desc: "Poss\xE9der la moiti\xE9 des cartes du set SB01.", reward: 3, prog: (m) => [m.owned, Math.ceil(m.total / 2)] },
+    { code: "set100", cat: "coll", name: "SB01 complet", desc: "Poss\xE9der toutes les cartes du set SB01.", reward: 10, prog: (m) => [m.owned, m.total] },
+    { code: "allC", cat: "coll", name: "Toutes les Communes", desc: "Poss\xE9der toutes les Communes.", reward: 3, prog: (m) => [m.ownC, m.totC] },
+    { code: "allR", cat: "coll", name: "Toutes les Rares", desc: "Poss\xE9der toutes les Rares.", reward: 5, prog: (m) => [m.ownR, m.totR] },
+    { code: "leg1", cat: "coll", name: "Premi\xE8re L\xE9gende", desc: "Poss\xE9der une L\xE9gendaire.", reward: 2, prog: N("legs", 1) },
+    { code: "leg5", cat: "coll", name: "Panth\xE9on", desc: "Poss\xE9der 5 L\xE9gendaires.", reward: 5, prog: N("legs", 5) },
+    { code: "secret", cat: "coll", name: "Poss\xE9der ???", desc: "???", reward: 10, secret: "Poss\xE9der une carte 1on1." },
+    { code: "theme", cat: "coll", name: "Th\xE8me complet", desc: "Poss\xE9der toutes les cartes d'un m\xEAme type (5 cartes ou plus).", reward: 3 },
+    { code: "all", cat: "coll", name: "Poss\xE9der TOUTES les cartes", desc: "Toutes les cartes du jeu, sans exception.", reward: "1000 \u20AC", prog: (m) => [m.owned, m.total] },
+    { code: "open1", cat: "open", name: "Premier booster", desc: "Ouvrir un booster.", reward: 1, prog: N("boosters_opened", 1) },
+    ...[10, 50, 100, 500, 1e3, 2e3].map((n3, i) => ({
+      code: `open${n3}`,
+      cat: "open",
+      name: `${n3.toLocaleString("fr-FR")} boosters`,
+      desc: `Ouvrir ${n3.toLocaleString("fr-FR")} boosters.`,
+      reward: [1, 2, 3, 5, 8, 10][i],
+      prog: N("boosters_opened", n3)
+    })),
+    { code: "firstUR", cat: "open", name: "Premi\xE8re UR", desc: "Obtenir une Ultra rare.", reward: 1, prog: N("urs", 1) },
+    { code: "firstL", cat: "open", name: "Premi\xE8re L\xE9gendaire", desc: "Obtenir une L\xE9gendaire.", reward: 2, prog: N("legs", 1) },
+    { code: "firstS", cat: "open", name: "Premi\xE8re ???", desc: "???", reward: 10, secret: "Tirer une carte 1on1." },
+    { code: "batch10", cat: "open", name: "Gros joueur", desc: "Ouvrir 10 boosters d'un coup.", reward: 2, prog: N("best_batch", 10) },
+    { code: "twoL", cat: "open", name: "Doubl\xE9 l\xE9gendaire", desc: "Deux L\xE9gendaires dans la m\xEAme ouverture.", reward: 5 },
+    { code: "dry20", cat: "open", name: "La poisse", desc: "20 boosters d'affil\xE9e sans SR ou mieux.", reward: 3, prog: N("max_dry_streak", 20) },
+    { code: "god", cat: "open", name: "God Pack", desc: "Tomber sur un God Pack.", reward: 10 }
+  ];
+  var BY = Object.fromEntries(ACHIEVEMENTS.map((a) => [a.code, a]));
+  function metrics() {
+    const st = S.stats || {};
+    const mine = S.cards.filter((c) => S.collection[c.id]);
+    const pool = S.cards.filter((c) => c.inBoosters !== false && c.rarity !== "S");
+    const own = (f) => mine.filter((c) => c.inBoosters !== false && f(c)).length;
+    return {
+      ...st,
+      beaten: (st.beaten || []).length,
+      owned: own((c) => c.rarity !== "S"),
+      total: pool.length,
+      ownC: own((c) => c.rarity === "C"),
+      totC: pool.filter((c) => c.rarity === "C").length,
+      ownR: own((c) => c.rarity === "R"),
+      totR: pool.filter((c) => c.rarity === "R").length,
+      legs: mine.filter((c) => c.rarity === "L").length,
+      urs: mine.filter((c) => c.rarity === "UR").length
+    };
+  }
+  var rewardText = (r) => typeof r === "number" ? `${r} booster${r > 1 ? "s" : ""}` : r;
+  function toast(a, reward) {
+    let box = document.querySelector(".ach-toasts");
+    if (!box) {
+      box = document.createElement("div");
+      box.className = "ach-toasts";
+      document.body.append(box);
+    }
+    const t = document.createElement("div");
+    t.className = "ach-toast";
+    t.innerHTML = `<span class="tt-ico">${icon("trophy")}</span><div><small>Succ\xE8s d\xE9bloqu\xE9</small><b>${esc(a?.name || "")}</b>
+    ${reward ? `<span>+ ${esc(rewardText(reward))}</span>` : ""}</div>`;
+    box.append(t);
+    setTimeout(() => t.classList.add("out"), 4200);
+    setTimeout(() => t.remove(), 4700);
+  }
+  var render = () => {
+  };
+  async function refreshAchievements() {
+    const fresh = await checkAchievements();
+    await loadStats();
+    fresh.forEach((f, i) => setTimeout(() => toast(BY[f.code], BY[f.code]?.reward === "1000 \u20AC" ? "1000 \u20AC" : f.reward), i * 700));
+    if (fresh.length) await refreshStatus();
+    render();
+    return fresh;
+  }
+  async function recordGame({ won, opponent, livesLeft, perfect }) {
+    if (await recordGameResult(won, opponent, livesLeft, perfect)) await refreshAchievements();
+  }
+  function initAchievements() {
+    const el = document.getElementById("tab-achievements");
+    let cat = "battle";
+    render = () => {
+      const m = metrics();
+      const got = S.achievements || {};
+      const done = ACHIEVEMENTS.filter((a) => got[a.code]).length;
+      el.innerHTML = `<div class="ach">
+      <div class="ach-head"><h2>Succ\xE8s</h2><span>${done} / ${ACHIEVEMENTS.length}</span></div>
+      ${S.stats === null ? '<p class="msg err">Les succ\xE8s seront actifs d\xE8s que le script SQL aura \xE9t\xE9 relanc\xE9 dans Supabase.</p>' : ""}
+      <div class="ach-cats">${Object.entries(CATS).map(([k, v]) => {
+        const list = ACHIEVEMENTS.filter((a) => a.cat === k);
+        return `<button data-cat="${k}" class="${k === cat ? "on" : ""}">${v} <small>${list.filter((a) => got[a.code]).length}/${list.length}</small></button>`;
+      }).join("")}</div>
+      <div class="ach-list">${ACHIEVEMENTS.filter((a) => a.cat === cat).map((a) => {
+        const ok = !!got[a.code];
+        const [cur2, max] = a.prog && max0(a.prog(m)) ? a.prog(m) : [ok ? 1 : 0, 1];
+        const pct = ok ? 100 : Math.min(100, Math.floor(100 * cur2 / (max || 1)));
+        const hidden = a.secret && !ok;
+        return `<div class="ach-item ${ok ? "ok" : ""} ${hidden ? "hidden" : ""}">
+          <span class="ach-ico">${icon(ok ? "trophy" : hidden ? "lock" : "trophy")}</span>
+          <div class="ach-txt"><b>${esc(a.name)}</b><small>${esc(ok && a.secret ? a.secret : a.desc)}</small>
+            ${a.prog && !ok ? `<div class="bar"><i style="width:${pct}%"></i></div><small class="ach-num">${Math.min(cur2, max)} / ${max}</small>` : ""}
+            ${ok ? `<small class="ach-date">Obtenu le ${new Date(got[a.code]).toLocaleDateString("fr-FR")}</small>` : ""}</div>
+          <span class="ach-rew">${icon(typeof a.reward === "number" ? "pack" : "star")}${esc(rewardText(a.reward))}</span></div>`;
+      }).join("")}</div></div>`;
+    };
+    const max0 = ([, max]) => max > 0;
+    el.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-cat]");
+      if (b) {
+        cat = b.dataset.cat;
+        render();
+      }
+    });
+    render();
+    refreshAchievements();
+  }
+
   // js/game.js
   var root2 = () => document.getElementById("tab-play");
   var G = null;
@@ -23029,18 +23208,18 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     });
     renderLobby();
     window.addEventListener("optcgm-theme", () => {
-      if (G) render();
+      if (G) render2();
     });
     matchMedia(MOBILE).addEventListener?.("change", () => {
       if (G) {
         root2().innerHTML = "";
-        render();
+        render2();
       }
     });
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && G?.select) {
         G.select = null;
-        render();
+        render2();
       }
     });
   }
@@ -23143,7 +23322,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     }
     Object.assign(lobby, { status: resumed ? "playing" : "connecting", error: "" });
     if (!isHost) lobby.code = code.trim().toUpperCase();
-    if (resumed) render();
+    if (resumed) render2();
     else renderLobby();
     let retries = 0;
     const open = () => {
@@ -23159,7 +23338,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         lobby.code = c;
         if (!G.connected) {
           lobby.status = resumed ? "playing" : "waiting";
-          if (resumed) render();
+          if (resumed) render2();
           else renderLobby();
         }
       },
@@ -23170,12 +23349,12 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         retries = 0;
         lobby.status = "playing";
         if (G.phase === "hello") {
-          send({ t: "hello", name: G.name, cards: G.myCards });
+          send({ t: "hello", name: G.name, user: S.status?.username, cards: G.myCards });
           if (!again) sys("Connect\xE9. \xC9change des decks\u2026");
         } else {
-          send({ t: "resume", name: G.name, cards: G.myCards, view: pub(), turn: G.turn });
+          send({ t: "resume", name: G.name, user: S.status?.username, cards: G.myCards, view: pub(), turn: G.turn });
         }
-        render();
+        render2();
       },
       onMessage: (m) => {
         try {
@@ -23188,7 +23367,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         if (!G) return;
         G.disconnected = true;
         sys("Connexion avec l'adversaire perdue : reconnexion automatique\u2026");
-        render();
+        render2();
         if (!isHost && lobby.mode === "online") setTimeout(retry, 3e3);
       },
       onError: (t) => {
@@ -23205,7 +23384,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         }
         if (G?.connected || resumed) {
           sys(t);
-          render();
+          render2();
           return;
         }
         link?.close();
@@ -23261,6 +23440,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     switch (m.t) {
       case "resume": {
         G.oppName = m.name || G.oppName;
+        G.oppUser = m.user || G.oppUser;
         G.oppCards = m.cards || G.oppCards;
         G.opp = m.view;
         if ((m.turn?.count || 0) > (G.turn?.count || 0)) G.turn = m.turn;
@@ -23279,6 +23459,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
           break;
         }
         G.oppName = m.name || "Adversaire";
+        G.oppUser = m.user || null;
         G.oppCards = m.cards || {};
         G.oppHello = true;
         sys(`${G.oppName} a rejoint la partie.`);
@@ -23329,7 +23510,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         break;
       case "attack":
         G.battle = { ...m.b, role: "def" };
-        render();
+        render2();
         fireAll("onOppAttack");
         return;
       case "battleUpd":
@@ -23345,6 +23526,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         G.winner = m.winner;
         G.overReason = m.reason;
         clearSave();
+        saveResult();
         break;
       case "rematch":
         resetMatch();
@@ -23352,7 +23534,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       default:
         break;
     }
-    render();
+    render2();
   }
   function log(text, manual = Boolean(G?.manual)) {
     G.log.push({ who: "me", text, manual });
@@ -23396,7 +23578,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     }
     send({ t: "view", v: pub() });
     saveGame();
-    render();
+    render2();
   }
   function coinFlip() {
     const w = Math.random() < 0.5 ? "host" : "guest";
@@ -23486,7 +23668,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     beginTurn(count + 1);
   }
   async function endTurn() {
-    if (G.battle) return toast("Terminez le combat en cours d'abord.");
+    if (G.battle) return toast2("Terminez le combat en cours d'abord.");
     if (G.manual) endManual();
     await fireAll("endOfTurn");
     endTurnMods(G.role);
@@ -23504,9 +23686,15 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     G.battle = null;
     log(`a perdu : ${reason}`);
     clearSave();
+    saveResult();
     send({ t: "gameover", winner: G.winner, reason });
     send({ t: "view", v: pub() });
-    render();
+    render2();
+  }
+  function saveResult() {
+    if (G.recorded || lobby.mode === "local") return;
+    G.recorded = true;
+    recordGame({ won: G.winner === G.role, opponent: G.oppUser, livesLeft: G.me.life.length, perfect: !G.dmg });
   }
   function resetMatch() {
     Object.assign(G, {
@@ -23523,7 +23711,9 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       winner: null,
       reveals: [],
       manual: null,
-      oppManual: null
+      oppManual: null,
+      recorded: false,
+      dmg: 0
     });
     sys("Nouvelle partie !");
     if (G.role === "host") coinFlip();
@@ -23577,7 +23767,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     if (!loc) return;
     const c = myCard(loc.inst);
     const cost = free ? 0 : Math.max(0, curCost(loc.inst, c));
-    if (cost > G.me.donActive) return toast(`Pas assez de DON!! actifs : il en faut ${cost}.`);
+    if (cost > G.me.donActive) return toast2(`Pas assez de DON!! actifs : il en faut ${cost}.`);
     if (c.type === "character" && G.me.chars.length >= 5) {
       const victim = await pickCard("Zone pleine (5 Personnages) : choisissez celui \xE0 d\xE9fausser", G.me.chars, myCard);
       if (!victim) return;
@@ -23624,18 +23814,18 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     stage: "le terrain"
   })[z] || z;
   function startAttack(inst) {
-    if (G.turn.count <= 2) return toast("Personne ne peut attaquer pendant son premier tour.");
+    if (G.turn.count <= 2) return toast2("Personne ne peut attaquer pendant son premier tour.");
     const c = myCard(inst);
-    if ((inst.noAtk || 0) >= G.turn.count) return toast(`${c.name} ne peut pas attaquer ce tour-ci.`);
+    if ((inst.noAtk || 0) >= G.turn.count) return toast2(`${c.name} ne peut pas attaquer ce tour-ci.`);
     const onlyChars = c.type === "character" && inst.t === G.turn.count && !hasKw(inst, "rush");
     if (onlyChars && !hasKw(inst, "rushChar")) {
-      return toast(`${c.name} a \xE9t\xE9 jou\xE9 ce tour : il lui faut [Initiative] pour attaquer.`);
+      return toast2(`${c.name} a \xE9t\xE9 jou\xE9 ce tour : il lui faut [Initiative] pour attaquer.`);
     }
     G.select = { kind: "attack", attacker: inst.u, onlyChars };
-    render();
+    render2();
   }
   async function declareAttack(targetInst, isLeader) {
-    if (isLeader && G.select.onlyChars) return toast("Jou\xE9 ce tour avec [Initiative : Personnage] : il ne peut attaquer que des Personnages.");
+    if (isLeader && G.select.onlyChars) return toast2("Jou\xE9 ce tour avec [Initiative : Personnage] : il ne peut attaquer que des Personnages.");
     const atk = locate(G.select.attacker)?.inst;
     G.select = null;
     if (!atk) return;
@@ -23688,8 +23878,8 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   }
   async function block(inst) {
     const c = myCard(inst);
-    if (G.battle.noBlock) return toast("Cette attaque ne peut pas \xEAtre bloqu\xE9e.");
-    if (!hasKw(inst, "blocker")) return toast(`${c.name} n'a pas [Bloqueur].`);
+    if (G.battle.noBlock) return toast2("Cette attaque ne peut pas \xEAtre bloqu\xE9e.");
+    if (!hasKw(inst, "blocker")) return toast2(`${c.name} n'a pas [Bloqueur].`);
     inst.r = true;
     Object.assign(G.battle, { blocker: inst.u, target: inst.u, targetCard: inst.c, targetIsLeader: false });
     log(`bloque avec ${name(c)}.`);
@@ -23707,7 +23897,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   async function counterEvent(inst) {
     const c = myCard(inst);
     const cost = Math.max(0, curCost(inst, c));
-    if (cost > G.me.donActive) return toast(`Pas assez de DON!! actifs : il en faut ${cost}.`);
+    if (cost > G.me.donActive) return toast2(`Pas assez de DON!! actifs : il en faut ${cost}.`);
     if (hasEffect(inst, "counter")) {
       G.me.donActive -= cost;
       G.me.donRested += cost;
@@ -23767,6 +23957,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         return true;
       }
       const inst = me.life.pop();
+      G.dmg = (G.dmg || 0) + 1;
       delete inst.fu;
       const c = myCard(inst);
       if (banish) {
@@ -24227,12 +24418,12 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     if (!condsOK(eff, src)) return false;
     const usedKey = `${src.c}:${idx}`;
     if (eff.once && src.used?.[usedKey] === G.turn.count) {
-      toast("Cet effet a d\xE9j\xE0 \xE9t\xE9 utilis\xE9 ce tour.");
+      toast2("Cet effet a d\xE9j\xE0 \xE9t\xE9 utilis\xE9 ce tour.");
       return false;
     }
     const why = canPay(eff.costs, src);
     if (why) {
-      if (!optional) toast(why);
+      if (!optional) toast2(why);
       return false;
     }
     const txt = effectText(eff, myCard(src));
@@ -24314,7 +24505,10 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
           move(i.u, "hand");
           reveal(i, "Ajout\xE9e \xE0 la main");
         }
-        for (const i of top.filter((x) => !picked.includes(x))) move(i.u, a.rest === "trash" ? "trash" : "deck", "bottom");
+        for (const i of top.filter((x) => !picked.includes(x))) {
+          if (a.rest === "life") move(i.u, "life", "top");
+          else move(i.u, a.rest === "trash" ? "trash" : "deck", "bottom");
+        }
         log(`regarde ${top.length} carte(s) du dessus de son deck${picked.length ? ` et prend ${picked.map((i) => name(myCard(i))).join(", ")}` : ""}.`);
         break;
       }
@@ -24628,7 +24822,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   async function chooseManualCard() {
     const me = G.me;
     const list = [me.leader, ...me.chars, me.stage, ...me.trash.slice(-3)].filter((i2) => i2 && hasFreeText(myCard(i2)));
-    if (!list.length) return toast("Aucune de vos cartes visibles n'a d'effet en texte libre.");
+    if (!list.length) return toast2("Aucune de vos cartes visibles n'a d'effet en texte libre.");
     const [i] = await pickMany("Quelle carte a un effet \xE0 r\xE9soudre \xE0 la main ?", list, myCard, { max: 1 }) || [];
     if (i) startManual(i);
   }
@@ -25046,9 +25240,9 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   }
   function openViewer(zone, count = null, side = "me") {
     G.viewer = { zone, count, side };
-    render();
+    render2();
   }
-  function toast(text) {
+  function toast2(text) {
     const t = document.createElement("div");
     t.className = "toast";
     t.textContent = text;
@@ -25289,7 +25483,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   function revealsHTML() {
     return G.reveals.map((r) => `<div class="reveal" data-rid="${r.id}"><small>${esc(G.oppName)} \xB7 ${esc(r.why || "r\xE9v\xE8le")}</small>${cardHTML(G.oppCards[r.c])}<button class="btn small" data-do="r-close" data-rid="${r.id}">OK</button></div>`).join("");
   }
-  function render() {
+  function render2() {
     if (!G) {
       renderLobby();
       return;
@@ -25353,7 +25547,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       const f = e.target.dataset.flag;
       if (f && G.battle) {
         G.battle[f] = e.target.checked;
-        render();
+        render2();
       }
     });
     r.addEventListener("keydown", (e) => {
@@ -25378,7 +25572,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       G.log.push({ who: "me", text, chat: true });
       send({ t: "chat", text });
       inp.value = "";
-      render();
+      render2();
     });
   }
   var longPressed = false;
@@ -25406,10 +25600,10 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         const inst = findOpp(el.dataset.u);
         const isLeader = G.opp.leader.u === inst?.u;
         if (inst && (isLeader || el.dataset.zone === "chars" && inst.r)) return declareAttack(inst, isLeader);
-        return toast("Cible invalide : un Personnage doit \xEAtre repos\xE9 pour \xEAtre attaqu\xE9.");
+        return toast2("Cible invalide : un Personnage doit \xEAtre repos\xE9 pour \xEAtre attaqu\xE9.");
       }
       G.select = null;
-      render();
+      render2();
       return;
     }
     if (side === "opp") {
@@ -25461,7 +25655,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         if (!confirm(`Contester l'effet manuel de ${G.oppName} ? Tout ce qu'il a fait depuis le d\xE9but de cet effet sera annul\xE9.`)) return void 0;
         send({ t: "contest" });
         G.log.push({ who: "me", text: "conteste l'effet manuel." });
-        return render();
+        return render2();
       case "rematch":
         send({ t: "rematch" });
         return resetMatch();
@@ -25479,7 +25673,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         return commit();
       case "v-close":
         G.viewer = null;
-        return render();
+        return render2();
       case "m-log":
         return root2().querySelector(".game")?.classList.toggle("show-log");
       case "m-menu": {
@@ -25494,7 +25688,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       }
       case "r-close":
         G.reveals = G.reveals.filter((r) => r.id !== el.dataset.rid);
-        return render();
+        return render2();
       default:
         return void 0;
     }
@@ -25529,7 +25723,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   var RATES = [
     ["3 cartes", "Commune"],
     ["1 carte", "Peu commune"],
-    ["1 carte", "Rare ou mieux : 1 Super rare (SR) tous les 4 boosters, 1 Ultra rare (UR) tous les 15, 1 L\xE9gendaire (LR) tous les 50, 1 \xAB 1on1 \xBB tous les 2 000"]
+    ["1 carte", "Rare ou mieux : 1 Super rare (SR) tous les 4 boosters, 1 Ultra rare (UR) tous les 15, 1 L\xE9gendaire (LR) tous les 50"]
   ];
   var busy2 = false;
   var qty = 1;
@@ -25578,7 +25772,6 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     </section>
     <details class="bs-rates"><summary>Contenu d'un booster</summary>
       <ul>${RATES.map(([n3, r]) => `<li><b>${n3}</b> : ${r}</li>`).join("")}</ul>
-      <p class="muted">Une carte <b>1on1</b> n'existe qu'en un seul exemplaire dans tout le jeu : le premier qui la tire est le seul \xE0 l'avoir.</p>
       <p class="muted">1 booster gratuit toutes les 10 minutes (6 en r\xE9serve au maximum), plus les boosters offerts par les admins.</p>
     </details>
   </div>`;
@@ -25599,7 +25792,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         pack.classList.add("tear");
         await wait(650);
         pack.classList.remove("tear");
-        reveal2([...pulls].sort((x, y) => rank(x.id) - rank(y.id)));
+        reveal2([...pulls].sort((x, y) => rank(x.id) - rank(y.id)), pulls.some((p) => p.god));
       } catch (e) {
         q(".bs-msg").textContent = e.message;
         q(".bs-msg").classList.add("err");
@@ -25639,7 +25832,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       q(".bs-open").textContent = qty > 1 ? `Ouvrir ${qty} boosters` : "Ouvrir";
       q(".bs-open").disabled = busy2 || total === 0;
     }
-    function reveal2(pulls) {
+    function reveal2(pulls, god = false) {
       const ov = document.createElement("div");
       ov.className = "bx";
       ov.innerHTML = `<div class="bx-fx"></div><div class="bx-stage"></div><div class="bx-info"></div><div class="bx-hint"></div>
@@ -25685,6 +25878,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         lock = false;
       }
       function summary() {
+        if (!done) refreshAchievements();
         done = true;
         ov.className = `bx done${pulls.length > 5 ? " many" : ""}`;
         ov.querySelector(".bx-fx").innerHTML = "";
@@ -25709,6 +25903,16 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       <div class="bx-acts">${left ? `<button class="btn main" data-do="again">${again > 1 ? `Ouvrir ${again} autres` : "Ouvrir un autre"} \xB7 ${left}</button>` : ""}<button class="btn ghost" data-do="close">Terminer</button></div>`;
         lock = false;
       }
+      async function start2() {
+        if (god) {
+          lock = true;
+          ov.classList.add("fx-S", "fx-god", "intro");
+          ov.querySelector(".bx-fx").innerHTML = `${fxHTML("S")}<div class="fx-godtxt">GOD PACK</div>`;
+          await wait(2800);
+          lock = false;
+        }
+        next();
+      }
       ov.addEventListener("click", (e) => {
         const d = e.target.closest("[data-do]")?.dataset.do;
         if (d === "all") {
@@ -25728,7 +25932,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         }
         if (!ov.classList.contains("done")) next();
       });
-      next();
+      start2();
     }
   }
   var wait = (ms) => new Promise((r) => {
@@ -25758,23 +25962,25 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     const q = (s) => el.querySelector(s);
     q(".filters").addEventListener("input", () => {
       filter2 = { q: q(".cl-q").value.toLowerCase(), own: q(".cl-own").value, rarity: q(".cl-rarity").value, type: q(".cl-type").value };
-      render2();
+      render3();
     });
-    onChange(render2);
-    render2();
-    function render2() {
-      const owned = S.cards.filter((c) => S.collection[c.id]);
-      q(".cl-progress").textContent = `${owned.length} / ${S.cards.length} cartes diff\xE9rentes`;
+    onChange(render3);
+    render3();
+    function render3() {
+      const cards = S.cards.filter((c) => c.rarity !== "S" || S.oneOfOne[c.id]);
+      const owned = cards.filter((c) => S.collection[c.id]);
+      q(".cl-progress").textContent = `${owned.length} / ${cards.length} cartes diff\xE9rentes`;
+      q(".cl-rarity option[value=S]").hidden = !cards.some((c) => c.rarity === "S");
       q(".cl-rarities").innerHTML = RARITY_ORDER.map((r) => {
-        const all = S.cards.filter((c) => c.rarity === r).length;
+        const all = cards.filter((c) => c.rarity === r).length;
         const have = owned.filter((c) => c.rarity === r).length;
         return all ? `<span class="rar-chip r-${r}">${RARITIES[r].label} ${have}/${all}</span>` : "";
       }).join("");
-      const list = S.cards.filter((c) => (!filter2.rarity || c.rarity === filter2.rarity) && (!filter2.type || c.type === filter2.type) && (filter2.own !== "yes" || S.collection[c.id]) && (filter2.own !== "no" || !S.collection[c.id]) && (!filter2.q || `${c.name} ${c.code} ${c.traits} ${c.effect}`.toLowerCase().includes(filter2.q))).sort((a, b) => RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity));
+      const list = cards.filter((c) => (!filter2.rarity || c.rarity === filter2.rarity) && (!filter2.type || c.type === filter2.type) && (filter2.own !== "yes" || S.collection[c.id]) && (filter2.own !== "no" || !S.collection[c.id]) && (!filter2.q || `${c.name} ${c.code} ${c.traits} ${c.effect}`.toLowerCase().includes(filter2.q))).sort((a, b) => RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity));
       q(".cl-grid").innerHTML = list.map((c) => {
         const n3 = S.collection[c.id] || 0;
         const owner = c.rarity === "S" ? S.oneOfOne[c.id] : null;
-        const tag = c.rarity === "S" ? `<span class="one-owner">${owner ? `Poss\xE9d\xE9e par ${esc(owner)}` : "Encore \xE0 prendre !"}</span>` : "";
+        const tag = owner ? `<span class="one-owner">Poss\xE9d\xE9e par ${esc(owner)}</span>` : "";
         return `<div class="grid-card ${n3 ? "" : "missing"}" title="${esc(c.name)}">${cardHTML(c)}${n3 ? `<span class="qty">\xD7${n3}</span>` : ""}${tag}</div>`;
       }).join("") || '<p class="muted">Aucune carte.</p>';
     }
@@ -25932,7 +26138,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   // js/credits.js
   function initCredits() {
     const el = document.getElementById("tab-credits");
-    const render2 = () => {
+    const render3 = () => {
       const list = S.cards.filter((c) => c.credit?.author).sort((a, b) => (a.code || "").localeCompare(b.code || "") || a.name.localeCompare(b.name));
       el.innerHTML = `<section class="panel credits">
       <h2>Cr\xE9dits photos</h2>
@@ -25944,26 +26150,9 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       </tbody></table>` : `<p class="muted">Aucune photo cr\xE9dit\xE9e pour l'instant.</p>`}
     </section>`;
     };
-    onChange(render2);
-    render2();
+    onChange(render3);
+    render3();
   }
-
-  // js/icons.js
-  var I = {
-    home: '<path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"/>',
-    pack: '<rect x="6" y="3" width="12" height="18" rx="2"/><path d="M6 7h12M6 17h12"/>',
-    cards: '<rect x="4" y="5" width="11" height="15" rx="2"/><path d="M9 3h9a2 2 0 0 1 2 2v12"/>',
-    deck: '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4v17"/>',
-    play: '<path d="M5 5l14 14M19 5L5 19"/>',
-    more: '<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>',
-    gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>',
-    user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>',
-    star: '<path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/>',
-    edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/>',
-    shield: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/>',
-    out: '<path d="M10 4H5v16h5M14 8l4 4-4 4M18 12H9"/>'
-  };
-  var icon = (k) => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${I[k]}</svg>`;
 
   // js/home.js
   function initHome(go) {
@@ -25992,7 +26181,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     });
     q(".hm-play").addEventListener("click", () => go("play"));
     el.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => go(b.dataset.go)));
-    function render2() {
+    function render3() {
       const b = boosterState();
       if (b) {
         q(".hm-count").textContent = `${b.total} booster${b.total > 1 ? "s" : ""}`;
@@ -26001,16 +26190,17 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         q(".hm-open").disabled = !b.total;
         q(".hm-boost").textContent = b.total;
       }
-      const owned = S.cards.filter((c) => S.collection[c.id]).length;
-      q(".hm-coll").textContent = `${owned} / ${S.cards.length}`;
-      q(".hm-stats .bar i").style.width = `${S.cards.length ? 100 * owned / S.cards.length : 0}%`;
+      const cards = S.cards.filter((c) => c.rarity !== "S" || S.oneOfOne[c.id]);
+      const owned = cards.filter((c) => S.collection[c.id]).length;
+      q(".hm-coll").textContent = `${owned} / ${cards.length}`;
+      q(".hm-stats .bar i").style.width = `${cards.length ? 100 * owned / cards.length : 0}%`;
       q(".hm-decks").textContent = S.decks.length;
     }
-    onChange(render2);
+    onChange(render3);
     setInterval(() => {
-      if (!el.hidden) render2();
+      if (!el.hidden) render3();
     }, 1e3);
-    render2();
+    render3();
   }
 
   // js/app.js
@@ -26065,6 +26255,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     });
     initPlay();
     initCredits();
+    initAchievements();
     if (admin) {
       initEditor();
       initAdmin();
