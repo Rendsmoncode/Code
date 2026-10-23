@@ -807,16 +807,20 @@ details { margin-top: 12px; }
   main:has(.game:not(.mobile)) { padding-block: 6px; }
   .game:not(.mobile) { grid-template-columns: minmax(0, 1fr) clamp(260px, 25vw, 380px); height: calc(100dvh - 74px); align-items: stretch; gap: 10px; }
   .game:not(.mobile) .board {
-    --wb: clamp(56px, min(calc((100dvh - 250px) / 6.2), calc((100vw - 470px) / 10.6)), 130px); --w: var(--wb);
-    display: flex; flex-direction: column; justify-content: center; overflow: hidden; padding: 6px 10px 0; min-height: 0;
+    --wb: clamp(56px, min(calc((100dvh - 185px) / 5.45), calc((100cqw - 60px) / 8)), 150px); --w: var(--wb); container-type: inline-size;
+    display: flex; flex-direction: column; justify-content: center; overflow: clip; padding: 6px 10px 0; min-height: 0;
   }
+  .game:not(.mobile) > #gm-viewer { display: contents; } /* conteneur vide : ne doit pas créer de 2e rangée */
   .game:not(.mobile) .names { display: none; }
   .game:not(.mobile) .side { gap: 6px; padding: 2px 0; }
   .game:not(.mobile) .side.opp { --w: calc(var(--wb) * .8); }
   .game:not(.mobile) .row { gap: 8px; }
   .game:not(.mobile) .leader-zone .slot { width: var(--w); }
-  .game:not(.mobile) .pile .lbl { font-size: .65em; margin-top: 0; }
-  .game:not(.mobile) .ohand { min-height: 0; }
+  /* noms des piles posés sur la carte (gagne de la hauteur) */
+  .game:not(.mobile) .pile .lbl { position: absolute; left: 50%; bottom: 4%; transform: translateX(-50%); margin: 0; padding: 1px 6px; border-radius: 6px; background: #000b; font-size: .65em; white-space: nowrap; pointer-events: none; }
+  /* main adverse : dans le coin, hors du flux */
+  .game:not(.mobile) .side.opp { position: relative; }
+  .game:not(.mobile) .ohand { min-height: 0; position: absolute; top: 2px; right: 0; z-index: 2; }
   .game:not(.mobile) .ohand .card.mini { width: 20px; }
   /* bandeau central sur une seule ligne */
   .game:not(.mobile) .center { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 14px; padding: 6px 12px; margin: 2px auto; max-width: min(100%, 900px); }
@@ -824,9 +828,9 @@ details { margin-top: 12px; }
   .game:not(.mobile) .center .row-btns { margin: 0; }
   .game:not(.mobile) .concede { position: static; order: 9; }
   /* ta main dépasse du bas de l'écran et se soulève au survol */
-  .game:not(.mobile) .side.me .hand { margin-bottom: calc(var(--w) * -0.5); min-height: 0; padding-top: 4px; }
+  .game:not(.mobile) .side.me .hand { margin-bottom: calc(var(--w) * -0.8); min-height: 0; padding-top: 4px; }
   .game:not(.mobile) .side.me .hand .hcard { width: var(--w); }
-  .game:not(.mobile) .side.me .hand .hcard:hover, .game:not(.mobile) .side.me .hand .hcard:focus-visible { transform: translateY(calc(var(--w) * -0.62)) scale(1.06); z-index: 5; }
+  .game:not(.mobile) .side.me .hand .hcard:hover, .game:not(.mobile) .side.me .hand .hcard:focus-visible { transform: translateY(calc(var(--w) * -0.9)) scale(1.06); z-index: 5; }
   /* colonne de droite : la carte en très grand, le journal en dessous */
   .game:not(.mobile) .gside { position: static; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
   .game:not(.mobile) .preview { flex: none; padding: 12px; }
