@@ -227,9 +227,9 @@ export function validateDeck(deck, { owned = true } = {}) {
 }
 
 // ---------- boosters ----------
-// Ouvre n boosters d'un coup (10 au maximum). Si l'un échoue, on garde les cartes déjà tirées.
+// Ouvre n boosters d'un coup (10 au maximum, 100 s'ils sont tous offerts). Si l'un échoue, on garde les cartes déjà tirées.
 export async function openBoosters(n = 1) {
-  n = Math.max(1, Math.min(10, n));
+  n = Math.max(1, Math.min(100, n));
   let pulls = [];
   let error = null;
   const many = await sb.rpc('open_boosters', { n });

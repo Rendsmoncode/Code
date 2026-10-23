@@ -206,7 +206,8 @@ end $$;
 -- Ouvre un booster de 5 cartes : 3 Communes, 1 Peu commune, 1 Rare ou mieux.
 -- Dernière carte : 1 SR sur 4, 1 UR sur 15, 1 LR sur 50, 1 « 1on1 » sur 2 000, sinon Rare.
 -- God Pack : 1 booster sur 1 000 ne contient que des Légendaires, avec 10 % de chance que la dernière soit une 1on1.
-create or replace function public.open_booster() returns json
+-- gift_only : n'utiliser que les boosters offerts (ouvertures de plus de 10 boosters d'un coup).
+create or replace function public.open_one_booster(gift_only boolean) returns json
 language plpgsql security definer set search_path = public as $$
 declare
   p public.profiles;
@@ -221,7 +222,7 @@ declare
 begin
   select * into p from public.profiles where id = auth.uid() for update;
   if not found then raise exception 'Profil introuvable.'; end if;
-  if public.free_boosters(p.free_anchor) > 0 then
+  if not gift_only and public.free_boosters(p.free_anchor) > 0 then
     update public.profiles
       set free_anchor = greatest(free_anchor, now() - interval '60 minutes') + interval '10 minutes'
       where id = p.id;
@@ -262,17 +263,26 @@ begin
   return array_to_json(result);
 end $$;
 
--- Ouvre jusqu'à 10 boosters d'un coup. S'il n'en reste plus en route, on rend ceux déjà ouverts.
+create or replace function public.open_booster() returns json
+language sql security definer set search_path = public as $$
+  select public.open_one_booster(false);
+$$;
+
+-- Ouvre jusqu'à 10 boosters d'un coup, ou jusqu'à 100 s'ils sont tous offerts (les boosters gratuits
+-- ne s'ouvrent jamais par plus de 10). S'il n'en reste plus en route, on rend ceux déjà ouverts.
 create or replace function public.open_boosters(n int) returns json
 language plpgsql security definer set search_path = public as $$
 declare
   res jsonb := '[]';
   legends int;
 begin
-  if n < 1 or n > 10 then raise exception 'On peut ouvrir de 1 à 10 boosters à la fois.'; end if;
+  if n < 1 or n > 100 then raise exception 'On peut ouvrir de 1 à 100 boosters à la fois.'; end if;
+  if n > 10 and (select boosters from public.profiles where id = auth.uid()) < n then
+    raise exception 'Au-delà de 10, on ne peut ouvrir d''un coup que des boosters offerts.';
+  end if;
   for k in 1..n loop
     begin
-      res := res || public.open_booster()::jsonb;
+      res := res || public.open_one_booster(n > 10)::jsonb;
     exception when others then
       if k = 1 then raise; end if;
       exit;

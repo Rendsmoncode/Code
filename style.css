@@ -451,8 +451,11 @@ details { margin-top: 12px; }
   background: linear-gradient(125deg, #ff4d6d, #ffb84d, #f7f052, #4dff9a, #4dc3ff, #b44dff, #ff4d6d) 0 0 / 300% 300%; animation: fx-holo 4s linear infinite; }
 @keyframes fx-holo { to { background-position: 300% 300%; } }
 
-.bx-all { position: absolute; z-index: 4; bottom: 26px; left: 50%; transform: translateX(-50%); }
-.bx.done .bx-all, .bx.intro .bx-all { display: none; }
+.bx-skip { position: absolute; z-index: 4; bottom: 26px; left: 0; right: 0; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; padding: 0 12px; }
+.bx-skip:empty { display: none; }
+.bx.intro .bx-skip { visibility: hidden; }
+.bx-skip .btn { padding: 12px 20px !important; }
+.bs-gift { color: var(--straw); font-size: .85rem; font-weight: 700; margin: -6px 0 12px; }
 
 /* récapitulatif */
 .bx.done .bx-stage { gap: 26px; padding: 20px; }

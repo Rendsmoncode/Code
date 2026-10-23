@@ -39,12 +39,13 @@ export function makeMock() {
       const fn = path.split('/').pop();
       if (fn === 'booster_status') return json(route, status(p));
       const stats = () => (st.stats[uid] ||= { boosters_opened: 0, best_batch: 0, wins: 0, games: 0, best_win_streak: 0, win_streak: 0, perfect_wins: 0, comeback_wins: 0, beaten: [], god_packs: 0, max_dry_streak: 0, two_legends: false });
-      const openOne = () => { if (p.free > 0) p.free--; else if (p.boosters > 0) p.boosters--; else return null;
+      const openOne = (giftOnly = false) => { if (p.free > 0 && !giftOnly) p.free--; else if (p.boosters > 0) p.boosters--; else return null;
         const roll = Math.random(); const god = st.god === true; const slots = god ? ['L', 'L', 'L', 'L', 'L'] : ['C', 'C', 'C', 'UC', st.force || (roll < 0.3 ? 'S' : roll < 0.6 ? 'L' : 'R')];
         stats().boosters_opened++; if (god) { stats().god_packs++; st.god = false; }
         return slots.map((r) => { const id = pick(r); const isNew = !st.coll[uid]?.[id]; add(uid, id, 1); return { id, new: isNew, god }; }); };
       if (fn === 'open_booster') { const r = openOne(); return r ? json(route, r) : json(route, { message: 'Aucun booster disponible pour le moment.' }, 400); }
-      if (fn === 'open_boosters') { const out = []; for (let i = 0; i < body.n; i++) { const r = openOne(); if (!r) { if (!i) return json(route, { message: 'Aucun booster disponible pour le moment.' }, 400); break; } out.push(...r); }
+      if (fn === 'open_boosters') { if (body.n > 10 && p.boosters < body.n) return json(route, { message: 'Au-delà de 10, on ne peut ouvrir d\'un coup que des boosters offerts.' }, 400);
+        const out = []; for (let i = 0; i < body.n; i++) { const r = openOne(body.n > 10); if (!r) { if (!i) return json(route, { message: 'Aucun booster disponible pour le moment.' }, 400); break; } out.push(...r); }
         stats().best_batch = Math.max(stats().best_batch, out.length / 5); return json(route, out); }
       if (fn === 'record_game') { const s = stats(); s.games++; if (body.won) { s.wins++; s.win_streak++; } else s.win_streak = 0; s.best_win_streak = Math.max(s.best_win_streak, s.win_streak); return json(route, null); }
       if (fn === 'check_achievements') { const s = stats(); const own = Object.keys(st.coll[uid] || {}).map((id) => st.cards[id]); const ach = (st.ach[uid] ||= {});

@@ -21531,7 +21531,7 @@ ${suffix}`;
     return { ok: errs.length === 0, errs: [...new Set(errs)], total };
   }
   async function openBoosters(n3 = 1) {
-    n3 = Math.max(1, Math.min(10, n3));
+    n3 = Math.max(1, Math.min(100, n3));
     let pulls = [];
     let error = null;
     const many = await sb.rpc("open_boosters", { n: n3 });
@@ -25727,8 +25727,10 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   ];
   var busy2 = false;
   var qty = 1;
+  var maxQty = (b) => S.status?.gifted > 10 ? Math.min(100, S.status.gifted) : Math.min(10, b?.total || 0);
   var SPECIAL = { UR: 1100, L: 1700, S: 2600 };
   var rank = (id) => RARITY_ORDER.indexOf(S.byId[id]?.rarity);
+  var SR = RARITY_ORDER.indexOf("SR");
   function packHTML(cls = "", set = "SB01") {
     return `<div class="bpack ${cls}" aria-hidden="true"><div class="bp-seal bp-top"></div>
     <div class="bp-body"><div class="bp-set">${set}</div><div class="bp-logo">${logoSVG()}</div><div class="bp-sub">Booster \xB7 5 cartes</div></div>
@@ -25767,6 +25769,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       <div class="bs-qty" role="group" aria-label="Nombre de boosters \xE0 ouvrir">
         <button class="btn" data-q="-1" aria-label="Un de moins">\u2212</button><span></span><button class="btn" data-q="1" aria-label="Un de plus">+</button>
         <button class="btn bs-max" data-q="max">Max</button></div>
+      <p class="bs-gift" hidden>Plus de 10 d'un coup : uniquement des boosters offerts</p>
       <button class="btn bs-open">Ouvrir</button>
       <p class="msg bs-msg" role="status"></p>
     </section>
@@ -25803,8 +25806,8 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     el.querySelector(".bs-qty").addEventListener("click", (e) => {
       const d = e.target.closest("[data-q]")?.dataset.q;
       if (!d) return;
-      const total = boosterState()?.total || 0;
-      qty = d === "max" ? Math.min(10, total) : qty + Number(d);
+      const max = maxQty(boosterState());
+      qty = d === "max" ? max : qty + Number(d);
       renderHead();
     });
     setInterval(renderHead, 1e3);
@@ -25821,11 +25824,13 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       q(".bs-count").textContent = `${total} booster${total > 1 ? "s" : ""}`;
       q(".bs-detail").innerHTML = next ? `Prochain booster gratuit dans <b>${mmss(left)}</b>` : "R\xE9serve de boosters gratuits pleine";
       if (S.status.gifted) q(".bs-detail").innerHTML += ` \xB7 dont <b>${S.status.gifted}</b> offert${S.status.gifted > 1 ? "s" : ""}`;
-      qty = Math.max(1, Math.min(qty, 10, total || 1));
+      const max = maxQty(b);
+      qty = Math.max(1, Math.min(qty, max || 1));
       q(".bs-qty span").textContent = qty;
       q('[data-q="-1"]').disabled = qty <= 1;
-      q('[data-q="1"]').disabled = qty >= Math.min(10, total);
-      q(".bs-max").disabled = qty >= Math.min(10, total);
+      q('[data-q="1"]').disabled = qty >= max;
+      q(".bs-max").disabled = qty >= max;
+      q(".bs-gift").hidden = qty <= 10;
       q(".bs-qty").hidden = total < 2;
       q(".bs-pack").classList.toggle("multi", qty > 1);
       q(".bs-x").textContent = qty > 1 ? `\xD7${qty}` : "";
@@ -25836,7 +25841,8 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       const ov = document.createElement("div");
       ov.className = "bx";
       ov.innerHTML = `<div class="bx-fx"></div><div class="bx-stage"></div><div class="bx-info"></div><div class="bx-hint"></div>
-      ${pulls.length > 5 ? '<button class="btn ghost bx-all" data-do="all">Tout r\xE9v\xE9ler</button>' : ""}`;
+      <div class="bx-skip">${pulls.length > 25 && pulls.some((p) => rank(p.id) >= SR) ? '<button class="btn ghost" data-do="sr">Passer aux SR et +</button>' : ""}
+      ${pulls.length > 5 ? '<button class="btn ghost" data-do="all">Tout r\xE9v\xE9ler</button>' : ""}</div>`;
       document.body.append(ov);
       const stage = ov.querySelector(".bx-stage");
       let i = -1;
@@ -25884,7 +25890,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         ov.querySelector(".bx-fx").innerHTML = "";
         ov.querySelector(".bx-hint").textContent = "";
         ov.querySelector(".bx-info").innerHTML = "";
-        ov.querySelector(".bx-all")?.remove();
+        ov.querySelector(".bx-skip")?.remove();
         const groups = [];
         for (const p of pulls) {
           const g = groups.find((x) => x.id === p.id);
@@ -25917,6 +25923,17 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         const d = e.target.closest("[data-do]")?.dataset.do;
         if (d === "all") {
           summary();
+          return;
+        }
+        if (d === "sr") {
+          const first = pulls.findIndex((p) => rank(p.id) >= SR);
+          if (lock) return;
+          e.target.closest("[data-do]").remove();
+          if (first > i + 1) {
+            i = first - 1;
+            stage.querySelector(".bx-card")?.remove();
+            next();
+          }
           return;
         }
         if (d === "close" || d === "again") {

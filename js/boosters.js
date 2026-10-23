@@ -11,9 +11,13 @@ const RATES = [
 ];
 
 let busy = false;
-let qty = 1; // nombre de boosters ouverts d'un coup (1 à 10)
+let qty = 1; // nombre de boosters ouverts d'un coup (1 à 10, ou jusqu'à 100 boosters offerts)
+
+// Au-delà de 10 boosters d'un coup, seuls les boosters offerts comptent (limite 100).
+const maxQty = (b) => (S.status?.gifted > 10 ? Math.min(100, S.status.gifted) : Math.min(10, b?.total || 0));
 const SPECIAL = { UR: 1100, L: 1700, S: 2600 }; // durée de l'animation d'arrivée (ms) des grosses raretés
 const rank = (id) => RARITY_ORDER.indexOf(S.byId[id]?.rarity);
+const SR = RARITY_ORDER.indexOf('SR');
 
 // Paquet de booster (accueil et onglet Boosters). set : code du set (SB01 = set de base n° 1).
 export function packHTML(cls = '', set = 'SB01') {
@@ -53,6 +57,7 @@ export function initBoosters() {
       <div class="bs-qty" role="group" aria-label="Nombre de boosters à ouvrir">
         <button class="btn" data-q="-1" aria-label="Un de moins">−</button><span></span><button class="btn" data-q="1" aria-label="Un de plus">+</button>
         <button class="btn bs-max" data-q="max">Max</button></div>
+      <p class="bs-gift" hidden>Plus de 10 d'un coup : uniquement des boosters offerts</p>
       <button class="btn bs-open">Ouvrir</button>
       <p class="msg bs-msg" role="status"></p>
     </section>
@@ -89,8 +94,8 @@ export function initBoosters() {
   el.querySelector('.bs-qty').addEventListener('click', (e) => {
     const d = e.target.closest('[data-q]')?.dataset.q;
     if (!d) return;
-    const total = boosterState()?.total || 0;
-    qty = d === 'max' ? Math.min(10, total) : qty + Number(d);
+    const max = maxQty(boosterState());
+    qty = d === 'max' ? max : qty + Number(d);
     renderHead();
   });
 
@@ -107,11 +112,13 @@ export function initBoosters() {
     q('.bs-count').textContent = `${total} booster${total > 1 ? 's' : ''}`;
     q('.bs-detail').innerHTML = next ? `Prochain booster gratuit dans <b>${mmss(left)}</b>` : 'Réserve de boosters gratuits pleine';
     if (S.status.gifted) q('.bs-detail').innerHTML += ` · dont <b>${S.status.gifted}</b> offert${S.status.gifted > 1 ? 's' : ''}`;
-    qty = Math.max(1, Math.min(qty, 10, total || 1));
+    const max = maxQty(b);
+    qty = Math.max(1, Math.min(qty, max || 1));
     q('.bs-qty span').textContent = qty;
     q('[data-q="-1"]').disabled = qty <= 1;
-    q('[data-q="1"]').disabled = qty >= Math.min(10, total);
-    q('.bs-max').disabled = qty >= Math.min(10, total);
+    q('[data-q="1"]').disabled = qty >= max;
+    q('.bs-max').disabled = qty >= max;
+    q('.bs-gift').hidden = qty <= 10;
     q('.bs-qty').hidden = total < 2;
     q('.bs-pack').classList.toggle('multi', qty > 1);
     q('.bs-x').textContent = qty > 1 ? `×${qty}` : '';
@@ -124,7 +131,8 @@ export function initBoosters() {
     const ov = document.createElement('div');
     ov.className = 'bx';
     ov.innerHTML = `<div class="bx-fx"></div><div class="bx-stage"></div><div class="bx-info"></div><div class="bx-hint"></div>
-      ${pulls.length > 5 ? '<button class="btn ghost bx-all" data-do="all">Tout révéler</button>' : ''}`;
+      <div class="bx-skip">${pulls.length > 25 && pulls.some((p) => rank(p.id) >= SR) ? '<button class="btn ghost" data-do="sr">Passer aux SR et +</button>' : ''}
+      ${pulls.length > 5 ? '<button class="btn ghost" data-do="all">Tout révéler</button>' : ''}</div>`;
     document.body.append(ov);
     const stage = ov.querySelector('.bx-stage');
     let i = -1;
@@ -168,7 +176,7 @@ export function initBoosters() {
       ov.querySelector('.bx-fx').innerHTML = '';
       ov.querySelector('.bx-hint').textContent = '';
       ov.querySelector('.bx-info').innerHTML = '';
-      ov.querySelector('.bx-all')?.remove();
+      ov.querySelector('.bx-skip')?.remove();
       const groups = [];
       for (const p of pulls) {
         const g = groups.find((x) => x.id === p.id);
@@ -200,6 +208,14 @@ export function initBoosters() {
     ov.addEventListener('click', (e) => {
       const d = e.target.closest('[data-do]')?.dataset.do;
       if (d === 'all') { summary(); return; }
+      if (d === 'sr') {
+        // Saute directement à la première SR (les cartes sont rangées de la Commune à la 1on1).
+        const first = pulls.findIndex((p) => rank(p.id) >= SR);
+        if (lock) return;
+        e.target.closest('[data-do]').remove();
+        if (first > i + 1) { i = first - 1; stage.querySelector('.bx-card')?.remove(); next(); }
+        return;
+      }
       if (d === 'close' || d === 'again') {
         ov.remove();
         busy = false;
