@@ -13,10 +13,10 @@ let busy = false;
 const SPECIAL = { UR: 1100, L: 1700, S: 2600 }; // durée de l'animation d'arrivée (ms) des grosses raretés
 const rank = (id) => RARITY_ORDER.indexOf(S.byId[id]?.rarity);
 
-// Paquet de booster (accueil et onglet Boosters).
-export function packHTML(cls = '') {
+// Paquet de booster (accueil et onglet Boosters). set : code du set (SB01 = set de base n° 1).
+export function packHTML(cls = '', set = 'SB01') {
   return `<div class="bpack ${cls}" aria-hidden="true"><div class="bp-seal bp-top"></div>
-    <div class="bp-body"><div class="bp-logo">${logoSVG()}</div><div class="bp-sub">Booster · 5 cartes</div></div>
+    <div class="bp-body"><div class="bp-set">${set}</div><div class="bp-logo">${logoSVG()}</div><div class="bp-sub">Booster · 5 cartes</div></div>
     <div class="bp-seal bp-bot"></div></div>`;
 }
 

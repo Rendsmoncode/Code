@@ -366,6 +366,7 @@ details { margin-top: 12px; }
 }
 .bp-body::after { content: ''; position: absolute; left: 0; right: 0; bottom: 16%; height: 5px; background: var(--pk); }
 .bp-logo svg { width: 120px; color: #fff; display: block; }
+.bp-set { position: absolute; top: 9px; left: 11px; font: 400 13px "Archivo Black", sans-serif; letter-spacing: 1.5px; color: var(--pk); }
 .bp-sub { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: #ffffff80; font-weight: 800; }
 .bp-seal { position: absolute; left: -2%; right: -2%; height: 8%; border-radius: 3px;
   background: repeating-linear-gradient(90deg, #ffffff22 0 2px, transparent 2px 5px), linear-gradient(#3a3e48, #24272e); }

@@ -25524,9 +25524,9 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   var busy2 = false;
   var SPECIAL = { UR: 1100, L: 1700, S: 2600 };
   var rank = (id) => RARITY_ORDER.indexOf(S.byId[id]?.rarity);
-  function packHTML(cls = "") {
+  function packHTML(cls = "", set = "SB01") {
     return `<div class="bpack ${cls}" aria-hidden="true"><div class="bp-seal bp-top"></div>
-    <div class="bp-body"><div class="bp-logo">${logoSVG()}</div><div class="bp-sub">Booster \xB7 5 cartes</div></div>
+    <div class="bp-body"><div class="bp-set">${set}</div><div class="bp-logo">${logoSVG()}</div><div class="bp-sub">Booster \xB7 5 cartes</div></div>
     <div class="bp-seal bp-bot"></div></div>`;
   }
   function boosterState() {
