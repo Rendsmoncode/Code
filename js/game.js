@@ -27,7 +27,7 @@ const myTurn = () => G?.phase === 'play' && G.turn.player === G.role;
 const oppTurn = () => G?.phase === 'play' && G.turn.player === other(G.role);
 const myCard = (inst) => G.myCards[inst.c];
 const oppCard = (inst) => G.oppCards[inst.c];
-const power = (inst, card, ownerTurn) => (Number(card?.power) || 0) + (inst.m || 0) + (inst.bm || 0) + (inst.pm || 0)
+const power = (inst, card, ownerTurn) => (Number(card?.power) || 0) + (inst.m || 0) + (inst.bm || 0) + (inst.pm || 0) + (inst.nm || 0)
   + (ownerTurn ? (inst.d || 0) * 1000 : 0);
 const myPower = (inst) => power(inst, myCard(inst), myTurn()) + staticSum(inst, 'power') + auraSum(inst, 'power');
 // L'adversaire envoie la puissance actuelle de ses cartes (p), effets permanents compris.
@@ -289,7 +289,7 @@ function pub() {
   const deco = (i) => i && { ...i, p: myPower(i), cc: curCost(i, myCard(i)) };
   return {
     leader: deco(m.leader), chars: m.chars.map(deco), stage: m.stage, trash: m.trash, auras: myAuras(),
-    hand: m.hand.length, deck: m.deck.length, life: m.life.length,
+    hand: m.hand.length, deck: m.deck.length, life: m.life.length, lifeUp: m.life.map((i) => (i.fu ? i.c : null)),
     donDeck: m.donDeck, donActive: m.donActive, donRested: m.donRested,
     phase: G.phase,
   };
@@ -397,7 +397,7 @@ async function beginTurn(count) {
 
 // Le tour adverse se termine : ses effets « jusqu'à la fin du tour » sur mes cartes s'arrêtent.
 async function oppTurnEnded(count) {
-  endTurnMods();
+  endTurnMods(other(G.role));
   await fireAll('endOfOppTurn');
   beginTurn(count + 1);
 }
@@ -406,7 +406,7 @@ async function endTurn() {
   if (G.battle) return toast('Terminez le combat en cours d\'abord.');
   if (G.manual) endManual();
   await fireAll('endOfTurn');
-  endTurnMods();
+  endTurnMods(G.role);
   log('termine son tour.');
   G.turn = { player: other(G.role), count: G.turn.count };
   G.select = null;
@@ -456,10 +456,11 @@ function move(u, to, pos = 'top') {
   const me = G.me;
   const { inst } = loc;
   if (loc.zone === 'stage') me.stage = null; else me[loc.zone].splice(loc.idx, 1);
-  if (loc.zone === 'chars' && to !== 'chars') queueLeave(myCard(inst));
+  if (loc.zone === 'life') delete inst.fu;
+  if (loc.zone === 'chars' && to !== 'chars') queueLeave(myCard(inst), oppCause);
   if (loc.zone === 'chars' || loc.zone === 'stage') {
     me.donRested += inst.d || 0; // les DON!! attachés retournent dans la zone de coût, reposés
-    for (const k of ['m', 'bm', 'pm', 'cm', 'cmt', 'kw', 'prot', 'frozen', 'noAtk', 'neg', 'used']) delete inst[k];
+    for (const k of ['m', 'bm', 'pm', 'nm', 'cm', 'cmt', 'cnx', 'nx', 'kw', 'prot', 'frozen', 'noAtk', 'neg', 'used']) delete inst[k];
     Object.assign(inst, { d: 0, r: false });
   }
   if (to === 'stage') {
@@ -481,7 +482,7 @@ function reveal(inst, why) {
   send({ t: 'reveal', c: inst.c, why });
 }
 
-async function playCard(u, free = false) {
+async function playCard(u, free = false, rested = false) {
   const loc = locate(u);
   if (!loc) return;
   const c = myCard(loc.inst);
@@ -497,7 +498,11 @@ async function playCard(u, free = false) {
   G.me.donRested += cost;
   const from = loc.zone === 'hand' ? '' : ` depuis ${zoneName(loc.zone)}`;
   const inst = loc.inst;
-  if (c.type === 'character') { move(u, 'chars'); log(`joue ${name(c)}${from}${cost ? ` (coût ${cost})` : ''}.`); }
+  if (c.type === 'character') {
+    move(u, 'chars');
+    if (rested) inst.r = true;
+    log(`joue ${name(c)}${rested ? ' épuisé' : ''}${from}${cost ? ` (coût ${cost})` : ''}.`);
+  }
   else if (c.type === 'stage') { move(u, 'stage'); log(`joue le Lieu ${name(c)}${from}${cost ? ` (coût ${cost})` : ''}.`); }
   else if (c.type === 'event') {
     move(u, 'trash');
@@ -526,14 +531,17 @@ function startAttack(inst) {
   if (G.turn.count <= 2) return toast('Personne ne peut attaquer pendant son premier tour.');
   const c = myCard(inst);
   if ((inst.noAtk || 0) >= G.turn.count) return toast(`${c.name} ne peut pas attaquer ce tour-ci.`);
-  if (c.type === 'character' && inst.t === G.turn.count && !hasKw(inst, 'rush')) {
+  // [Initiative : Personnage] : le tour où il est joué, il peut attaquer les Personnages seulement.
+  const onlyChars = c.type === 'character' && inst.t === G.turn.count && !hasKw(inst, 'rush');
+  if (onlyChars && !hasKw(inst, 'rushChar')) {
     return toast(`${c.name} a été joué ce tour : il lui faut [Initiative] pour attaquer.`);
   }
-  G.select = { kind: 'attack', attacker: inst.u };
+  G.select = { kind: 'attack', attacker: inst.u, onlyChars };
   render();
 }
 
 async function declareAttack(targetInst, isLeader) {
+  if (isLeader && G.select.onlyChars) return toast('Joué ce tour avec [Initiative : Personnage] : il ne peut attaquer que des Personnages.');
   const atk = locate(G.select.attacker)?.inst;
   G.select = null;
   if (!atk) return;
@@ -639,7 +647,7 @@ async function resolveBattle() {
         if (lost) return;
       } else if (isProtected(tgt, 'battle')) {
         log(`${name(tc)} ne peut pas être mis KO en combat (${b.atkPower} contre ${def}).`);
-      } else {
+      } else if (!(await tryReplace(tgt, 'koBattle'))) {
         await koMine(tgt, ` (${b.atkPower} contre ${def})`);
       }
     } else log(`repousse l'attaque (${b.atkPower} contre ${def}).`);
@@ -656,6 +664,7 @@ async function takeDamage(n, banish) {
     const me = G.me;
     if (!me.life.length) { lose('Son Leader a été touché sans carte Vie restante.'); return true; }
     const inst = me.life.pop();
+    delete inst.fu;
     const c = myCard(inst);
     if (banish) {
       me.trash.push(inst);
@@ -707,8 +716,12 @@ async function takeDamage(n, banish) {
 //   m / bm / pm : puissance (tour / combat / permanent) ; cmt / cm : coût (tour / permanent)
 //   kw : { motClé: durée } ; prot : { battle|effect: durée } ; frozen ; noAtk (n° de tour) ; neg ; used
 const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+// La carte a-t-elle ce type ? incl : le type contient seulement le mot (« incluant «CP» dans son type »).
+const typeOk = (c, type, incl = false) => String(c?.traits || '').split('/').map(norm).map((t) => t.trim())
+  .some((t) => (incl ? t.includes(norm(type).trim()) : t === norm(type).trim()));
+const oppDon = () => (G.opp ? G.opp.donActive + G.opp.donRested + [G.opp.leader, ...G.opp.chars, G.opp.stage].filter(Boolean).reduce((s, i) => s + (i.d || 0), 0) : 0);
 const hasNum = (v) => v !== undefined && v !== '' && v !== null;
-const curCost = (inst, c) => (Number(c?.cost) || 0) + (inst?.cm || 0) + (inst?.cmt || 0)
+const curCost = (inst, c) => (Number(c?.cost) || 0) + (inst?.cm || 0) + (inst?.cmt || 0) + (inst?.cnx || 0)
   + (inst?.u ? staticSum(inst, 'cost') + auraSum(inst, 'cost') : 0);
 const effectsOf = (inst) => (inst?.neg ? [] : myCard(inst)?.effects || []);
 const donTotal = () => G.me.donActive + G.me.donRested + fieldInsts().reduce((s, i) => s + (i.d || 0), 0);
@@ -719,7 +732,22 @@ function condOK(c, src) {
   switch (c.k) {
     case 'donAttached': return (src?.d || 0) >= c.n;
     case 'donField': return donTotal() >= c.n;
-    case 'leaderType': return norm(L.traits).includes(norm(c.v));
+    case 'leaderType': return typeOk(L, c.v);
+    case 'leaderName': return norm(L.name) === norm(c.v).trim();
+    case 'leaderMulti': return (L.colors || []).length > 1;
+    case 'donFieldLE': return donTotal() <= c.n;
+    case 'donCmp': { const a = donTotal(); const b = oppDon(); return { le: a <= b, lt: a < b, ge: a >= b, gt: a > b }[c.cmp || 'le']; }
+    case 'oppCount': {
+      const o = G.opp;
+      if (!o) return false;
+      const v = { don: oppDon(), hand: o.hand, chars: o.chars.length, life: o.life }[c.what || 'don'];
+      return c.cmp === 'le' ? v <= c.n : v >= c.n;
+    }
+    case 'anyChar': {
+      const mine = c.side === 'opp' ? 0 : me.chars.filter((i) => matches(myCard(i), c.f || {}, i, 'me')).length;
+      const theirs = (G.opp?.chars || []).filter((i) => matches(oppCard(i), c.f || {}, i, 'opp')).length;
+      return mine + theirs >= (c.n || 1);
+    }
     case 'leaderColor': return (L.colors || []).includes(c.v);
     case 'leaderAttr': return attributesOf(L).map(norm).includes(norm(c.v));
     case 'lifeLE': return me.life.length <= c.n;
@@ -730,8 +758,8 @@ function condOK(c, src) {
       const f = { ...(c.f || {}), ...(c.type ? { type: c.type } : {}) };
       return me.chars.filter((i) => matches(myCard(i), f, i, 'me')).length >= c.n;
     }
-    case 'typeFieldGE': return fieldInsts().filter((i) => (c.self !== 'skip' || i.u !== src?.u) && norm(myCard(i).traits).includes(norm(c.type))).length >= c.n;
-    case 'noTypeField': return !fieldInsts().some((i) => (c.self === 'count' || i.u !== src?.u) && norm(myCard(i).traits).includes(norm(c.type)));
+    case 'typeFieldGE': return fieldInsts().filter((i) => (c.self !== 'skip' || i.u !== src?.u) && typeOk(myCard(i), c.type)).length >= c.n;
+    case 'noTypeField': return !fieldInsts().some((i) => (c.self === 'count' || i.u !== src?.u) && typeOk(myCard(i), c.type));
     case 'trashGE': return me.trash.length >= c.n;
     case 'myTurn': return myTurn();
     case 'oppTurn': return oppTurn();
@@ -743,7 +771,8 @@ const condsOK = (e, src) => (e.conds || []).every((c) => condOK(c, src));
 // Une carte correspond-elle au filtre ? side : 'me' ou 'opp' (pour la puissance / le coût actuels).
 function matches(c, f = {}, inst = null, side = 'me') {
   if (!c) return false;
-  if (f.type && !norm(c.traits).includes(norm(f.type))) return false;
+  if (f.type && !typeOk(c, f.type, f.typeIncl === 'yes')) return false;
+  if (f.notName && norm(c.name).includes(norm(f.notName))) return false;
   if (f.color && !(c.colors || []).includes(f.color)) return false;
   if (f.attr && !attributesOf(c).map(norm).includes(norm(f.attr))) return false;
   if (f.name && !norm(c.name).includes(norm(f.name))) return false;
@@ -862,7 +891,8 @@ function auraFlag(inst, kind, test) {
 // Mot-clé d'une de mes cartes en jeu (carte, effet temporaire, effet permanent, ou aura adverse).
 function hasKw(inst, k) {
   const c = myCard(inst);
-  if (!inst.neg && ({ blocker: isBlocker, rush: hasRush, double: hasDoubleAttack, banish: hasBanish, unblockable: isUnblockable }[k])?.(c)) return true;
+  const own = { blocker: isBlocker, rush: hasRush, double: hasDoubleAttack, banish: hasBanish, unblockable: isUnblockable, rushChar: (x) => (x?.keywords || []).includes('rushChar') };
+  if (!inst.neg && own[k]?.(c)) return true;
   if (inst.kw?.[k]) return true;
   return staticFlag(inst, 'grantKw', (a) => a.kw === k) || auraFlag(inst, 'grantKw', (a) => a.kw === k);
 }
@@ -873,13 +903,19 @@ function isProtected(inst, kind) {
 }
 
 // Applique un modificateur à une de MES cartes (effet de moi ou reçu de l'adversaire).
-function applyMod(inst, a) {
+// fromOpp : l'effet vient de l'adversaire (pour savoir quel « prochain tour adverse » met fin à la durée « next »).
+function applyMod(inst, a, fromOpp = false) {
   const dur = a.dur || 'turn';
+  if (dur === 'next' && ['power', 'cost', 'grantKw', 'protect'].includes(a.k)) {
+    // Fin au terme du prochain tour de l'adversaire de celui qui joue l'effet (pas le tour en cours).
+    const x = fromOpp ? G.role : other(G.role);
+    inst.nx = { x, skip: G.turn.player === x };
+  }
   if (a.k === 'power') {
-    const key = dur === 'battle' ? 'bm' : dur === 'perm' ? 'pm' : 'm';
+    const key = dur === 'battle' ? 'bm' : dur === 'perm' ? 'pm' : dur === 'next' ? 'nm' : 'm';
     inst[key] = (inst[key] || 0) + (Number(a.amount) || 0);
   } else if (a.k === 'cost') {
-    const key = dur === 'perm' ? 'cm' : 'cmt';
+    const key = dur === 'perm' ? 'cm' : dur === 'next' ? 'cnx' : 'cmt';
     inst[key] = (inst[key] || 0) + (Number(a.amount) || 0);
   } else if (a.k === 'grantKw') {
     inst.kw = { ...(inst.kw || {}), [a.kw]: dur };
@@ -902,13 +938,43 @@ function endBattleMods() {
   for (const i of fieldInsts()) { i.bm = 0; clearDur(i, 'battle'); }
 }
 // Fin d'un tour (le mien ou celui de l'adversaire) : les effets « jusqu'à la fin du tour » disparaissent.
-function endTurnMods() {
+// endedBy : rôle du joueur dont le tour se termine.
+function endTurnMods(endedBy) {
   for (const i of fieldInsts()) {
     Object.assign(i, { m: 0, cmt: 0, neg: false });
     clearDur(i, 'turn');
     clearDur(i, 'battle');
     i.bm = 0;
+    if (i.nx?.x === endedBy) {
+      if (i.nx.skip) i.nx.skip = false;
+      else { Object.assign(i, { nm: 0, cnx: 0 }); clearDur(i, 'next'); delete i.nx; }
+    }
   }
+}
+
+// Effets de remplacement : « Si ce Personnage devait être mis KO …, vous pouvez … à la place. »
+// ev : koBattle, koMine (par mon effet), koOpp (par un effet adverse), leaveOpp (renvoyé, placé sous le deck… par l'adversaire).
+const REPLACES = {
+  ko: ['koBattle', 'koMine', 'koOpp'], koBattle: ['koBattle'], koOpp: ['koOpp'],
+  leaveOpp: ['koOpp', 'leaveOpp'], any: ['koBattle', 'koMine', 'koOpp', 'leaveOpp'],
+};
+async function tryReplace(inst, ev) {
+  if (!G.me.chars.some((x) => x.u === inst.u)) return false;
+  for (const src of fieldInsts()) {
+    const list = effectsOf(src);
+    for (let idx = 0; idx < list.length; idx++) {
+      const e = list[idx];
+      if (e.when !== 'replace') continue;
+      const rp = e.rp || { ev: 'ko', who: 'self' };
+      if (!(REPLACES[rp.ev] || []).includes(ev)) continue;
+      if (rp.who === 'self' ? src.u !== inst.u : (!matches(myCard(inst), e.wf || {}, inst, 'me') || (rp.who === 'other' && src.u === inst.u))) continue;
+      if (!condsOK(e, src) || canPay(e.costs, src)) continue;
+      if (e.once && src.used?.[`${src.c}:${idx}`] === G.turn.count) continue;
+      const ctx = await runEffect(src, e, { optional: true, idx });
+      if (ctx) { log(`${name(myCard(inst))} reste sur le terrain (remplacement).`); return true; }
+    }
+  }
+  return false;
 }
 
 // Met KO une de mes cartes en jeu et déclenche ses effets [KO].
@@ -926,8 +992,9 @@ async function koMine(inst, why = '') {
 // qu'aucun autre effet n'est en cours (pour ne pas ouvrir deux fenêtres de choix à la fois).
 let leaveQueue = [];
 let leaveTimer = null;
-function queueLeave(c) {
-  leaveQueue.push(c);
+let oppCause = false; // vrai pendant qu'un effet adverse s'applique à mes cartes
+function queueLeave(c, byOpp = false) {
+  leaveQueue.push({ c, byOpp });
   if (!leaveTimer) leaveTimer = setTimeout(flushLeaves, 0);
 }
 async function flushLeaves() {
@@ -939,7 +1006,25 @@ async function flushLeaves() {
   leaveTimer = null;
   const list = leaveQueue;
   leaveQueue = [];
-  for (const c of list) await fireAll('onOwnLeave', null, c);
+  for (const { c, byOpp } of list) {
+    await fireAll('onOwnLeave', null, c);
+    if (byOpp) await fireAll('onOwnLeaveOpp', null, c);
+  }
+}
+
+// Prend n Vies en main, du dessus (fin du tableau) ou du dessous ; « either » : le joueur choisit.
+async function lifeToHand(n, pos = 'top') {
+  const me = G.me;
+  for (let k = 0; k < n && me.life.length; k++) {
+    let p = pos;
+    if (p === 'either' && me.life.length > 1) {
+      p = await ask('Quelle Vie ?', '<p>Prendre la carte du dessus ou du dessous de votre Vie ?</p>',
+        [{ label: 'Dessus', value: 'top', cls: 'primary' }, { label: 'Dessous', value: 'bottom' }]) || 'top';
+    }
+    const i = p === 'bottom' ? me.life[0] : me.life.at(-1);
+    move(i.u, 'hand');
+  }
+  log(`ajoute ${n} de ses Vies à sa main.`);
 }
 
 // ---------- coûts ----------
@@ -948,7 +1033,9 @@ function canPay(costs, src) {
   for (const c of costs || []) {
     if (c.k === 'restDon' && me.donActive < c.n) return `Il faut ${c.n} DON!! actif(s).`;
     if (c.k === 'donReturn' && donTotal() < c.n) return `Il faut ${c.n} DON!! sur le terrain.`;
-    if (c.k === 'discard' && me.hand.length < c.n) return `Il faut ${c.n} carte(s) en main.`;
+    if (c.k === 'discard' && me.hand.filter((i) => matches(myCard(i), c.f || {})).length < c.n) return `Il faut ${c.n} carte(s) qui conviennent en main.`;
+    if (c.k === 'trashSelf' && !['chars', 'stage'].includes(locate(src?.u)?.zone)) return 'Cette carte n\'est pas sur le terrain.';
+    if (c.k === 'lifeFlip' && !me.life.some((i) => !i.fu)) return 'Il faut une Vie face cachée.';
     if (c.k === 'restSelf' && src?.r) return 'Cette carte est déjà reposée.';
     if (c.k === 'restLeader' && me.leader?.r) return 'Votre Leader est déjà reposé.';
     if (c.k === 'koOwn' && !me.chars.length) return 'Il faut un Personnage à mettre KO.';
@@ -969,9 +1056,15 @@ async function payCosts(costs, src) {
       for (const i of fieldInsts()) { const x = Math.min(n, i.d || 0); i.d -= x; n -= x; }
       me.donDeck += c.n - n;
     } else if (c.k === 'discard') {
-      const picked = await pickMany(`Coût : défaussez ${c.n} carte(s)`, me.hand, myCard, { min: c.n, max: c.n, cancel: false });
-      for (const i of picked) move(i.u, 'trash');
+      const ok = (i) => matches(myCard(i), c.f || {});
+      const picked = await pickMany(`Coût : défaussez ${c.n} carte(s)`, me.hand, myCard, { min: c.n, max: c.n, selectable: ok, cancel: false });
+      for (const i of picked) { move(i.u, 'trash'); reveal(i, 'Défaussée (coût)'); }
     } else if (c.k === 'restSelf') src.r = true;
+    else if (c.k === 'trashSelf') { move(src.u, 'trash'); log(`place ${name(myCard(src))} dans sa défausse.`); }
+    else if (c.k === 'lifeFlip') {
+      const i = [...me.life].reverse().find((x) => !x.fu);
+      if (i) { i.fu = true; log(`retourne une Vie face visible : ${name(myCard(i))}.`); }
+    }
     else if (c.k === 'restLeader') me.leader.r = true;
     else if (c.k === 'koOwn') {
       const [v] = await pickMany('Coût : mettez KO un de vos Personnages', me.chars, myCard, { min: 1, max: 1, cancel: false });
@@ -979,7 +1072,7 @@ async function payCosts(costs, src) {
     } else if (c.k === 'trashToDeck') {
       const picked = await pickMany(`Coût : ${c.n} carte(s) de la défausse sous le deck`, me.trash, myCard, { min: c.n, max: c.n, cancel: false });
       for (const i of picked) move(i.u, 'deck', 'bottom');
-    } else if (c.k === 'lifeToHand') { const i = me.life.at(-1); if (i) move(i.u, 'hand'); }
+    } else if (c.k === 'lifeToHand') await lifeToHand(1, c.pos);
     else if (c.k === 'revealHand') {
       const ok = (i) => matches(myCard(i), c.f || {});
       const [i] = await pickMany('Coût : révélez une carte de votre main', me.hand, myCard, { min: 1, max: 1, selectable: ok, cancel: false });
@@ -1086,6 +1179,34 @@ async function doFx(a, ctx) {
       log(`cherche dans son deck${i ? ` et prend ${name(myCard(i))}` : ''}, puis le mélange.`);
       break;
     }
+    case 'trashToHand': {
+      const ok = (i) => matches(myCard(i), a.f || {});
+      const picked = (await pickMany(title(`reprenez jusqu'à ${a.n} carte(s) de votre défausse`), me.trash, myCard, { max: a.n, selectable: ok })) || [];
+      for (const i of picked) { move(i.u, 'hand'); reveal(i, 'Reprise de la défausse'); }
+      if (picked.length) log(`reprend ${picked.map((i) => name(myCard(i))).join(', ')} de sa défausse.`);
+      break;
+    }
+    case 'useMain': {
+      if (ctx.eff.when === 'main' || ctx.inMain) break;
+      ctx.inMain = true;
+      await fireCard(src, 'main');
+      break;
+    }
+    case 'toLife': {
+      const targets = await chooseTargets(t, src, title('choisissez le Personnage à placer dans la Vie'));
+      if (!targets.length) break;
+      if (opp) {
+        sendFx('toLife', { us: targets.map((x) => x.u), pos: a.pos, fu: a.face === 'up' }, src);
+        log(`place ${targets.map((x) => name(oppCard(x))).join(', ')} dans la Vie adverse.`);
+        break;
+      }
+      for (const x of targets) {
+        move(x.u, 'life', a.pos === 'bottom' ? 'bottom' : 'top');
+        if (a.face === 'up') x.fu = true;
+        log(`place ${name(myCard(x))} dans sa Vie.`);
+      }
+      break;
+    }
     case 'mill': {
       const top = me.deck.slice(0, a.n);
       for (const i of top) move(i.u, 'trash');
@@ -1097,7 +1218,7 @@ async function doFx(a, ctx) {
       const list = me[zone].filter((i) => ['character', 'stage'].includes(myCard(i).type)
         && (!hasNum(a.max) || curCost(i, myCard(i)) <= a.max) && matches(myCard(i), a.f || {}));
       const [i] = (await pickMany(title('jouez une carte gratuitement'), list, myCard, { max: 1 })) || [];
-      if (i) await playCard(i.u, true);
+      if (i) await playCard(i.u, true, a.state === 'rested');
       break;
     }
     case 'ko': case 'bounce': case 'toBottom': case 'rest': case 'untap': case 'freeze':
@@ -1113,6 +1234,7 @@ async function doFx(a, ctx) {
       for (const x of targets) {
         if (a.k === 'ko') {
           if (isProtected(x, 'effect')) { log(`${name(myCard(x))} ne peut pas être mis KO.`); continue; }
+          if (await tryReplace(x, 'koMine')) continue;
           await koMine(x);
         } else if (a.k === 'bounce') { move(x.u, 'hand'); log(`renvoie ${name(myCard(x))} en main.`); }
         else if (a.k === 'toBottom') { move(x.u, 'deck', 'bottom'); log(`place ${name(myCard(x))} sous son deck.`); }
@@ -1125,7 +1247,7 @@ async function doFx(a, ctx) {
       if (a.from === 'life' || ctx.eff.when === 'trigger' || !a.from) { ctx.played = true; break; }
       // Sinon : jouer la carte gratuitement depuis la défausse ou la main (ex. « [KO] Jouez cette carte depuis votre défausse »).
       const zone = locate(src.u)?.zone;
-      if (zone === (a.from === 'hand' ? 'hand' : 'trash')) await playCard(src.u, true);
+      if (zone === (a.from === 'hand' ? 'hand' : 'trash')) await playCard(src.u, true, a.state === 'rested');
       break;
     }
     case 'donAdd': {
@@ -1148,21 +1270,18 @@ async function doFx(a, ctx) {
     case 'donOppReturn': sendFx('donReturn', { n: a.n }, src); break;
     case 'restOppDon': sendFx('restDon', { n: a.n }, src); break;
     case 'lifeFromDeck': {
-      for (let k = 0; k < a.n && me.deck.length; k++) move(me.deck[0].u, 'life', 'top');
+      for (let k = 0; k < a.n && me.deck.length; k++) { const i = move(me.deck[0].u, 'life', 'top'); if (a.face === 'up') i.fu = true; }
       log(`ajoute ${a.n} carte(s) du deck à sa Vie.`);
       break;
     }
     case 'lifeFromHand': {
-      const picked = (await pickMany(title(`ajoutez jusqu'à ${a.n} carte(s) à votre Vie`), me.hand, myCard, { max: a.n })) || [];
-      for (const i of picked) move(i.u, 'life', 'top');
+      const ok = (i) => matches(myCard(i), a.f || {});
+      const picked = (await pickMany(title(`ajoutez jusqu'à ${a.n} carte(s) à votre Vie`), me.hand, myCard, { max: a.n, selectable: ok })) || [];
+      for (const i of picked) { move(i.u, 'life', 'top'); if (a.face === 'up') i.fu = true; }
       if (picked.length) log(`ajoute ${picked.length} carte(s) de sa main à sa Vie.`);
       break;
     }
-    case 'lifeToHand': {
-      for (let k = 0; k < a.n && me.life.length; k++) move(me.life.at(-1).u, 'hand');
-      log(`ajoute ${a.n} de ses Vies à sa main.`);
-      break;
-    }
+    case 'lifeToHand': await lifeToHand(a.n, a.pos); break;
     case 'oppLifeRemove': sendFx('lifeRemove', { n: a.n, to: a.to }, src); break;
     case 'lifeLook': {
       if (me.life.length < 2) break;
@@ -1193,7 +1312,8 @@ async function doFx(a, ctx) {
 // Action reçue de l'adversaire sur mes cartes.
 async function applyFx(m) {
   busy++;
-  try { await applyFxNow(m); } finally { busy--; }
+  oppCause = true;
+  try { await applyFxNow(m); } finally { busy--; oppCause = false; }
 }
 async function applyFxNow(m) {
   const me = G.me;
@@ -1203,13 +1323,24 @@ async function applyFxNow(m) {
     case 'ko':
       for (const x of insts) {
         if (isProtected(x, 'effect')) { log(`${name(myCard(x))} ne peut pas être mis KO${by}.`); continue; }
+        if (await tryReplace(x, 'koOpp')) continue;
         await koMine(x, by);
       }
       break;
-    case 'bounce': for (const x of insts) { move(x.u, 'hand'); log(`reprend ${name(myCard(x))} en main${by}.`); } break;
-    case 'toBottom': for (const x of insts) { move(x.u, 'deck', 'bottom'); log(`place ${name(myCard(x))} sous son deck${by}.`); } break;
+    case 'bounce': case 'toBottom': case 'toLife':
+      for (const x of insts) {
+        if (await tryReplace(x, 'leaveOpp')) continue;
+        if (m.op === 'bounce') { move(x.u, 'hand'); log(`reprend ${name(myCard(x))} en main${by}.`); }
+        else if (m.op === 'toBottom') { move(x.u, 'deck', 'bottom'); log(`place ${name(myCard(x))} sous son deck${by}.`); }
+        else {
+          move(x.u, 'life', m.pos === 'bottom' ? 'bottom' : 'top');
+          if (m.fu) x.fu = true;
+          log(`place ${name(myCard(x))} dans sa Vie${by}.`);
+        }
+      }
+      break;
     case 'rest': case 'untap': case 'freeze': case 'power': case 'cost': case 'grantKw': case 'protect': case 'cannotAttack': case 'negate':
-      for (const x of insts) applyMod(x, { k: m.op, amount: m.amount, dur: m.dur, kw: m.kw, by: m.by2 });
+      for (const x of insts) applyMod(x, { k: m.op, amount: m.amount, dur: m.dur, kw: m.kw, by: m.by2 }, true);
       break;
     case 'discard': {
       const n = Math.min(m.n, me.hand.length);
@@ -1230,6 +1361,7 @@ async function applyFxNow(m) {
     case 'lifeRemove': {
       for (let k = 0; k < m.n && me.life.length; k++) {
         const i = me.life.pop();
+        delete i.fu;
         me[m.to === 'hand' ? 'hand' : 'trash'].push(i);
       }
       log(`perd ${m.n} Vie(s) vers sa ${m.to === 'hand' ? 'main' : 'défausse'}${by}.`);
@@ -1537,7 +1669,7 @@ function slot(inst, side, zone) {
   const pw = c && (c.type === 'leader' || c.type === 'character') ? (mine ? myPower(inst) : oppPower(inst)) : undefined;
   const cls = ['slot'];
   if (inst.r) cls.push('rested');
-  if (G.select?.kind === 'attack' && !mine && (zone === 'leader' || (zone === 'chars' && inst.r))) cls.push('target');
+  if (G.select?.kind === 'attack' && !mine && ((zone === 'leader' && !G.select.onlyChars) || (zone === 'chars' && inst.r))) cls.push('target');
   if (G.select?.attacker === inst.u) cls.push('attacking');
   if (G.battle && (G.battle.attacker === inst.u)) cls.push('attacking');
   if (G.battle && (G.battle.target === inst.u)) cls.push('defending');
@@ -1566,8 +1698,13 @@ function sideHTML(side) {
   if (!d || !d.leader) return `<div class="side ${side} empty"><p class="muted">${mine ? '' : 'En attente de l\'adversaire…'}</p></div>`;
   const n = (x) => (mine ? x.length : x);
   const chars = Array.from({ length: 5 }, (_, i) => (d.chars[i] ? slot(d.chars[i], side, 'chars') : '<div class="slot free"></div>')).join('');
+  // Vies face visible : vues par les deux joueurs (index 0 = dessous).
+  const lifeUp = mine ? d.life.map((i) => (i.fu ? i.c : null)) : (d.lifeUp || []);
+  const getC = mine ? (id) => G.myCards[id] : (id) => G.oppCards[id];
+  const upCount = lifeUp.filter(Boolean).length;
+  const lifeTop = lifeUp.at(-1) ? { ...getC(lifeUp.at(-1)), c: lifeUp.at(-1) } : null;
   const base = `<div class="row base">
-      ${pile('life', side, n(d.life), 'Vie')}
+      ${pile('life', side, n(d.life), upCount ? `Vie · ${upCount} visible${upCount > 1 ? 's' : ''}` : 'Vie', lifeTop)}
       <div class="leader-zone">${slot(d.leader, side, 'leader')}</div>
       <div class="stage-zone">${d.stage ? slot(d.stage, side, 'stage') : '<div class="slot free stage-free"><span>Lieu</span></div>'}</div>
       ${pile('deck', side, n(d.deck), 'Deck')}
@@ -1856,5 +1993,6 @@ if (TESTING) {
     prot: (u, k) => isProtected(locate(u).inst, k),
     commit: () => commit(),
     endTurn: () => endTurn(),
+    attack: (u) => startAttack(locate(u).inst),
   };
 }

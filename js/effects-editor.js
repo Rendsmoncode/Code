@@ -1,12 +1,12 @@
 // Constructeur d'effets (onglet Cartes) : menus déroulants → card.effects / card.keywords.
 import {
   WHEN, CONDS, COSTS, ACTIONS, ACTION_GROUPS, CONTINUOUS_ACTIONS, SIDES, WHO, KEYWORDS_AUTO, COLORS_FR,
-  effectText, defaults,
+  effectText, defaults, REPLACE_EV, REPLACE_WHO,
 } from './effects.js';
 import { esc, ATTRIBUTES } from './cards.js';
 
 const SECTIONS = { conds: ['Conditions', CONDS], costs: ['Coûts', COSTS], actions: ['Actions', ACTIONS] };
-const KW_SHOWN = ['blocker', 'rush', 'double', 'banish', 'unblockable', 'unlimited'];
+const KW_SHOWN = ['blocker', 'rush', 'rushChar', 'double', 'banish', 'unblockable', 'unlimited'];
 
 // card est modifié directement ; onChange() est appelé après chaque modification.
 export function mountEffectsEditor(el, getCard, onChange) {
@@ -53,7 +53,7 @@ export function mountEffectsEditor(el, getCard, onChange) {
       onChange();
       return;
     }
-    if (t.dataset.f === 'when') eff.when = t.value;
+    if (t.dataset.f === 'when') { eff.when = t.value; if (WHEN[t.value]?.replace) eff.rp ||= { ev: 'ko', who: 'self' }; }
     else if (t.dataset.wp) setPath(eff, t.dataset.wp, t.type === 'number' ? (t.value === '' ? '' : Number(t.value)) : t.value);
     else if (t.dataset.f === 'once') eff.once = t.checked;
     else if (t.dataset.p) {
@@ -93,7 +93,10 @@ function blockHTML(eff, i, card) {
     <div class="fxe-head">
       <label>Quand <select data-f="when">${allowed.map(([k, v]) => `<option value="${k}" ${k === eff.when ? 'selected' : ''}>${v.label}</option>`).join('')}</select></label>
       <label class="check"><input type="checkbox" data-f="once" ${eff.once ? 'checked' : ''}> Une fois par tour</label>
-      ${w.subject ? `<span class="fxe-when-filter"><span class="muted small">Quel Personnage ?</span>${filterHTML('wf', eff.wf || {}, 'data-wp')}</span>` : ''}
+      ${w.replace ? `<label>Si ${select('rp.who', REPLACE_WHO, eff.rp?.who).replace('data-p=', 'data-wp=')}</label>
+        <label>devait être ${select('rp.ev', REPLACE_EV, eff.rp?.ev).replace('data-p=', 'data-wp=')}</label>` : ''}
+      ${w.subject && !(w.replace && (eff.rp?.who || 'self') === 'self') ? `<span class="fxe-when-filter"><span class="muted small">Quel Personnage ?</span>${filterHTML('wf', eff.wf || {}, 'data-wp')}</span>` : ''}
+      ${w.replace ? '<span class="muted small">Ce que vous faites à la place : ajoutez-le dans « Coûts » (ou « Actions »).</span>' : ''}
       <button type="button" class="btn small danger" data-act="del-effect">Supprimer l'effet</button>
     </div>
     ${sectionHTML(eff, 'conds')}
@@ -152,7 +155,9 @@ function filterHTML(path, f, attr = 'data-p') {
   const sel = (k, opts) => select(`${path}.${k}`, opts, f[k] || '').replace('data-p=', `${attr}=`);
   return `<span class="fxe-filter">
     <label>Type <input type="text" ${attr}="${path}.type" value="${esc(f.type || '')}" placeholder="ex. Marine" list="all-traits"></label>
+    <label>Le type ${sel('typeIncl', { '': 'est exactement', yes: 'contient le mot' })}</label>
     <label>Nom <input type="text" ${attr}="${path}.name" value="${esc(f.name || '')}" placeholder="ex. Prisonnier"></label>
+    <label>Autre que <input type="text" ${attr}="${path}.notName" value="${esc(f.notName || '')}" placeholder="ex. Garp"></label>
     <label>Genre ${sel('cardType', { '': '—', character: 'Personnage', stage: 'Lieu', event: 'Événement' })}</label>
     <label>Couleur ${sel('color', { '': '—', ...COLORS_FR })}</label>
     <label>Attribut ${sel('attr', { '': '—', ...Object.fromEntries(ATTRIBUTES.map((a) => [a, a])) })}</label>
