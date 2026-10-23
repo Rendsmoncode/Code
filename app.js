@@ -21813,6 +21813,114 @@ ${suffix}`;
     else o[last] = value;
   }
 
+  // js/wiki-hints.js
+  var WIKI_HINTS = {
+    // Rugby — clubs et nations
+    "Stade Toulousain": "Stade Ernest-Wallon",
+    "RC Toulon": "Stade Mayol",
+    "Stade Rochelais": "Stade Marcel-Deflandre",
+    UBB: "Stade Chaban-Delmas",
+    "Racing 92": "Paris La Defense Arena",
+    "Stade Fran\xE7ais": "Stade Jean-Bouin Paris",
+    "ASM Clermont": "Stade Marcel-Michelin",
+    "Castres Olympique": "Stade Pierre-Fabre Castres",
+    Montpellier: "GGL Stadium Montpellier",
+    "Section Paloise": "Stade du Hameau Pau",
+    "Aviron Bayonnais": "Stade Jean-Dauger Bayonne",
+    "USA Perpignan": "Stade Aim\xE9-Giral",
+    "Lyon OU": "Matmut Stadium Gerland",
+    "Biarritz Olympique": "Parc des sports Aguilera Biarritz",
+    "CA Brive": "Stade Am\xE9d\xE9e-Domenech Brive",
+    "SU Agen": "Stade Armandie Agen",
+    "RC Vannes": "Stade de la Rabine Vannes",
+    "AS B\xE9ziers": "Stade Raoul-Barri\xE8re B\xE9ziers",
+    Oyonnax: "Stade Charles-Mathon Oyonnax",
+    "FC Grenoble": "Stade des Alpes Grenoble",
+    "XV de France": "Stade de France rugby",
+    "Nouvelle-Z\xE9lande": "All Blacks haka",
+    "Afrique du Sud": "Springboks rugby",
+    Angleterre: "Twickenham Stadium",
+    Irlande: "Aviva Stadium rugby",
+    // Football — clubs et nations
+    "Paris Saint-Germain": "Parc des Princes",
+    "Olympique de Marseille": "Stade V\xE9lodrome Marseille",
+    "Olympique Lyonnais": "Groupama Stadium Lyon",
+    "AS Saint-\xC9tienne": "Stade Geoffroy-Guichard",
+    "Real Madrid": "Santiago Bernab\xE9u Stadium",
+    "FC Barcelone": "Camp Nou",
+    "Manchester United": "Old Trafford",
+    Liverpool: "Anfield stadium",
+    "Bayern Munich": "Allianz Arena",
+    Juventus: "Juventus Stadium Turin",
+    "AC Milan": "San Siro stadium",
+    Chelsea: "Stamford Bridge stadium",
+    Arsenal: "Emirates Stadium",
+    "Manchester City": "Etihad Stadium",
+    "Inter Milan": "Giuseppe Meazza stadium",
+    France: "France national football team supporters",
+    "Br\xE9sil": "Maracan\xE3 stadium",
+    Argentine: "Argentina football fans",
+    Allemagne: "Germany national football team fans",
+    Espagne: "Spain national football team fans",
+    // Julie — fiction, œuvres, lieux
+    "Juliette Capulet": "Juliet balcony Verona",
+    "Julie Lescaut": "police car France",
+    "Julie Molina": "piano keyboard",
+    "Juliet Starling": "chainsaw",
+    "Juliet Burke": "Hawaii jungle",
+    "Juliette Barnes": "Nashville country music stage",
+    "Julie Cooper": "Newport Beach California",
+    "Julie Powers": "Toronto night",
+    "Juliette Nichols": "underground silo",
+    "Juliette (Gnom\xE9o)": "garden gnome",
+    "Rom\xE9o, Rom\xE9o !": "Juliet balcony Verona",
+    "Poison de V\xE9rone": "poison bottle",
+    "Le sac de Mary Poppins": "carpet bag umbrella",
+    "Cry Me a River": "river rain",
+    "Love Story": "love letter",
+    "Sous le ciel de Paris": "Paris sky rooftops",
+    "Le Chocolat": "chocolate shop",
+    "Appel au commissariat": "police station France",
+    "Le balcon de V\xE9rone": "Juliet balcony Verona",
+    "Le salon R\xE9camier": "salon Empire style",
+    "Le Silo 18": "grain silo",
+    // Jazz, Pieds, M, Manucure, Bordeaux
+    "Lisa Simpson": "saxophone",
+    "A Love Supreme": "jazz saxophone concert",
+    "Jam session": "jazz jam session",
+    "Le Cotton Club": "Cotton Club Harlem",
+    Bigfoot: "Bigfoot footprint",
+    Cendrillon: "glass slipper",
+    Achille: "Achilles statue",
+    "Frodon Sacquet": "Hobbiton",
+    "Le gros orteil": "bare feet toes",
+    "Chaussette d\xE9pareill\xE9e": "odd socks",
+    "Coup de pied retourn\xE9": "bicycle kick football",
+    "Massage des pieds": "foot massage",
+    "Ampoule au talon": "hiking boots",
+    "Le magasin de chaussures": "shoe shop",
+    Machistador: "Matthieu Chedid concert",
+    "Qui de nous deux": "guitar concert",
+    "Mama Sam": "acoustic guitar",
+    Lamomali: "kora instrument",
+    "La proth\xE9siste ongulaire": "manicure",
+    "Vernis rouge": "red nail polish",
+    "Lime \xE0 ongles": "nail file",
+    "Faux ongles": "artificial nails",
+    "Ongle cass\xE9": "fingernail",
+    "French manucure": "french manicure",
+    "S\xE9chage UV": "UV nail lamp",
+    "Pose de vernis": "nail polish",
+    "L'onglerie": "nail salon",
+    "Le bac \xE0 manucure": "manicure set",
+    "Cannel\xE9": "canel\xE9",
+    "Grand cru class\xE9": "Bordeaux wine bottle",
+    "La F\xEAte du Vin": "F\xEAte du Vin Bordeaux",
+    "Le Miroir d'eau": "Miroir d'eau Bordeaux",
+    "Place de la Bourse": "Place de la Bourse Bordeaux",
+    "Le Pont de pierre": "Pont de pierre Bordeaux"
+  };
+
   // js/editor.js
   var root = () => document.getElementById("tab-cards");
   var cur = newCard();
@@ -22207,7 +22315,10 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         e.target.closest("[data-start]").disabled = true;
         const pre = q(".ws-prefix").value;
         const list = S.cards.filter((c) => (!pre || (c.code || "").startsWith(`${pre}-`)) && (!q(".ws-empty").checked || !c.image) && (!q(".ws-chars").checked || c.type === "character"));
-        items = list.map((c) => ({ c, query: c.name.replace(/\(.*\)/, "").trim(), strict: c.type === "character", cands: [], sel: 0, keep: false }));
+        items = list.map((c) => {
+          const hint = WIKI_HINTS[c.name];
+          return { c, query: hint || c.name.replace(/\(.*\)/, "").trim(), strict: !hint && c.type === "character", cands: [], sel: 0, keep: false };
+        });
         q(".ws-grid").innerHTML = "";
         for (let i = 0; i < items.length; i++) {
           if (stop) return;

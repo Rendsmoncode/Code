@@ -4,6 +4,7 @@ import {
   COLORS, TYPES, RARITIES, ATTRIBUTES, attributesOf, KEYWORDS, esc, uid, newCard, cardHTML, resizeImage, download, readJSONFile,
 } from './cards.js';
 import { mountEffectsEditor } from './effects-editor.js';
+import { WIKI_HINTS } from './wiki-hints.js';
 import { allTraits } from './store.js';
 
 const root = () => document.getElementById('tab-cards');
@@ -335,7 +336,11 @@ function openWikiSearch() {
       const pre = q('.ws-prefix').value;
       const list = S.cards.filter((c) => (!pre || (c.code || '').startsWith(`${pre}-`)) && (!q('.ws-empty').checked || !c.image)
         && (!q('.ws-chars').checked || c.type === 'character'));
-      items = list.map((c) => ({ c, query: c.name.replace(/\(.*\)/, '').trim(), strict: c.type === 'character', cands: [], sel: 0, keep: false }));
+      // Mots-clés préparés (clubs, nations, œuvres, fiction) : la recherche est alors libre (pas de nom à retrouver dans le titre).
+      items = list.map((c) => {
+        const hint = WIKI_HINTS[c.name];
+        return { c, query: hint || c.name.replace(/\(.*\)/, '').trim(), strict: !hint && c.type === 'character', cands: [], sel: 0, keep: false };
+      });
       q('.ws-grid').innerHTML = '';
       for (let i = 0; i < items.length; i++) {
         if (stop) return;
