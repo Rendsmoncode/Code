@@ -1,5 +1,5 @@
 // Onglets « Boosters » (ouverture) et « Collection ».
-import { S, openBoosters, refreshStatus, onChange } from './store.js';
+import { S, openBoosters, refreshStatus, refreshCollection, takeReveals, onChange } from './store.js';
 import { RARITIES, RARITY_ORDER, TYPES, esc, cardHTML, showCardBig } from './cards.js';
 import { logoSVG } from './logo.js';
 import { refreshAchievements } from './achievements.js';
@@ -20,9 +20,9 @@ const rank = (id) => RARITY_ORDER.indexOf(S.byId[id]?.rarity);
 const SR = RARITY_ORDER.indexOf('SR');
 
 // Paquet de booster (accueil et onglet Boosters). set : code du set (SB01 = set de base n° 1).
-export function packHTML(cls = '', set = 'SB01') {
+export function packHTML(cls = '', set = 'SB01', sub = 'Booster · 5 cartes') {
   return `<div class="bpack ${cls}" aria-hidden="true"><div class="bp-seal bp-top"></div>
-    <div class="bp-body"><div class="bp-set">${set}</div><div class="bp-logo">${logoSVG()}</div><div class="bp-sub">Booster · 5 cartes</div></div>
+    <div class="bp-body"><div class="bp-set">${set}</div><div class="bp-logo">${logoSVG()}</div><div class="bp-sub">${sub}</div></div>
     <div class="bp-seal bp-bot"></div></div>`;
 }
 
@@ -42,6 +42,37 @@ export function boosterState() {
   return { free, next, total: free + st.gifted, left: next ? Math.max(0, Math.ceil((next - now) / 1000)) : 0 };
 }
 export const mmss = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+
+let revealFn = null; // ouverture plein écran (définie par initBoosters)
+
+// Cartes offertes en attente : écran « Cadeau ! », puis chaque carte différente se révèle comme dans un booster.
+export async function checkGifts() {
+  if (!revealFn || busy || document.querySelector('.bx')) return;
+  const list = await takeReveals();
+  if (!list.length) return;
+  await refreshCollection().catch(() => {});
+  const pulls = list.filter((g) => S.byId[g.id]).sort((x, y) => rank(x.id) - rank(y.id));
+  if (!pulls.length) return;
+  busy = true;
+  const total = pulls.reduce((a, g) => a + (g.n || 1), 0);
+  const ov = document.createElement('div');
+  ov.className = 'bx gift';
+  ov.innerHTML = `<div class="bx-gift"><p class="bx-gift-t">Cadeau !</p>
+    <p class="bx-gift-s">Tu as reçu <b>${total} carte${total > 1 ? 's' : ''}</b> · ${pulls.length} différente${pulls.length > 1 ? 's' : ''}</p>
+    <div class="bs-pack">${packHTML('', 'SB01', 'Cadeau')}</div>
+    <button class="btn main" data-do="go">Ouvrir</button></div>`;
+  document.body.append(ov);
+  let opened = false;
+  ov.addEventListener('click', async (e) => {
+    if (opened || !e.target.closest('[data-do=go], .bs-pack')) return;
+    opened = true;
+    const pack = ov.querySelector('.bpack');
+    pack.classList.add('tear');
+    await wait(650);
+    ov.remove();
+    revealFn(pulls, false, true);
+  });
+}
 
 // Ouvre un booster depuis un autre onglet (accueil).
 export const openFromHome = () => { qty = 1; document.querySelector('#tab-boosters .bs-open')?.click(); };
@@ -126,12 +157,17 @@ export function initBoosters() {
     q('.bs-open').disabled = busy || total === 0;
   }
 
+  revealFn = reveal;
+  // Compte à rebours, cadeaux reçus pendant qu'on est sur le site.
+  setInterval(() => { if (!document.hidden) checkGifts().catch(() => {}); }, 30000);
+
   // Ouverture plein écran : une carte à la fois, on touche la carte pour passer à la suivante.
-  function reveal(pulls, god = false) {
+  // gift : cartes offertes (chaque carte différente une fois, p.n = nombre d'exemplaires).
+  function reveal(pulls, god = false, gift = false) {
     const ov = document.createElement('div');
     ov.className = 'bx';
     ov.innerHTML = `<div class="bx-fx"></div><div class="bx-stage"></div><div class="bx-info"></div><div class="bx-hint"></div>
-      <div class="bx-skip">${pulls.length > 25 && pulls.some((p) => rank(p.id) >= SR) ? '<button class="btn ghost" data-do="sr">Passer aux SR et +</button>' : ''}
+      <div class="bx-skip">${!gift && pulls.length > 25 && pulls.some((p) => rank(p.id) >= SR) ? '<button class="btn ghost" data-do="sr">Passer aux SR et +</button>' : ''}
       ${pulls.length > 5 ? '<button class="btn ghost" data-do="all">Tout révéler</button>' : ''}</div>`;
     document.body.append(ov);
     const stage = ov.querySelector('.bx-stage');
@@ -165,7 +201,7 @@ export function initBoosters() {
         ov.classList.remove('intro');
       }
       stage.insertAdjacentHTML('beforeend', `<button class="bx-card in r-${r}" data-id="${esc(p.id)}" aria-label="Carte suivante (appui long : voir en grand)">${cardHTML(c)}</button>`);
-      ov.querySelector('.bx-info').innerHTML = `<span class="rar-chip r-${r}">${RARITIES[r]?.label || ''}</span>${p.new ? '<span class="bx-new">Nouvelle !</span>' : ''}
+      ov.querySelector('.bx-info').innerHTML = `<span class="rar-chip r-${r}">${RARITIES[r]?.label || ''}</span>${p.n > 1 ? `<span class="bx-new">×${p.n}</span>` : ''}${p.new ? '<span class="bx-new">Nouvelle !</span>' : ''}
         ${r === 'S' ? '<div class="bx-unique">Exemplaire unique</div>' : ''}`;
       await wait(SPECIAL[r] ? 500 : 250);
       lock = false;
@@ -183,9 +219,9 @@ export function initBoosters() {
       const groups = [];
       for (const p of pulls) {
         const g = groups.find((x) => x.id === p.id);
-        if (g) { g.n++; g.new ||= p.new; } else groups.push({ id: p.id, n: 1, new: p.new });
+        if (g) { g.n += p.n || 1; g.new ||= p.new; } else groups.push({ id: p.id, n: p.n || 1, new: p.new });
       }
-      const left = boosterState()?.total || 0;
+      const left = gift ? 0 : boosterState()?.total || 0;
       const again = Math.min(10, left, Math.max(1, pulls.length / 5));
       stage.innerHTML = `<div class="bx-sum">${groups.map((g) => {
         const c = S.byId[g.id];
@@ -231,6 +267,7 @@ export function initBoosters() {
         for (const ev of ['pointerup', 'pointercancel']) document.removeEventListener(ev, release);
         busy = false;
         renderHead();
+        if (gift) checkGifts().catch(() => {});
         if (d === 'again') { qty = Math.max(1, Math.min(10, pulls.length / 5)); renderHead(); q('.bs-open').click(); }
         return;
       }

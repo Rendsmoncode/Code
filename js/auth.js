@@ -2,6 +2,7 @@
 import { S, signIn, signUp, claimStarter, validateDeck, inviteInfo } from './store.js';
 import { esc, cardHTML } from './cards.js';
 import { logoSVG } from './logo.js';
+import { checkGifts } from './boosters.js';
 
 export async function showAuth() {
   let mode = 'in';
@@ -83,6 +84,7 @@ export function maybeAskStarter() {
     try {
       await claimStarter(d.id);
       o.remove();
+      checkGifts().catch(() => {}); // les cartes du deck s'ouvrent comme un booster
     } catch (err) { o.querySelector('.st-msg').textContent = err.message; }
   });
 }

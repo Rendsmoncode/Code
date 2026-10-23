@@ -99,7 +99,40 @@ create table if not exists public.collection_backups (
   restored_at timestamptz
 );
 
+-- Cartes reçues en cadeau (deck de départ, Game Master) pas encore « ouvertes » : le joueur les découvre
+-- une par une comme un booster à sa prochaine visite.
+create table if not exists public.pending_reveals (
+  user_id uuid not null references public.profiles on delete cascade,
+  card_id text not null references public.cards on delete cascade,
+  qty int not null check (qty > 0),
+  was_new boolean not null default false,   -- le joueur ne l'avait pas encore
+  created_at timestamptz not null default now(),
+  primary key (user_id, card_id)
+);
+
 -- ---------- Fonctions utilitaires ----------
+
+-- Met une carte offerte de côté pour l'ouverture façon booster (à appeler AVANT de l'ajouter à la collection).
+create or replace function public.queue_reveal(uid uuid, cid text, n int) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if n is null or n <= 0 then return; end if;
+  insert into public.pending_reveals (user_id, card_id, qty, was_new)
+    values (uid, cid, n, not exists (select 1 from public.collection where user_id = uid and card_id = cid))
+    on conflict (user_id, card_id) do update set qty = public.pending_reveals.qty + excluded.qty,
+      was_new = public.pending_reveals.was_new or excluded.was_new;
+end $$;
+
+-- Cartes offertes à ouvrir : renvoyées une seule fois, puis retirées de la file.
+create or replace function public.take_reveals() returns json
+language plpgsql security definer set search_path = public as $$
+declare r json;
+begin
+  select coalesce(json_agg(json_build_object('id', card_id, 'n', qty, 'new', was_new) order by created_at), '[]') into r
+    from public.pending_reveals where user_id = auth.uid();
+  delete from public.pending_reveals where user_id = auth.uid();
+  return r;
+end $$;
 
 create or replace function public.is_admin() returns boolean
 language sql stable security definer set search_path = public as $$
@@ -348,10 +381,12 @@ begin
     raise exception 'Un deck préconstruit ne peut pas contenir de carte 1on1.';
   end if;
   if coalesce(s.leader, '') <> '' then
+    perform public.queue_reveal(p.id, s.leader, 1);
     insert into public.collection (user_id, card_id, qty) values (p.id, s.leader, 1)
       on conflict (user_id, card_id) do update set qty = public.collection.qty + 1;
   end if;
   for k, v in select key, value::int from jsonb_each_text(s.cards) loop
+    perform public.queue_reveal(p.id, k, v);
     insert into public.collection (user_id, card_id, qty) values (p.id, k, v)
       on conflict (user_id, card_id) do update set qty = public.collection.qty + excluded.qty;
   end loop;
@@ -428,6 +463,7 @@ alter table public.invites enable row level security;
 alter table public.stats enable row level security;
 alter table public.achievements enable row level security;
 alter table public.collection_backups enable row level security;
+alter table public.pending_reveals enable row level security;
 
 drop policy if exists "mes stats" on public.stats;
 create policy "mes stats" on public.stats for select to authenticated using (user_id = auth.uid());
@@ -578,6 +614,11 @@ declare
   n int;
 begin
   if not exists (select 1 from public.cards where id = cid) then raise exception 'Carte introuvable.'; end if;
+  if delta > 0 then perform public.queue_reveal(uid, cid, delta);
+  else
+    delete from public.pending_reveals where user_id = uid and card_id = cid and qty + delta <= 0;
+    update public.pending_reveals set qty = qty + delta where user_id = uid and card_id = cid;
+  end if;
   select coalesce(max(qty), 0) + delta into n from public.collection where user_id = uid and card_id = cid;
   if n <= 0 then
     delete from public.collection where user_id = uid and card_id = cid;
@@ -599,6 +640,7 @@ begin
     select uid, lower(target), coalesce(jsonb_object_agg(card_id, qty), '{}') from public.collection where user_id = uid
     returning id into bid;
   delete from public.collection where user_id = uid;
+  delete from public.pending_reveals where user_id = uid;
   return bid;
 end $$;
 
@@ -644,7 +686,7 @@ grant execute on function public.is_admin(), public.booster_status(), public.ope
   public.admin_create_invite(text, text, int), public.is_revealed(text), public.open_boosters(int),
   public.record_game(boolean, text, int, boolean), public.check_achievements(),
   public.is_owner(), public.gm_collection(text), public.gm_add_card(text, text, int), public.gm_reset_collection(text),
-  public.gm_restore_backup(bigint), public.gm_backups()
+  public.gm_restore_backup(bigint), public.gm_backups(), public.take_reveals()
   to authenticated;
 grant usage on schema public to anon;
 grant execute on function public.invite_info(text) to anon, authenticated;

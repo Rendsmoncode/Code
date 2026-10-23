@@ -4,7 +4,7 @@ import { showAuth, maybeAskStarter } from './auth.js';
 import { initEditor } from './editor.js';
 import { createDeckBuilder } from './decks.js';
 import { initPlay } from './game.js';
-import { initBoosters, initCollection } from './boosters.js';
+import { initBoosters, initCollection, checkGifts } from './boosters.js';
 import { initAdmin } from './admin.js';
 import { openSettings } from './settings.js';
 import { initCredits } from './credits.js';
@@ -66,6 +66,7 @@ async function start() {
   if (new URLSearchParams(location.search).get('join')) first = 'play';
   show(first);
   maybeAskStarter();
+  checkGifts().catch(() => {});
 }
 
 start().catch((e) => {

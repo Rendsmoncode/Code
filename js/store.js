@@ -131,6 +131,12 @@ export async function refreshStatus() {
   return S.status;
 }
 
+// Cartes offertes (deck de départ, Game Master) à ouvrir façon booster. Vide si le script SQL n'est pas à jour.
+export async function takeReveals() {
+  const { data, error } = await sb.rpc('take_reveals');
+  return error ? [] : (data || []);
+}
+
 export async function refreshCollection() {
   S.collection = Object.fromEntries(check(await sb.from('collection').select('card_id, qty')).map((r) => [r.card_id, r.qty]));
 }

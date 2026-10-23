@@ -21465,6 +21465,10 @@ ${suffix}`;
     emit();
     return S.status;
   }
+  async function takeReveals() {
+    const { data, error } = await sb.rpc("take_reveals");
+    return error ? [] : data || [];
+  }
   async function refreshCollection() {
     S.collection = Object.fromEntries(check(await sb.from("collection").select("card_id, qty")).map((r) => [r.card_id, r.qty]));
   }
@@ -21637,6 +21641,525 @@ ${suffix}`;
     check(await sb.rpc("admin_set_role", { target, new_role: role }));
   }
 
+  // js/icons.js
+  var I = {
+    home: '<path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"/>',
+    pack: '<rect x="6" y="3" width="12" height="18" rx="2"/><path d="M6 7h12M6 17h12"/>',
+    cards: '<rect x="4" y="5" width="11" height="15" rx="2"/><path d="M9 3h9a2 2 0 0 1 2 2v12"/>',
+    deck: '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4v17"/>',
+    play: '<path d="M5 5l14 14M19 5L5 19"/>',
+    more: '<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>',
+    gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>',
+    user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>',
+    star: '<path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/>',
+    edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/>',
+    shield: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/>',
+    out: '<path d="M10 4H5v16h5M14 8l4 4-4 4M18 12H9"/>',
+    trophy: '<path d="M7 4h10v5a5 5 0 0 1-10 0zM7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3M12 14v4M8 21h8M9 18h6"/>',
+    crown: '<path d="M3 8l4 4 5-7 5 7 4-4-2 11H5z"/>',
+    lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>'
+  };
+  var icon = (k) => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${I[k]}</svg>`;
+
+  // js/achievements.js
+  var CATS = { battle: "Bataille", coll: "Collection", open: "Ouverture" };
+  var N = (n3, t) => (m) => [m[n3] || 0, t];
+  var ACHIEVEMENTS = [
+    { code: "win1", cat: "battle", name: "Premi\xE8re victoire", desc: "Gagner une partie.", reward: 1, prog: N("wins", 1) },
+    { code: "win10", cat: "battle", name: "10 victoires", desc: "Gagner 10 parties.", reward: 3, prog: N("wins", 10) },
+    { code: "win20", cat: "battle", name: "20 victoires", desc: "Gagner 20 parties.", reward: 5, prog: N("wins", 20) },
+    { code: "games10", cat: "battle", name: "Habitu\xE9", desc: "Jouer 10 parties.", reward: 2, prog: N("games", 10) },
+    { code: "games50", cat: "battle", name: "V\xE9t\xE9ran", desc: "Jouer 50 parties.", reward: 5, prog: N("games", 50) },
+    { code: "perfect", cat: "battle", name: "Victoire parfaite", desc: "Gagner sans perdre une seule Vie.", reward: 3, prog: N("perfect_wins", 1) },
+    { code: "comeback", cat: "battle", name: "Remontada", desc: "Gagner avec 0 Vie restante.", reward: 3, prog: N("comeback_wins", 1) },
+    { code: "streak3", cat: "battle", name: "En forme", desc: "Gagner 3 parties d'affil\xE9e.", reward: 3, prog: N("best_win_streak", 3) },
+    { code: "streak5", cat: "battle", name: "Inarr\xEAtable", desc: "Gagner 5 parties d'affil\xE9e.", reward: 5, prog: N("best_win_streak", 5) },
+    { code: "friends5", cat: "battle", name: "Tourn\xE9e des nakamas", desc: "Battre 5 amis diff\xE9rents.", reward: 5, prog: N("beaten", 5) },
+    { code: "own25", cat: "coll", name: "Collectionneur", desc: "Poss\xE9der 25 cartes diff\xE9rentes.", reward: 1, prog: N("owned", 25) },
+    { code: "own50", cat: "coll", name: "Classeur", desc: "Poss\xE9der 50 cartes diff\xE9rentes.", reward: 2, prog: N("owned", 50) },
+    { code: "own100", cat: "coll", name: "Biblioth\xE8que", desc: "Poss\xE9der 100 cartes diff\xE9rentes.", reward: 3, prog: N("owned", 100) },
+    { code: "own200", cat: "coll", name: "Archiviste", desc: "Poss\xE9der 200 cartes diff\xE9rentes.", reward: 5, prog: N("owned", 200) },
+    { code: "set50", cat: "coll", name: "SB01 \xE0 moiti\xE9", desc: "Poss\xE9der la moiti\xE9 des cartes du set SB01.", reward: 3, prog: (m) => [m.owned, Math.ceil(m.total / 2)] },
+    { code: "set100", cat: "coll", name: "SB01 complet", desc: "Poss\xE9der toutes les cartes du set SB01.", reward: 10, prog: (m) => [m.owned, m.total] },
+    { code: "allC", cat: "coll", name: "Toutes les Communes", desc: "Poss\xE9der toutes les Communes.", reward: 3, prog: (m) => [m.ownC, m.totC] },
+    { code: "allR", cat: "coll", name: "Toutes les Rares", desc: "Poss\xE9der toutes les Rares.", reward: 5, prog: (m) => [m.ownR, m.totR] },
+    { code: "leg1", cat: "coll", name: "Premi\xE8re L\xE9gende", desc: "Poss\xE9der une L\xE9gendaire.", reward: 2, prog: N("legs", 1) },
+    { code: "leg5", cat: "coll", name: "Panth\xE9on", desc: "Poss\xE9der 5 L\xE9gendaires.", reward: 5, prog: N("legs", 5) },
+    { code: "secret", cat: "coll", name: "Poss\xE9der ???", desc: "???", reward: 10, secret: "Poss\xE9der une carte 1on1." },
+    { code: "theme", cat: "coll", name: "Th\xE8me complet", desc: "Poss\xE9der toutes les cartes d'un m\xEAme type (5 cartes ou plus).", reward: 3 },
+    { code: "all", cat: "coll", name: "Poss\xE9der TOUTES les cartes", desc: "Toutes les cartes du jeu, sans exception.", reward: "1000 \u20AC", prog: (m) => [m.owned, m.total] },
+    { code: "open1", cat: "open", name: "Premier booster", desc: "Ouvrir un booster.", reward: 1, prog: N("boosters_opened", 1) },
+    ...[10, 50, 100, 500, 1e3, 2e3].map((n3, i) => ({
+      code: `open${n3}`,
+      cat: "open",
+      name: `${n3.toLocaleString("fr-FR")} boosters`,
+      desc: `Ouvrir ${n3.toLocaleString("fr-FR")} boosters.`,
+      reward: [1, 2, 3, 5, 8, 10][i],
+      prog: N("boosters_opened", n3)
+    })),
+    { code: "firstUR", cat: "open", name: "Premi\xE8re UR", desc: "Obtenir une Ultra rare.", reward: 1, prog: N("urs", 1) },
+    { code: "firstL", cat: "open", name: "Premi\xE8re L\xE9gendaire", desc: "Obtenir une L\xE9gendaire.", reward: 2, prog: N("legs", 1) },
+    { code: "firstS", cat: "open", name: "Premi\xE8re ???", desc: "???", reward: 10, secret: "Tirer une carte 1on1." },
+    { code: "batch10", cat: "open", name: "Gros joueur", desc: "Ouvrir 10 boosters d'un coup.", reward: 2, prog: N("best_batch", 10) },
+    { code: "twoL", cat: "open", name: "Doubl\xE9 l\xE9gendaire", desc: "Deux L\xE9gendaires dans la m\xEAme ouverture.", reward: 5 },
+    { code: "dry20", cat: "open", name: "La poisse", desc: "20 boosters d'affil\xE9e sans SR ou mieux.", reward: 3, prog: N("max_dry_streak", 20) },
+    { code: "god", cat: "open", name: "God Pack", desc: "Tomber sur un God Pack.", reward: 10 }
+  ];
+  var BY = Object.fromEntries(ACHIEVEMENTS.map((a) => [a.code, a]));
+  function metrics() {
+    const st = S.stats || {};
+    const mine = S.cards.filter((c) => S.collection[c.id]);
+    const pool = S.cards.filter((c) => c.inBoosters !== false && c.rarity !== "S");
+    const own = (f) => mine.filter((c) => c.inBoosters !== false && f(c)).length;
+    return {
+      ...st,
+      beaten: (st.beaten || []).length,
+      owned: own((c) => c.rarity !== "S"),
+      total: pool.length,
+      ownC: own((c) => c.rarity === "C"),
+      totC: pool.filter((c) => c.rarity === "C").length,
+      ownR: own((c) => c.rarity === "R"),
+      totR: pool.filter((c) => c.rarity === "R").length,
+      legs: mine.filter((c) => c.rarity === "L").length,
+      urs: mine.filter((c) => c.rarity === "UR").length
+    };
+  }
+  var rewardText = (r) => typeof r === "number" ? `${r} booster${r > 1 ? "s" : ""}` : r;
+  function toast(a, reward) {
+    let box = document.querySelector(".ach-toasts");
+    if (!box) {
+      box = document.createElement("div");
+      box.className = "ach-toasts";
+      document.body.append(box);
+    }
+    const t = document.createElement("div");
+    t.className = "ach-toast";
+    t.innerHTML = `<span class="tt-ico">${icon("trophy")}</span><div><small>Succ\xE8s d\xE9bloqu\xE9</small><b>${esc(a?.name || "")}</b>
+    ${reward ? `<span>+ ${esc(rewardText(reward))}</span>` : ""}</div>`;
+    box.append(t);
+    setTimeout(() => t.classList.add("out"), 4200);
+    setTimeout(() => t.remove(), 4700);
+  }
+  var render = () => {
+  };
+  async function refreshAchievements() {
+    const fresh = await checkAchievements();
+    await loadStats();
+    fresh.forEach((f, i) => setTimeout(() => toast(BY[f.code], BY[f.code]?.reward === "1000 \u20AC" ? "1000 \u20AC" : f.reward), i * 700));
+    if (fresh.length) await refreshStatus();
+    render();
+    return fresh;
+  }
+  async function recordGame({ won, opponent, livesLeft, perfect }) {
+    if (await recordGameResult(won, opponent, livesLeft, perfect)) await refreshAchievements();
+  }
+  function initAchievements() {
+    const el = document.getElementById("tab-achievements");
+    let cat = "battle";
+    render = () => {
+      const m = metrics();
+      const got = S.achievements || {};
+      const done = ACHIEVEMENTS.filter((a) => got[a.code]).length;
+      el.innerHTML = `<div class="ach">
+      <div class="ach-head"><h2>Succ\xE8s</h2><span>${done} / ${ACHIEVEMENTS.length}</span></div>
+      ${S.stats === null ? '<p class="msg err">Les succ\xE8s seront actifs d\xE8s que le script SQL aura \xE9t\xE9 relanc\xE9 dans Supabase.</p>' : ""}
+      <div class="ach-cats">${Object.entries(CATS).map(([k, v]) => {
+        const list = ACHIEVEMENTS.filter((a) => a.cat === k);
+        return `<button data-cat="${k}" class="${k === cat ? "on" : ""}">${v} <small>${list.filter((a) => got[a.code]).length}/${list.length}</small></button>`;
+      }).join("")}</div>
+      <div class="ach-list">${ACHIEVEMENTS.filter((a) => a.cat === cat).map((a) => {
+        const ok = !!got[a.code];
+        const [cur2, max] = a.prog && max0(a.prog(m)) ? a.prog(m) : [ok ? 1 : 0, 1];
+        const pct = ok ? 100 : Math.min(100, Math.floor(100 * cur2 / (max || 1)));
+        const hidden = a.secret && !ok;
+        return `<div class="ach-item ${ok ? "ok" : ""} ${hidden ? "hidden" : ""}">
+          <span class="ach-ico">${icon(ok ? "trophy" : hidden ? "lock" : "trophy")}</span>
+          <div class="ach-txt"><b>${esc(a.name)}</b><small>${esc(ok && a.secret ? a.secret : a.desc)}</small>
+            ${a.prog && !ok ? `<div class="bar"><i style="width:${pct}%"></i></div><small class="ach-num">${Math.min(cur2, max)} / ${max}</small>` : ""}
+            ${ok ? `<small class="ach-date">Obtenu le ${new Date(got[a.code]).toLocaleDateString("fr-FR")}</small>` : ""}</div>
+          <span class="ach-rew">${icon(typeof a.reward === "number" ? "pack" : "star")}${esc(rewardText(a.reward))}</span></div>`;
+      }).join("")}</div></div>`;
+    };
+    const max0 = ([, max]) => max > 0;
+    el.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-cat]");
+      if (b) {
+        cat = b.dataset.cat;
+        render();
+      }
+    });
+    render();
+    refreshAchievements();
+  }
+
+  // js/boosters.js
+  var RATES = [
+    ["3 cartes", "Commune"],
+    ["1 carte", "Peu commune"],
+    ["1 carte", "Rare ou mieux : 1 Super rare (SR) tous les 4 boosters, 1 Ultra rare (UR) tous les 15, 1 L\xE9gendaire (LR) tous les 50"]
+  ];
+  var busy = false;
+  var qty = 1;
+  var maxQty = (b) => S.status?.gifted > 10 ? Math.min(100, S.status.gifted) : Math.min(10, b?.total || 0);
+  var SPECIAL = { UR: 1100, L: 1700, S: 2600 };
+  var rank = (id) => RARITY_ORDER.indexOf(S.byId[id]?.rarity);
+  var SR = RARITY_ORDER.indexOf("SR");
+  function packHTML(cls = "", set = "SB01", sub = "Booster \xB7 5 cartes") {
+    return `<div class="bpack ${cls}" aria-hidden="true"><div class="bp-seal bp-top"></div>
+    <div class="bp-body"><div class="bp-set">${set}</div><div class="bp-logo">${logoSVG()}</div><div class="bp-sub">${sub}</div></div>
+    <div class="bp-seal bp-bot"></div></div>`;
+  }
+  function boosterState() {
+    const st = S.status;
+    if (!st) return null;
+    const now = Date.now() + (st.offset || 0);
+    let { free } = st;
+    let next = st.next_free_at ? new Date(st.next_free_at).getTime() : null;
+    while (next && next <= now && free < st.free_max) {
+      free++;
+      next = free < st.free_max ? next + 6e5 : null;
+      if (!st.syncing) {
+        st.syncing = true;
+        setTimeout(() => refreshStatus().catch(() => {
+        }), 1500);
+      }
+    }
+    return { free, next, total: free + st.gifted, left: next ? Math.max(0, Math.ceil((next - now) / 1e3)) : 0 };
+  }
+  var mmss = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+  var revealFn = null;
+  async function checkGifts() {
+    if (!revealFn || busy || document.querySelector(".bx")) return;
+    const list = await takeReveals();
+    if (!list.length) return;
+    await refreshCollection().catch(() => {
+    });
+    const pulls = list.filter((g) => S.byId[g.id]).sort((x, y) => rank(x.id) - rank(y.id));
+    if (!pulls.length) return;
+    busy = true;
+    const total = pulls.reduce((a, g) => a + (g.n || 1), 0);
+    const ov = document.createElement("div");
+    ov.className = "bx gift";
+    ov.innerHTML = `<div class="bx-gift"><p class="bx-gift-t">Cadeau !</p>
+    <p class="bx-gift-s">Tu as re\xE7u <b>${total} carte${total > 1 ? "s" : ""}</b> \xB7 ${pulls.length} diff\xE9rente${pulls.length > 1 ? "s" : ""}</p>
+    <div class="bs-pack">${packHTML("", "SB01", "Cadeau")}</div>
+    <button class="btn main" data-do="go">Ouvrir</button></div>`;
+    document.body.append(ov);
+    let opened = false;
+    ov.addEventListener("click", async (e) => {
+      if (opened || !e.target.closest("[data-do=go], .bs-pack")) return;
+      opened = true;
+      const pack = ov.querySelector(".bpack");
+      pack.classList.add("tear");
+      await wait(650);
+      ov.remove();
+      revealFn(pulls, false, true);
+    });
+  }
+  var openFromHome = () => {
+    qty = 1;
+    document.querySelector("#tab-boosters .bs-open")?.click();
+  };
+  function initBoosters() {
+    const el = document.getElementById("tab-boosters");
+    el.innerHTML = `
+  <div class="boosters">
+    <section class="bs-head">
+      <div class="bs-pack">${packHTML("g2")}${packHTML("g1")}${packHTML()}<span class="bs-x"></span></div>
+      <div class="bs-count"></div>
+      <p class="bs-detail"></p>
+      <div class="bs-qty" role="group" aria-label="Nombre de boosters \xE0 ouvrir">
+        <button class="btn" data-q="-1" aria-label="Un de moins">\u2212</button><span></span><button class="btn" data-q="1" aria-label="Un de plus">+</button>
+        <button class="btn bs-max" data-q="max">Max</button></div>
+      <p class="bs-gift" hidden>Plus de 10 d'un coup : uniquement des boosters offerts</p>
+      <button class="btn bs-open">Ouvrir</button>
+      <p class="msg bs-msg" role="status"></p>
+    </section>
+    <details class="bs-rates"><summary>Contenu d'un booster</summary>
+      <ul>${RATES.map(([n3, r]) => `<li><b>${n3}</b> : ${r}</li>`).join("")}</ul>
+      <p class="muted">1 booster gratuit toutes les 10 minutes (6 en r\xE9serve au maximum), plus les boosters offerts par les admins.</p>
+    </details>
+  </div>`;
+    const q = (s) => el.querySelector(s);
+    q(".bs-open").addEventListener("click", async () => {
+      if (busy) return;
+      busy = true;
+      q(".bs-msg").textContent = "";
+      q(".bs-msg").classList.remove("err");
+      q(".bs-open").disabled = true;
+      try {
+        const { pulls, error } = await openBoosters(qty);
+        if (error) {
+          q(".bs-msg").textContent = `Seulement ${pulls.length / 5} booster(s) ouvert(s) : ${error.message}`;
+          q(".bs-msg").classList.add("err");
+        }
+        const pack = q(".bs-pack .bpack:not(.g1):not(.g2)");
+        pack.classList.add("tear");
+        await wait(650);
+        pack.classList.remove("tear");
+        reveal2([...pulls].sort((x, y) => rank(x.id) - rank(y.id)), pulls.some((p) => p.god));
+      } catch (e) {
+        q(".bs-msg").textContent = e.message;
+        q(".bs-msg").classList.add("err");
+        busy = false;
+      }
+      renderHead();
+    });
+    el.querySelector(".bs-qty").addEventListener("click", (e) => {
+      const d = e.target.closest("[data-q]")?.dataset.q;
+      if (!d) return;
+      const max = maxQty(boosterState());
+      qty = d === "max" ? max : qty + Number(d);
+      renderHead();
+    });
+    setInterval(renderHead, 1e3);
+    setInterval(() => {
+      if (!document.hidden) refreshStatus().catch(() => {
+      });
+    }, 3e4);
+    onChange(renderHead);
+    renderHead();
+    function renderHead() {
+      const b = boosterState();
+      if (!b) return;
+      const { next, total, left } = b;
+      q(".bs-count").textContent = `${total} booster${total > 1 ? "s" : ""}`;
+      q(".bs-detail").innerHTML = next ? `Prochain booster gratuit dans <b>${mmss(left)}</b>` : "R\xE9serve de boosters gratuits pleine";
+      if (S.status.gifted) q(".bs-detail").innerHTML += ` \xB7 dont <b>${S.status.gifted}</b> offert${S.status.gifted > 1 ? "s" : ""}`;
+      const max = maxQty(b);
+      qty = Math.max(1, Math.min(qty, max || 1));
+      q(".bs-qty span").textContent = qty;
+      q('[data-q="-1"]').disabled = qty <= 1;
+      q('[data-q="1"]').disabled = qty >= max;
+      q(".bs-max").disabled = qty >= max;
+      q(".bs-gift").hidden = qty <= 10;
+      q(".bs-qty").hidden = total < 2;
+      q(".bs-pack").classList.toggle("multi", qty > 1);
+      q(".bs-x").textContent = qty > 1 ? `\xD7${qty}` : "";
+      q(".bs-open").textContent = qty > 1 ? `Ouvrir ${qty} boosters` : "Ouvrir";
+      q(".bs-open").disabled = busy || total === 0;
+    }
+    revealFn = reveal2;
+    setInterval(() => {
+      if (!document.hidden) checkGifts().catch(() => {
+      });
+    }, 3e4);
+    function reveal2(pulls, god = false, gift = false) {
+      const ov = document.createElement("div");
+      ov.className = "bx";
+      ov.innerHTML = `<div class="bx-fx"></div><div class="bx-stage"></div><div class="bx-info"></div><div class="bx-hint"></div>
+      <div class="bx-skip">${!gift && pulls.length > 25 && pulls.some((p) => rank(p.id) >= SR) ? '<button class="btn ghost" data-do="sr">Passer aux SR et +</button>' : ""}
+      ${pulls.length > 5 ? '<button class="btn ghost" data-do="all">Tout r\xE9v\xE9ler</button>' : ""}</div>`;
+      document.body.append(ov);
+      const stage = ov.querySelector(".bx-stage");
+      let seq = pulls.map((_, k) => k);
+      let pos = -1;
+      let lock = false;
+      let done = false;
+      let held = false;
+      async function next() {
+        if (lock) return;
+        lock = true;
+        const old = stage.querySelector(".bx-card");
+        if (old) {
+          old.classList.add("out");
+          ov.querySelector(".bx-info").innerHTML = "";
+          await wait(260);
+          old.remove();
+        }
+        if (done) return;
+        pos++;
+        ov.className = "bx";
+        ov.querySelector(".bx-fx").innerHTML = "";
+        if (pos >= seq.length) {
+          summary();
+          return;
+        }
+        const p = pulls[seq[pos]];
+        const c = S.byId[p.id];
+        const r = c?.rarity;
+        ov.querySelector(".bx-hint").textContent = `${seq[pos] + 1} / ${pulls.length}`;
+        if (SPECIAL[r]) {
+          ov.classList.add(`fx-${r}`, "intro");
+          ov.querySelector(".bx-fx").innerHTML = fxHTML(r);
+          await wait(SPECIAL[r]);
+          if (done) return;
+          ov.classList.remove("intro");
+        }
+        stage.insertAdjacentHTML("beforeend", `<button class="bx-card in r-${r}" data-id="${esc(p.id)}" aria-label="Carte suivante (appui long : voir en grand)">${cardHTML(c)}</button>`);
+        ov.querySelector(".bx-info").innerHTML = `<span class="rar-chip r-${r}">${RARITIES[r]?.label || ""}</span>${p.n > 1 ? `<span class="bx-new">\xD7${p.n}</span>` : ""}${p.new ? '<span class="bx-new">Nouvelle !</span>' : ""}
+        ${r === "S" ? '<div class="bx-unique">Exemplaire unique</div>' : ""}`;
+        await wait(SPECIAL[r] ? 500 : 250);
+        lock = false;
+      }
+      function summary() {
+        if (!done) refreshAchievements();
+        done = true;
+        ov.className = `bx done${pulls.length > 5 ? " many" : ""}`;
+        ov.querySelector(".bx-fx").innerHTML = "";
+        ov.querySelector(".bx-hint").textContent = "";
+        ov.querySelector(".bx-info").innerHTML = "";
+        ov.querySelector(".bx-skip")?.remove();
+        const groups = [];
+        for (const p of pulls) {
+          const g = groups.find((x) => x.id === p.id);
+          if (g) {
+            g.n += p.n || 1;
+            g.new || (g.new = p.new);
+          } else groups.push({ id: p.id, n: p.n || 1, new: p.new });
+        }
+        const left = gift ? 0 : boosterState()?.total || 0;
+        const again = Math.min(10, left, Math.max(1, pulls.length / 5));
+        stage.innerHTML = `<div class="bx-sum">${groups.map((g) => {
+          const c = S.byId[g.id];
+          return `<div class="bx-mini r-${c?.rarity}" data-id="${esc(g.id)}" role="button" tabindex="0" title="Voir en grand">${cardHTML(c)}<span class="rar-chip r-${c?.rarity}">${RARITIES[c?.rarity]?.short || ""}</span>
+          ${g.new ? '<span class="bx-new">Nouvelle</span>' : ""}${g.n > 1 ? `<span class="bx-n">\xD7${g.n}</span>` : ""}</div>`;
+        }).join("")}</div>
+      <div class="bx-acts">${left ? `<button class="btn main" data-do="again">${again > 1 ? `Ouvrir ${again} autres` : "Ouvrir un autre"} \xB7 ${left}</button>` : ""}<button class="btn ghost" data-do="close">Terminer</button></div>`;
+        lock = false;
+      }
+      async function start2() {
+        if (god) {
+          lock = true;
+          ov.classList.add("fx-S", "fx-god", "intro");
+          ov.querySelector(".bx-fx").innerHTML = `${fxHTML("S")}<div class="fx-godtxt">GOD PACK</div>`;
+          await wait(2800);
+          lock = false;
+        }
+        next();
+      }
+      ov.addEventListener("click", (e) => {
+        const d = e.target.closest("[data-do]")?.dataset.do;
+        if (d === "all") {
+          seq = [...seq.slice(0, pos + 1), ...seq.slice(pos + 1).filter((k) => ["L", "S"].includes(S.byId[pulls[k].id]?.rarity))];
+          ov.querySelector(".bx-skip")?.remove();
+          if (pos + 1 >= seq.length) summary();
+          else if (!lock) next();
+          return;
+        }
+        if (d === "sr") {
+          const first = seq.findIndex((k) => rank(pulls[k].id) >= SR);
+          if (lock) return;
+          e.target.closest("[data-do]").remove();
+          if (first > pos + 1) {
+            pos = first - 1;
+            stage.querySelector(".bx-card")?.remove();
+            next();
+          }
+          return;
+        }
+        if (d === "close" || d === "again") {
+          ov.remove();
+          for (const ev of ["pointerup", "pointercancel"]) document.removeEventListener(ev, release);
+          busy = false;
+          renderHead();
+          if (gift) checkGifts().catch(() => {
+          });
+          if (d === "again") {
+            qty = Math.max(1, Math.min(10, pulls.length / 5));
+            renderHead();
+            q(".bs-open").click();
+          }
+          return;
+        }
+        const mini = e.target.closest(".bx-mini");
+        if (mini) {
+          showCardBig(S.byId[mini.dataset.id]);
+          return;
+        }
+        if (held) {
+          held = false;
+          return;
+        }
+        if (!ov.classList.contains("done")) next();
+      });
+      let timer = null;
+      let closeBig = null;
+      ov.addEventListener("pointerdown", (e) => {
+        const card = e.target.closest(".bx-card");
+        held = false;
+        if (!card) return;
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          held = true;
+          closeBig = showCardBig(S.byId[card.dataset.id], { hold: true });
+        }, 400);
+      });
+      const release = () => {
+        clearTimeout(timer);
+        if (closeBig) {
+          closeBig();
+          closeBig = null;
+        }
+      };
+      for (const ev of ["pointerup", "pointercancel"]) document.addEventListener(ev, release);
+      ov.addEventListener("contextmenu", (e) => {
+        if (e.target.closest(".bx-card")) e.preventDefault();
+      });
+      start2();
+    }
+  }
+  var wait = (ms) => new Promise((r) => {
+    setTimeout(r, ms);
+  });
+  function fxHTML(r) {
+    const sparks = (n3) => Array.from({ length: n3 }, () => `<i style="--x:${(Math.random() * 100).toFixed(1)}%;--d:${(Math.random() * 1.6).toFixed(2)}s;--s:${(0.5 + Math.random()).toFixed(2)}"></i>`).join("");
+    if (r === "UR") return '<div class="fx-rays"></div><div class="fx-glow"></div>';
+    if (r === "L") return `<div class="fx-flash"></div><div class="fx-rays"></div><div class="fx-glow"></div><div class="fx-sparks">${sparks(28)}</div>`;
+    return `<div class="fx-rays"></div><div class="fx-ring"></div><div class="fx-ring r2"></div><div class="fx-glow"></div><div class="fx-sparks">${sparks(40)}</div>`;
+  }
+  function initCollection() {
+    const el = document.getElementById("tab-collection");
+    let filter2 = { rarity: "", type: "", q: "" };
+    el.innerHTML = `
+  <section class="panel">
+    <div class="list-head"><h2>Ma collection</h2><div class="cl-progress muted"></div></div>
+    <div class="cl-rarities"></div>
+    <div class="filters">
+      <input class="cl-q" type="search" placeholder="Rechercher\u2026" aria-label="Rechercher">
+      <select class="cl-rarity" aria-label="Raret\xE9"><option value="">Toutes raret\xE9s</option>${Object.entries(RARITIES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join("")}</select>
+      <select class="cl-type" aria-label="Type"><option value="">Tous types</option>${Object.entries(TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select>
+    </div>
+    <div class="card-grid cl-grid"></div>
+  </section>`;
+    const q = (s) => el.querySelector(s);
+    q(".filters").addEventListener("input", () => {
+      filter2 = { q: q(".cl-q").value.toLowerCase(), rarity: q(".cl-rarity").value, type: q(".cl-type").value };
+      render3();
+    });
+    q(".cl-grid").addEventListener("click", (e) => {
+      const g = e.target.closest(".grid-card");
+      if (g) showCardBig(S.byId[g.dataset.id]);
+    });
+    q(".cl-grid").addEventListener("keydown", (e) => {
+      const g = e.target.closest(".grid-card");
+      if (g && (e.key === "Enter" || e.key === " ")) {
+        e.preventDefault();
+        showCardBig(S.byId[g.dataset.id]);
+      }
+    });
+    onChange(render3);
+    render3();
+    function render3() {
+      const cards = S.cards.filter((c) => c.rarity !== "S" || S.oneOfOne[c.id]);
+      const owned = cards.filter((c) => S.collection[c.id]);
+      q(".cl-progress").textContent = `${owned.length} / ${cards.length} cartes diff\xE9rentes`;
+      q(".cl-rarity option[value=S]").hidden = !cards.some((c) => c.rarity === "S");
+      q(".cl-rarities").innerHTML = RARITY_ORDER.map((r) => {
+        const all = cards.filter((c) => c.rarity === r).length;
+        const have = owned.filter((c) => c.rarity === r).length;
+        return all ? `<span class="rar-chip r-${r}">${RARITIES[r].label} ${have}/${all}</span>` : "";
+      }).join("");
+      const list = owned.filter((c) => (!filter2.rarity || c.rarity === filter2.rarity) && (!filter2.type || c.type === filter2.type) && (!filter2.q || `${c.name} ${c.code} ${c.traits} ${c.effect}`.toLowerCase().includes(filter2.q))).sort((a, b) => RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity));
+      q(".cl-grid").innerHTML = list.map((c) => {
+        const n3 = S.collection[c.id] || 0;
+        const owner = c.rarity === "S" ? S.oneOfOne[c.id] : null;
+        const tag = owner ? `<span class="one-owner">Poss\xE9d\xE9e par ${esc(owner)}</span>` : "";
+        return `<div class="grid-card" data-id="${esc(c.id)}" role="button" tabindex="0" title="${esc(c.name)} : voir en grand">${cardHTML(c)}${n3 > 1 ? `<span class="qty">\xD7${n3}</span>` : ""}${tag}</div>`;
+      }).join("") || `<p class="muted">${owned.length ? "Aucune carte ne correspond." : "Aucune carte pour l'instant : ouvrez des boosters !"}</p>`;
+    }
+  }
+
   // js/auth.js
   async function showAuth() {
     let mode = "in";
@@ -21720,6 +22243,8 @@ ${suffix}`;
       try {
         await claimStarter(d.id);
         o.remove();
+        checkGifts().catch(() => {
+        });
       } catch (err) {
         o.querySelector(".st-msg").textContent = err.message;
       }
@@ -23056,157 +23581,6 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     });
   }
 
-  // js/icons.js
-  var I = {
-    home: '<path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"/>',
-    pack: '<rect x="6" y="3" width="12" height="18" rx="2"/><path d="M6 7h12M6 17h12"/>',
-    cards: '<rect x="4" y="5" width="11" height="15" rx="2"/><path d="M9 3h9a2 2 0 0 1 2 2v12"/>',
-    deck: '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4v17"/>',
-    play: '<path d="M5 5l14 14M19 5L5 19"/>',
-    more: '<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>',
-    gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>',
-    user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>',
-    star: '<path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/>',
-    edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/>',
-    shield: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/>',
-    out: '<path d="M10 4H5v16h5M14 8l4 4-4 4M18 12H9"/>',
-    trophy: '<path d="M7 4h10v5a5 5 0 0 1-10 0zM7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3M12 14v4M8 21h8M9 18h6"/>',
-    crown: '<path d="M3 8l4 4 5-7 5 7 4-4-2 11H5z"/>',
-    lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>'
-  };
-  var icon = (k) => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${I[k]}</svg>`;
-
-  // js/achievements.js
-  var CATS = { battle: "Bataille", coll: "Collection", open: "Ouverture" };
-  var N = (n3, t) => (m) => [m[n3] || 0, t];
-  var ACHIEVEMENTS = [
-    { code: "win1", cat: "battle", name: "Premi\xE8re victoire", desc: "Gagner une partie.", reward: 1, prog: N("wins", 1) },
-    { code: "win10", cat: "battle", name: "10 victoires", desc: "Gagner 10 parties.", reward: 3, prog: N("wins", 10) },
-    { code: "win20", cat: "battle", name: "20 victoires", desc: "Gagner 20 parties.", reward: 5, prog: N("wins", 20) },
-    { code: "games10", cat: "battle", name: "Habitu\xE9", desc: "Jouer 10 parties.", reward: 2, prog: N("games", 10) },
-    { code: "games50", cat: "battle", name: "V\xE9t\xE9ran", desc: "Jouer 50 parties.", reward: 5, prog: N("games", 50) },
-    { code: "perfect", cat: "battle", name: "Victoire parfaite", desc: "Gagner sans perdre une seule Vie.", reward: 3, prog: N("perfect_wins", 1) },
-    { code: "comeback", cat: "battle", name: "Remontada", desc: "Gagner avec 0 Vie restante.", reward: 3, prog: N("comeback_wins", 1) },
-    { code: "streak3", cat: "battle", name: "En forme", desc: "Gagner 3 parties d'affil\xE9e.", reward: 3, prog: N("best_win_streak", 3) },
-    { code: "streak5", cat: "battle", name: "Inarr\xEAtable", desc: "Gagner 5 parties d'affil\xE9e.", reward: 5, prog: N("best_win_streak", 5) },
-    { code: "friends5", cat: "battle", name: "Tourn\xE9e des nakamas", desc: "Battre 5 amis diff\xE9rents.", reward: 5, prog: N("beaten", 5) },
-    { code: "own25", cat: "coll", name: "Collectionneur", desc: "Poss\xE9der 25 cartes diff\xE9rentes.", reward: 1, prog: N("owned", 25) },
-    { code: "own50", cat: "coll", name: "Classeur", desc: "Poss\xE9der 50 cartes diff\xE9rentes.", reward: 2, prog: N("owned", 50) },
-    { code: "own100", cat: "coll", name: "Biblioth\xE8que", desc: "Poss\xE9der 100 cartes diff\xE9rentes.", reward: 3, prog: N("owned", 100) },
-    { code: "own200", cat: "coll", name: "Archiviste", desc: "Poss\xE9der 200 cartes diff\xE9rentes.", reward: 5, prog: N("owned", 200) },
-    { code: "set50", cat: "coll", name: "SB01 \xE0 moiti\xE9", desc: "Poss\xE9der la moiti\xE9 des cartes du set SB01.", reward: 3, prog: (m) => [m.owned, Math.ceil(m.total / 2)] },
-    { code: "set100", cat: "coll", name: "SB01 complet", desc: "Poss\xE9der toutes les cartes du set SB01.", reward: 10, prog: (m) => [m.owned, m.total] },
-    { code: "allC", cat: "coll", name: "Toutes les Communes", desc: "Poss\xE9der toutes les Communes.", reward: 3, prog: (m) => [m.ownC, m.totC] },
-    { code: "allR", cat: "coll", name: "Toutes les Rares", desc: "Poss\xE9der toutes les Rares.", reward: 5, prog: (m) => [m.ownR, m.totR] },
-    { code: "leg1", cat: "coll", name: "Premi\xE8re L\xE9gende", desc: "Poss\xE9der une L\xE9gendaire.", reward: 2, prog: N("legs", 1) },
-    { code: "leg5", cat: "coll", name: "Panth\xE9on", desc: "Poss\xE9der 5 L\xE9gendaires.", reward: 5, prog: N("legs", 5) },
-    { code: "secret", cat: "coll", name: "Poss\xE9der ???", desc: "???", reward: 10, secret: "Poss\xE9der une carte 1on1." },
-    { code: "theme", cat: "coll", name: "Th\xE8me complet", desc: "Poss\xE9der toutes les cartes d'un m\xEAme type (5 cartes ou plus).", reward: 3 },
-    { code: "all", cat: "coll", name: "Poss\xE9der TOUTES les cartes", desc: "Toutes les cartes du jeu, sans exception.", reward: "1000 \u20AC", prog: (m) => [m.owned, m.total] },
-    { code: "open1", cat: "open", name: "Premier booster", desc: "Ouvrir un booster.", reward: 1, prog: N("boosters_opened", 1) },
-    ...[10, 50, 100, 500, 1e3, 2e3].map((n3, i) => ({
-      code: `open${n3}`,
-      cat: "open",
-      name: `${n3.toLocaleString("fr-FR")} boosters`,
-      desc: `Ouvrir ${n3.toLocaleString("fr-FR")} boosters.`,
-      reward: [1, 2, 3, 5, 8, 10][i],
-      prog: N("boosters_opened", n3)
-    })),
-    { code: "firstUR", cat: "open", name: "Premi\xE8re UR", desc: "Obtenir une Ultra rare.", reward: 1, prog: N("urs", 1) },
-    { code: "firstL", cat: "open", name: "Premi\xE8re L\xE9gendaire", desc: "Obtenir une L\xE9gendaire.", reward: 2, prog: N("legs", 1) },
-    { code: "firstS", cat: "open", name: "Premi\xE8re ???", desc: "???", reward: 10, secret: "Tirer une carte 1on1." },
-    { code: "batch10", cat: "open", name: "Gros joueur", desc: "Ouvrir 10 boosters d'un coup.", reward: 2, prog: N("best_batch", 10) },
-    { code: "twoL", cat: "open", name: "Doubl\xE9 l\xE9gendaire", desc: "Deux L\xE9gendaires dans la m\xEAme ouverture.", reward: 5 },
-    { code: "dry20", cat: "open", name: "La poisse", desc: "20 boosters d'affil\xE9e sans SR ou mieux.", reward: 3, prog: N("max_dry_streak", 20) },
-    { code: "god", cat: "open", name: "God Pack", desc: "Tomber sur un God Pack.", reward: 10 }
-  ];
-  var BY = Object.fromEntries(ACHIEVEMENTS.map((a) => [a.code, a]));
-  function metrics() {
-    const st = S.stats || {};
-    const mine = S.cards.filter((c) => S.collection[c.id]);
-    const pool = S.cards.filter((c) => c.inBoosters !== false && c.rarity !== "S");
-    const own = (f) => mine.filter((c) => c.inBoosters !== false && f(c)).length;
-    return {
-      ...st,
-      beaten: (st.beaten || []).length,
-      owned: own((c) => c.rarity !== "S"),
-      total: pool.length,
-      ownC: own((c) => c.rarity === "C"),
-      totC: pool.filter((c) => c.rarity === "C").length,
-      ownR: own((c) => c.rarity === "R"),
-      totR: pool.filter((c) => c.rarity === "R").length,
-      legs: mine.filter((c) => c.rarity === "L").length,
-      urs: mine.filter((c) => c.rarity === "UR").length
-    };
-  }
-  var rewardText = (r) => typeof r === "number" ? `${r} booster${r > 1 ? "s" : ""}` : r;
-  function toast(a, reward) {
-    let box = document.querySelector(".ach-toasts");
-    if (!box) {
-      box = document.createElement("div");
-      box.className = "ach-toasts";
-      document.body.append(box);
-    }
-    const t = document.createElement("div");
-    t.className = "ach-toast";
-    t.innerHTML = `<span class="tt-ico">${icon("trophy")}</span><div><small>Succ\xE8s d\xE9bloqu\xE9</small><b>${esc(a?.name || "")}</b>
-    ${reward ? `<span>+ ${esc(rewardText(reward))}</span>` : ""}</div>`;
-    box.append(t);
-    setTimeout(() => t.classList.add("out"), 4200);
-    setTimeout(() => t.remove(), 4700);
-  }
-  var render = () => {
-  };
-  async function refreshAchievements() {
-    const fresh = await checkAchievements();
-    await loadStats();
-    fresh.forEach((f, i) => setTimeout(() => toast(BY[f.code], BY[f.code]?.reward === "1000 \u20AC" ? "1000 \u20AC" : f.reward), i * 700));
-    if (fresh.length) await refreshStatus();
-    render();
-    return fresh;
-  }
-  async function recordGame({ won, opponent, livesLeft, perfect }) {
-    if (await recordGameResult(won, opponent, livesLeft, perfect)) await refreshAchievements();
-  }
-  function initAchievements() {
-    const el = document.getElementById("tab-achievements");
-    let cat = "battle";
-    render = () => {
-      const m = metrics();
-      const got = S.achievements || {};
-      const done = ACHIEVEMENTS.filter((a) => got[a.code]).length;
-      el.innerHTML = `<div class="ach">
-      <div class="ach-head"><h2>Succ\xE8s</h2><span>${done} / ${ACHIEVEMENTS.length}</span></div>
-      ${S.stats === null ? '<p class="msg err">Les succ\xE8s seront actifs d\xE8s que le script SQL aura \xE9t\xE9 relanc\xE9 dans Supabase.</p>' : ""}
-      <div class="ach-cats">${Object.entries(CATS).map(([k, v]) => {
-        const list = ACHIEVEMENTS.filter((a) => a.cat === k);
-        return `<button data-cat="${k}" class="${k === cat ? "on" : ""}">${v} <small>${list.filter((a) => got[a.code]).length}/${list.length}</small></button>`;
-      }).join("")}</div>
-      <div class="ach-list">${ACHIEVEMENTS.filter((a) => a.cat === cat).map((a) => {
-        const ok = !!got[a.code];
-        const [cur2, max] = a.prog && max0(a.prog(m)) ? a.prog(m) : [ok ? 1 : 0, 1];
-        const pct = ok ? 100 : Math.min(100, Math.floor(100 * cur2 / (max || 1)));
-        const hidden = a.secret && !ok;
-        return `<div class="ach-item ${ok ? "ok" : ""} ${hidden ? "hidden" : ""}">
-          <span class="ach-ico">${icon(ok ? "trophy" : hidden ? "lock" : "trophy")}</span>
-          <div class="ach-txt"><b>${esc(a.name)}</b><small>${esc(ok && a.secret ? a.secret : a.desc)}</small>
-            ${a.prog && !ok ? `<div class="bar"><i style="width:${pct}%"></i></div><small class="ach-num">${Math.min(cur2, max)} / ${max}</small>` : ""}
-            ${ok ? `<small class="ach-date">Obtenu le ${new Date(got[a.code]).toLocaleDateString("fr-FR")}</small>` : ""}</div>
-          <span class="ach-rew">${icon(typeof a.reward === "number" ? "pack" : "star")}${esc(rewardText(a.reward))}</span></div>`;
-      }).join("")}</div></div>`;
-    };
-    const max0 = ([, max]) => max > 0;
-    el.addEventListener("click", (e) => {
-      const b = e.target.closest("[data-cat]");
-      if (b) {
-        cat = b.dataset.cat;
-        render();
-      }
-    });
-    render();
-    refreshAchievements();
-  }
-
   // js/game.js
   var root2 = () => document.getElementById("tab-play");
   var G = null;
@@ -24383,7 +24757,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     if (!leaveTimer) leaveTimer = setTimeout(flushLeaves, 0);
   }
   async function flushLeaves() {
-    if (busy > 0 || G?.phase !== "play") {
+    if (busy2 > 0 || G?.phase !== "play") {
       leaveTimer = G?.phase === "play" ? setTimeout(flushLeaves, 250) : null;
       if (!leaveTimer) leaveQueue = [];
       return;
@@ -24486,14 +24860,14 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     }
   }
   async function runEffect(src, eff, opts = {}) {
-    busy++;
+    busy2++;
     try {
       return await runEffectNow(src, eff, opts);
     } finally {
-      busy--;
+      busy2--;
     }
   }
-  var busy = 0;
+  var busy2 = 0;
   async function runEffectNow(src, eff, { optional = false, idx = 0 } = {}) {
     const c = myCard(src);
     if (!condsOK(eff, src)) return false;
@@ -24778,12 +25152,12 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     commit();
   }
   async function applyFx(m) {
-    busy++;
+    busy2++;
     oppCause = true;
     try {
       await applyFxNow(m);
     } finally {
-      busy--;
+      busy2--;
       oppCause = false;
     }
   }
@@ -25834,338 +26208,6 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     };
   }
 
-  // js/boosters.js
-  var RATES = [
-    ["3 cartes", "Commune"],
-    ["1 carte", "Peu commune"],
-    ["1 carte", "Rare ou mieux : 1 Super rare (SR) tous les 4 boosters, 1 Ultra rare (UR) tous les 15, 1 L\xE9gendaire (LR) tous les 50"]
-  ];
-  var busy2 = false;
-  var qty = 1;
-  var maxQty = (b) => S.status?.gifted > 10 ? Math.min(100, S.status.gifted) : Math.min(10, b?.total || 0);
-  var SPECIAL = { UR: 1100, L: 1700, S: 2600 };
-  var rank = (id) => RARITY_ORDER.indexOf(S.byId[id]?.rarity);
-  var SR = RARITY_ORDER.indexOf("SR");
-  function packHTML(cls = "", set = "SB01") {
-    return `<div class="bpack ${cls}" aria-hidden="true"><div class="bp-seal bp-top"></div>
-    <div class="bp-body"><div class="bp-set">${set}</div><div class="bp-logo">${logoSVG()}</div><div class="bp-sub">Booster \xB7 5 cartes</div></div>
-    <div class="bp-seal bp-bot"></div></div>`;
-  }
-  function boosterState() {
-    const st = S.status;
-    if (!st) return null;
-    const now = Date.now() + (st.offset || 0);
-    let { free } = st;
-    let next = st.next_free_at ? new Date(st.next_free_at).getTime() : null;
-    while (next && next <= now && free < st.free_max) {
-      free++;
-      next = free < st.free_max ? next + 6e5 : null;
-      if (!st.syncing) {
-        st.syncing = true;
-        setTimeout(() => refreshStatus().catch(() => {
-        }), 1500);
-      }
-    }
-    return { free, next, total: free + st.gifted, left: next ? Math.max(0, Math.ceil((next - now) / 1e3)) : 0 };
-  }
-  var mmss = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
-  var openFromHome = () => {
-    qty = 1;
-    document.querySelector("#tab-boosters .bs-open")?.click();
-  };
-  function initBoosters() {
-    const el = document.getElementById("tab-boosters");
-    el.innerHTML = `
-  <div class="boosters">
-    <section class="bs-head">
-      <div class="bs-pack">${packHTML("g2")}${packHTML("g1")}${packHTML()}<span class="bs-x"></span></div>
-      <div class="bs-count"></div>
-      <p class="bs-detail"></p>
-      <div class="bs-qty" role="group" aria-label="Nombre de boosters \xE0 ouvrir">
-        <button class="btn" data-q="-1" aria-label="Un de moins">\u2212</button><span></span><button class="btn" data-q="1" aria-label="Un de plus">+</button>
-        <button class="btn bs-max" data-q="max">Max</button></div>
-      <p class="bs-gift" hidden>Plus de 10 d'un coup : uniquement des boosters offerts</p>
-      <button class="btn bs-open">Ouvrir</button>
-      <p class="msg bs-msg" role="status"></p>
-    </section>
-    <details class="bs-rates"><summary>Contenu d'un booster</summary>
-      <ul>${RATES.map(([n3, r]) => `<li><b>${n3}</b> : ${r}</li>`).join("")}</ul>
-      <p class="muted">1 booster gratuit toutes les 10 minutes (6 en r\xE9serve au maximum), plus les boosters offerts par les admins.</p>
-    </details>
-  </div>`;
-    const q = (s) => el.querySelector(s);
-    q(".bs-open").addEventListener("click", async () => {
-      if (busy2) return;
-      busy2 = true;
-      q(".bs-msg").textContent = "";
-      q(".bs-msg").classList.remove("err");
-      q(".bs-open").disabled = true;
-      try {
-        const { pulls, error } = await openBoosters(qty);
-        if (error) {
-          q(".bs-msg").textContent = `Seulement ${pulls.length / 5} booster(s) ouvert(s) : ${error.message}`;
-          q(".bs-msg").classList.add("err");
-        }
-        const pack = q(".bs-pack .bpack:not(.g1):not(.g2)");
-        pack.classList.add("tear");
-        await wait(650);
-        pack.classList.remove("tear");
-        reveal2([...pulls].sort((x, y) => rank(x.id) - rank(y.id)), pulls.some((p) => p.god));
-      } catch (e) {
-        q(".bs-msg").textContent = e.message;
-        q(".bs-msg").classList.add("err");
-        busy2 = false;
-      }
-      renderHead();
-    });
-    el.querySelector(".bs-qty").addEventListener("click", (e) => {
-      const d = e.target.closest("[data-q]")?.dataset.q;
-      if (!d) return;
-      const max = maxQty(boosterState());
-      qty = d === "max" ? max : qty + Number(d);
-      renderHead();
-    });
-    setInterval(renderHead, 1e3);
-    setInterval(() => {
-      if (!document.hidden) refreshStatus().catch(() => {
-      });
-    }, 3e4);
-    onChange(renderHead);
-    renderHead();
-    function renderHead() {
-      const b = boosterState();
-      if (!b) return;
-      const { next, total, left } = b;
-      q(".bs-count").textContent = `${total} booster${total > 1 ? "s" : ""}`;
-      q(".bs-detail").innerHTML = next ? `Prochain booster gratuit dans <b>${mmss(left)}</b>` : "R\xE9serve de boosters gratuits pleine";
-      if (S.status.gifted) q(".bs-detail").innerHTML += ` \xB7 dont <b>${S.status.gifted}</b> offert${S.status.gifted > 1 ? "s" : ""}`;
-      const max = maxQty(b);
-      qty = Math.max(1, Math.min(qty, max || 1));
-      q(".bs-qty span").textContent = qty;
-      q('[data-q="-1"]').disabled = qty <= 1;
-      q('[data-q="1"]').disabled = qty >= max;
-      q(".bs-max").disabled = qty >= max;
-      q(".bs-gift").hidden = qty <= 10;
-      q(".bs-qty").hidden = total < 2;
-      q(".bs-pack").classList.toggle("multi", qty > 1);
-      q(".bs-x").textContent = qty > 1 ? `\xD7${qty}` : "";
-      q(".bs-open").textContent = qty > 1 ? `Ouvrir ${qty} boosters` : "Ouvrir";
-      q(".bs-open").disabled = busy2 || total === 0;
-    }
-    function reveal2(pulls, god = false) {
-      const ov = document.createElement("div");
-      ov.className = "bx";
-      ov.innerHTML = `<div class="bx-fx"></div><div class="bx-stage"></div><div class="bx-info"></div><div class="bx-hint"></div>
-      <div class="bx-skip">${pulls.length > 25 && pulls.some((p) => rank(p.id) >= SR) ? '<button class="btn ghost" data-do="sr">Passer aux SR et +</button>' : ""}
-      ${pulls.length > 5 ? '<button class="btn ghost" data-do="all">Tout r\xE9v\xE9ler</button>' : ""}</div>`;
-      document.body.append(ov);
-      const stage = ov.querySelector(".bx-stage");
-      let seq = pulls.map((_, k) => k);
-      let pos = -1;
-      let lock = false;
-      let done = false;
-      let held = false;
-      async function next() {
-        if (lock) return;
-        lock = true;
-        const old = stage.querySelector(".bx-card");
-        if (old) {
-          old.classList.add("out");
-          ov.querySelector(".bx-info").innerHTML = "";
-          await wait(260);
-          old.remove();
-        }
-        if (done) return;
-        pos++;
-        ov.className = "bx";
-        ov.querySelector(".bx-fx").innerHTML = "";
-        if (pos >= seq.length) {
-          summary();
-          return;
-        }
-        const p = pulls[seq[pos]];
-        const c = S.byId[p.id];
-        const r = c?.rarity;
-        ov.querySelector(".bx-hint").textContent = `${seq[pos] + 1} / ${pulls.length}`;
-        if (SPECIAL[r]) {
-          ov.classList.add(`fx-${r}`, "intro");
-          ov.querySelector(".bx-fx").innerHTML = fxHTML(r);
-          await wait(SPECIAL[r]);
-          if (done) return;
-          ov.classList.remove("intro");
-        }
-        stage.insertAdjacentHTML("beforeend", `<button class="bx-card in r-${r}" data-id="${esc(p.id)}" aria-label="Carte suivante (appui long : voir en grand)">${cardHTML(c)}</button>`);
-        ov.querySelector(".bx-info").innerHTML = `<span class="rar-chip r-${r}">${RARITIES[r]?.label || ""}</span>${p.new ? '<span class="bx-new">Nouvelle !</span>' : ""}
-        ${r === "S" ? '<div class="bx-unique">Exemplaire unique</div>' : ""}`;
-        await wait(SPECIAL[r] ? 500 : 250);
-        lock = false;
-      }
-      function summary() {
-        if (!done) refreshAchievements();
-        done = true;
-        ov.className = `bx done${pulls.length > 5 ? " many" : ""}`;
-        ov.querySelector(".bx-fx").innerHTML = "";
-        ov.querySelector(".bx-hint").textContent = "";
-        ov.querySelector(".bx-info").innerHTML = "";
-        ov.querySelector(".bx-skip")?.remove();
-        const groups = [];
-        for (const p of pulls) {
-          const g = groups.find((x) => x.id === p.id);
-          if (g) {
-            g.n++;
-            g.new || (g.new = p.new);
-          } else groups.push({ id: p.id, n: 1, new: p.new });
-        }
-        const left = boosterState()?.total || 0;
-        const again = Math.min(10, left, Math.max(1, pulls.length / 5));
-        stage.innerHTML = `<div class="bx-sum">${groups.map((g) => {
-          const c = S.byId[g.id];
-          return `<div class="bx-mini r-${c?.rarity}" data-id="${esc(g.id)}" role="button" tabindex="0" title="Voir en grand">${cardHTML(c)}<span class="rar-chip r-${c?.rarity}">${RARITIES[c?.rarity]?.short || ""}</span>
-          ${g.new ? '<span class="bx-new">Nouvelle</span>' : ""}${g.n > 1 ? `<span class="bx-n">\xD7${g.n}</span>` : ""}</div>`;
-        }).join("")}</div>
-      <div class="bx-acts">${left ? `<button class="btn main" data-do="again">${again > 1 ? `Ouvrir ${again} autres` : "Ouvrir un autre"} \xB7 ${left}</button>` : ""}<button class="btn ghost" data-do="close">Terminer</button></div>`;
-        lock = false;
-      }
-      async function start2() {
-        if (god) {
-          lock = true;
-          ov.classList.add("fx-S", "fx-god", "intro");
-          ov.querySelector(".bx-fx").innerHTML = `${fxHTML("S")}<div class="fx-godtxt">GOD PACK</div>`;
-          await wait(2800);
-          lock = false;
-        }
-        next();
-      }
-      ov.addEventListener("click", (e) => {
-        const d = e.target.closest("[data-do]")?.dataset.do;
-        if (d === "all") {
-          seq = [...seq.slice(0, pos + 1), ...seq.slice(pos + 1).filter((k) => ["L", "S"].includes(S.byId[pulls[k].id]?.rarity))];
-          ov.querySelector(".bx-skip")?.remove();
-          if (pos + 1 >= seq.length) summary();
-          else if (!lock) next();
-          return;
-        }
-        if (d === "sr") {
-          const first = seq.findIndex((k) => rank(pulls[k].id) >= SR);
-          if (lock) return;
-          e.target.closest("[data-do]").remove();
-          if (first > pos + 1) {
-            pos = first - 1;
-            stage.querySelector(".bx-card")?.remove();
-            next();
-          }
-          return;
-        }
-        if (d === "close" || d === "again") {
-          ov.remove();
-          for (const ev of ["pointerup", "pointercancel"]) document.removeEventListener(ev, release);
-          busy2 = false;
-          renderHead();
-          if (d === "again") {
-            qty = Math.max(1, Math.min(10, pulls.length / 5));
-            renderHead();
-            q(".bs-open").click();
-          }
-          return;
-        }
-        const mini = e.target.closest(".bx-mini");
-        if (mini) {
-          showCardBig(S.byId[mini.dataset.id]);
-          return;
-        }
-        if (held) {
-          held = false;
-          return;
-        }
-        if (!ov.classList.contains("done")) next();
-      });
-      let timer = null;
-      let closeBig = null;
-      ov.addEventListener("pointerdown", (e) => {
-        const card = e.target.closest(".bx-card");
-        held = false;
-        if (!card) return;
-        clearTimeout(timer);
-        timer = setTimeout(() => {
-          held = true;
-          closeBig = showCardBig(S.byId[card.dataset.id], { hold: true });
-        }, 400);
-      });
-      const release = () => {
-        clearTimeout(timer);
-        if (closeBig) {
-          closeBig();
-          closeBig = null;
-        }
-      };
-      for (const ev of ["pointerup", "pointercancel"]) document.addEventListener(ev, release);
-      ov.addEventListener("contextmenu", (e) => {
-        if (e.target.closest(".bx-card")) e.preventDefault();
-      });
-      start2();
-    }
-  }
-  var wait = (ms) => new Promise((r) => {
-    setTimeout(r, ms);
-  });
-  function fxHTML(r) {
-    const sparks = (n3) => Array.from({ length: n3 }, () => `<i style="--x:${(Math.random() * 100).toFixed(1)}%;--d:${(Math.random() * 1.6).toFixed(2)}s;--s:${(0.5 + Math.random()).toFixed(2)}"></i>`).join("");
-    if (r === "UR") return '<div class="fx-rays"></div><div class="fx-glow"></div>';
-    if (r === "L") return `<div class="fx-flash"></div><div class="fx-rays"></div><div class="fx-glow"></div><div class="fx-sparks">${sparks(28)}</div>`;
-    return `<div class="fx-rays"></div><div class="fx-ring"></div><div class="fx-ring r2"></div><div class="fx-glow"></div><div class="fx-sparks">${sparks(40)}</div>`;
-  }
-  function initCollection() {
-    const el = document.getElementById("tab-collection");
-    let filter2 = { rarity: "", type: "", q: "" };
-    el.innerHTML = `
-  <section class="panel">
-    <div class="list-head"><h2>Ma collection</h2><div class="cl-progress muted"></div></div>
-    <div class="cl-rarities"></div>
-    <div class="filters">
-      <input class="cl-q" type="search" placeholder="Rechercher\u2026" aria-label="Rechercher">
-      <select class="cl-rarity" aria-label="Raret\xE9"><option value="">Toutes raret\xE9s</option>${Object.entries(RARITIES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join("")}</select>
-      <select class="cl-type" aria-label="Type"><option value="">Tous types</option>${Object.entries(TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select>
-    </div>
-    <div class="card-grid cl-grid"></div>
-  </section>`;
-    const q = (s) => el.querySelector(s);
-    q(".filters").addEventListener("input", () => {
-      filter2 = { q: q(".cl-q").value.toLowerCase(), rarity: q(".cl-rarity").value, type: q(".cl-type").value };
-      render3();
-    });
-    q(".cl-grid").addEventListener("click", (e) => {
-      const g = e.target.closest(".grid-card");
-      if (g) showCardBig(S.byId[g.dataset.id]);
-    });
-    q(".cl-grid").addEventListener("keydown", (e) => {
-      const g = e.target.closest(".grid-card");
-      if (g && (e.key === "Enter" || e.key === " ")) {
-        e.preventDefault();
-        showCardBig(S.byId[g.dataset.id]);
-      }
-    });
-    onChange(render3);
-    render3();
-    function render3() {
-      const cards = S.cards.filter((c) => c.rarity !== "S" || S.oneOfOne[c.id]);
-      const owned = cards.filter((c) => S.collection[c.id]);
-      q(".cl-progress").textContent = `${owned.length} / ${cards.length} cartes diff\xE9rentes`;
-      q(".cl-rarity option[value=S]").hidden = !cards.some((c) => c.rarity === "S");
-      q(".cl-rarities").innerHTML = RARITY_ORDER.map((r) => {
-        const all = cards.filter((c) => c.rarity === r).length;
-        const have = owned.filter((c) => c.rarity === r).length;
-        return all ? `<span class="rar-chip r-${r}">${RARITIES[r].label} ${have}/${all}</span>` : "";
-      }).join("");
-      const list = owned.filter((c) => (!filter2.rarity || c.rarity === filter2.rarity) && (!filter2.type || c.type === filter2.type) && (!filter2.q || `${c.name} ${c.code} ${c.traits} ${c.effect}`.toLowerCase().includes(filter2.q))).sort((a, b) => RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity));
-      q(".cl-grid").innerHTML = list.map((c) => {
-        const n3 = S.collection[c.id] || 0;
-        const owner = c.rarity === "S" ? S.oneOfOne[c.id] : null;
-        const tag = owner ? `<span class="one-owner">Poss\xE9d\xE9e par ${esc(owner)}</span>` : "";
-        return `<div class="grid-card" data-id="${esc(c.id)}" role="button" tabindex="0" title="${esc(c.name)} : voir en grand">${cardHTML(c)}${n3 > 1 ? `<span class="qty">\xD7${n3}</span>` : ""}${tag}</div>`;
-      }).join("") || `<p class="muted">${owned.length ? "Aucune carte ne correspond." : "Aucune carte pour l'instant : ouvrez des boosters !"}</p>`;
-    }
-  }
-
   // js/admin.js
   var ROLE = { owner: "Propri\xE9taire", admin: "Admin", player: "Joueur" };
   function initAdmin() {
@@ -26613,6 +26655,8 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     if (new URLSearchParams(location.search).get("join")) first = "play";
     show(first);
     maybeAskStarter();
+    checkGifts().catch(() => {
+    });
   }
   start().catch((e) => {
     document.querySelector("main").innerHTML = `<div class="panel"><h2>Impossible de charger le jeu</h2>
