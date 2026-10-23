@@ -95,6 +95,7 @@ export function initEditor() {
           <button class="btn ghost" id="ed-legacy" title="Cartes créées avec la première version du site, dans ce navigateur">Récupérer l'ancienne version</button>
           <button class="btn ghost" id="ed-export">Exporter</button>
           <label class="btn ghost"><input type="file" id="ed-import" accept=".json,application/json" hidden>Importer</label>
+          <label class="btn ghost" title="Plusieurs images d'un coup : nommez chaque fichier avec le numéro ou le nom de la carte (ex. FT-003.jpg ou Pelé.jpg)"><input type="file" id="ed-images" accept="image/*" multiple hidden>Importer des images</label>
         </div>
       </div>
       <div class="filters">
@@ -190,6 +191,11 @@ export function initEditor() {
   val('ed-export').addEventListener('click', () => {
     download('mes-cartes.json', { format: 'optcg-maison-cartes', cards: S.cards });
   });
+  val('ed-images').addEventListener('change', (e) => {
+    const files = [...e.target.files];
+    e.target.value = '';
+    if (files.length) importImages(files);
+  });
   val('ed-import').addEventListener('change', async (e) => {
     const f = e.target.files[0];
     e.target.value = '';
@@ -224,6 +230,51 @@ export function initEditor() {
 
 // Seuls les Leaders peuvent être bicolores.
 const maxColors = () => (cur.type === 'leader' ? 2 : 1);
+
+// ---------- import d'images en masse ----------
+// Le nom du fichier (sans extension) désigne la carte : son numéro (FT-003) ou son nom (Pelé). Accents et majuscules ignorés.
+const key = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '');
+function matchCard(file) {
+  const k = key(file.name.replace(/\.[^.]+$/, ''));
+  if (!k) return null;
+  return S.cards.find((c) => key(c.code) === k) || S.cards.find((c) => key(c.name) === k) || null;
+}
+function importImages(files) {
+  const pairs = files.map((f) => ({ f, c: matchCard(f) }));
+  const ok = pairs.filter((p) => p.c);
+  const ko = pairs.filter((p) => !p.c);
+  const o = document.createElement('div');
+  o.className = 'overlay';
+  o.innerHTML = `<div class="dialog wide" role="dialog" aria-label="Importer des images">
+    <h3>Importer ${files.length} image(s)</h3>
+    ${ok.length ? `<p><b>${ok.length}</b> image(s) reconnue(s) :</p><ul class="img-import">${ok.map((p) => `<li>${esc(p.f.name)} → <b>${esc(p.c.name)}</b> <span class="muted">${esc(p.c.code || '')}</span>${p.c.image ? ' <span class="badge">remplace l\'image actuelle</span>' : ''}</li>`).join('')}</ul>` : ''}
+    ${ko.length ? `<p class="msg err">${ko.length} image(s) sans carte correspondante (elles seront ignorées) : ${ko.map((p) => esc(p.f.name)).join(', ')}</p>` : ''}
+    <p class="small muted">Nommez chaque fichier avec le numéro de la carte (ex. FT-003.jpg) ou son nom exact (ex. Pelé.jpg).</p>
+    <p class="msg ii-msg" role="status"></p>
+    <div class="row-btns">${ok.length ? `<button class="btn primary" data-go>Envoyer ${ok.length} image(s)</button>` : ''}<button class="btn ghost" data-close>Fermer</button></div></div>`;
+  document.body.append(o);
+  o.addEventListener('click', async (e) => {
+    if (e.target.closest('[data-close]')) { o.remove(); return; }
+    const go = e.target.closest('[data-go]');
+    if (!go) return;
+    go.disabled = true;
+    const out = o.querySelector('.ii-msg');
+    let n = 0;
+    try {
+      for (const p of ok) {
+        out.textContent = `Envoi ${n + 1} / ${ok.length} : ${p.c.name}…`;
+        await saveCards([{ ...p.c, image: await resizeImage(p.f) }]);
+        n++;
+      }
+      out.textContent = `${n} image(s) enregistrée(s).`;
+      msg(`${n} image(s) importée(s).`);
+    } catch (err) {
+      out.textContent = `Erreur après ${n} image(s) : ${err.message || err}`;
+      out.classList.add('err');
+    }
+    go.remove();
+  });
+}
 
 function msg(t, err = false) {
   const m = root().querySelector('#ed-msg');

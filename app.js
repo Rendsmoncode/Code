@@ -293,7 +293,7 @@
             url.searchParams.set("forceFunctionRegion", region);
           }
           let body;
-          const hasContentTypeHeader = !!headers && Object.keys(headers).some((key) => key.toLowerCase() === "content-type");
+          const hasContentTypeHeader = !!headers && Object.keys(headers).some((key2) => key2.toLowerCase() === "content-type");
           if (functionArgs && !hasContentTypeHeader) {
             if (typeof Blob !== "undefined" && functionArgs instanceof Blob || functionArgs instanceof ArrayBuffer) {
               _headers["Content-Type"] = "application/octet-stream";
@@ -697,8 +697,8 @@
       const _fetch = this.fetch;
       const executeWithRetry = async () => {
         const headers = {};
-        _this.headers.forEach((value, key) => {
-          headers[key] = value;
+        _this.headers.forEach((value, key2) => {
+          headers[key2] = value;
         });
         const res$1 = await fetchWithRetry(_fetch, _this.url.toString(), {
           method: _this.method,
@@ -1194,9 +1194,9 @@ ${cause.stack}`;
     * ```
     */
     order(column, { ascending = true, nullsFirst, foreignTable, referencedTable = foreignTable } = {}) {
-      const key = referencedTable ? `${referencedTable}.order` : "order";
-      const existingOrder = this.url.searchParams.get(key);
-      this.url.searchParams.set(key, `${existingOrder ? `${existingOrder},` : ""}${column}.${ascending ? "asc" : "desc"}${nullsFirst === void 0 ? "" : nullsFirst ? ".nullsfirst" : ".nullslast"}`);
+      const key2 = referencedTable ? `${referencedTable}.order` : "order";
+      const existingOrder = this.url.searchParams.get(key2);
+      this.url.searchParams.set(key2, `${existingOrder ? `${existingOrder},` : ""}${column}.${ascending ? "asc" : "desc"}${nullsFirst === void 0 ? "" : nullsFirst ? ".nullsfirst" : ".nullslast"}`);
       return this;
     }
     /**
@@ -1300,8 +1300,8 @@ ${cause.stack}`;
     * ```
     */
     limit(rows, { foreignTable, referencedTable = foreignTable } = {}) {
-      const key = typeof referencedTable === "undefined" ? "limit" : `${referencedTable}.limit`;
-      this.url.searchParams.set(key, `${rows}`);
+      const key2 = typeof referencedTable === "undefined" ? "limit" : `${referencedTable}.limit`;
+      this.url.searchParams.set(key2, `${rows}`);
       return this;
     }
     /**
@@ -2291,8 +2291,8 @@ ${cause.stack}`;
     * ```
     */
     or(filters, { foreignTable, referencedTable = foreignTable } = {}) {
-      const key = referencedTable ? `${referencedTable}.or` : "or";
-      this.url.searchParams.append(key, `(${filters})`);
+      const key2 = referencedTable ? `${referencedTable}.or` : "or";
+      this.url.searchParams.append(key2, `(${filters})`);
       return this;
     }
     filter(column, operator, value) {
@@ -4035,8 +4035,8 @@ ${cause.stack}`;
       headers.set("Accept", "application/openapi+json");
       if (_this.schemaName) headers.set("Accept-Profile", _this.schemaName);
       const requestHeaders = {};
-      headers.forEach((value, key) => {
-        requestHeaders[key] = value;
+      headers.forEach((value, key2) => {
+        requestHeaders[key2] = value;
       });
       const fetchImpl = (_this$fetch = _this.fetch) !== null && _this$fetch !== void 0 ? _this$fetch : globalThis.fetch;
       let res;
@@ -4555,7 +4555,7 @@ Suggested solution: ${env.workaround}`;
       if (!obj || typeof obj !== "object") {
         return {};
       }
-      return Object.fromEntries(Object.entries(obj).filter(([key]) => keys.includes(key)));
+      return Object.fromEntries(Object.entries(obj).filter(([key2]) => keys.includes(key2)));
     }
   };
 
@@ -5294,8 +5294,8 @@ Suggested solution: ${env.workaround}`;
     static xhrRequest(req, method, endPoint, headers, body, timeout, ontimeout, callback) {
       req.open(method, endPoint, true);
       req.timeout = timeout;
-      for (let [key, value] of Object.entries(headers)) {
-        req.setRequestHeader(key, value);
+      for (let [key2, value] of Object.entries(headers)) {
+        req.setRequestHeader(key2, value);
       }
       req.onerror = () => callback && callback(null);
       req.onreadystatechange = () => {
@@ -5323,12 +5323,12 @@ Suggested solution: ${env.workaround}`;
     }
     static serialize(obj, parentKey) {
       let queryStr = [];
-      for (var key in obj) {
-        if (!Object.prototype.hasOwnProperty.call(obj, key)) {
+      for (var key2 in obj) {
+        if (!Object.prototype.hasOwnProperty.call(obj, key2)) {
           continue;
         }
-        let paramKey = parentKey ? `${parentKey}[${key}]` : key;
-        let paramVal = obj[key];
+        let paramKey = parentKey ? `${parentKey}[${key2}]` : key2;
+        let paramVal = obj[key2];
         if (typeof paramVal === "object") {
           queryStr.push(this.serialize(paramVal, paramKey));
         } else {
@@ -5602,28 +5602,28 @@ Suggested solution: ${env.workaround}`;
       newState = this.toNullProtoObj(newState);
       let joins = /* @__PURE__ */ Object.create(null);
       let leaves = /* @__PURE__ */ Object.create(null);
-      this.map(state, (key, presence) => {
-        if (!newState[key]) {
-          leaves[key] = presence;
+      this.map(state, (key2, presence) => {
+        if (!newState[key2]) {
+          leaves[key2] = presence;
         }
       });
-      this.map(newState, (key, newPresence) => {
-        let currentPresence = state[key];
+      this.map(newState, (key2, newPresence) => {
+        let currentPresence = state[key2];
         if (currentPresence) {
           let newRefs = newPresence.metas.map((m) => m.phx_ref);
           let curRefs = currentPresence.metas.map((m) => m.phx_ref);
           let joinedMetas = newPresence.metas.filter((m) => curRefs.indexOf(m.phx_ref) < 0);
           let leftMetas = currentPresence.metas.filter((m) => newRefs.indexOf(m.phx_ref) < 0);
           if (joinedMetas.length > 0) {
-            joins[key] = newPresence;
-            joins[key].metas = joinedMetas;
+            joins[key2] = newPresence;
+            joins[key2].metas = joinedMetas;
           }
           if (leftMetas.length > 0) {
-            leaves[key] = this.clone(currentPresence);
-            leaves[key].metas = leftMetas;
+            leaves[key2] = this.clone(currentPresence);
+            leaves[key2].metas = leftMetas;
           }
         } else {
-          joins[key] = newPresence;
+          joins[key2] = newPresence;
         }
       });
       return this.syncDiff(state, { joins, leaves }, onJoin, onLeave);
@@ -5653,18 +5653,18 @@ Suggested solution: ${env.workaround}`;
         onLeave = function() {
         };
       }
-      this.map(joins, (key, newPresence) => {
-        let currentPresence = state[key];
-        state[key] = this.clone(newPresence);
+      this.map(joins, (key2, newPresence) => {
+        let currentPresence = state[key2];
+        state[key2] = this.clone(newPresence);
         if (currentPresence) {
-          let joinedRefs = state[key].metas.map((m) => m.phx_ref);
+          let joinedRefs = state[key2].metas.map((m) => m.phx_ref);
           let curMetas = currentPresence.metas.filter((m) => joinedRefs.indexOf(m.phx_ref) < 0);
-          state[key].metas.unshift(...curMetas);
+          state[key2].metas.unshift(...curMetas);
         }
-        onJoin(key, currentPresence, newPresence);
+        onJoin(key2, currentPresence, newPresence);
       });
-      this.map(leaves, (key, leftPresence) => {
-        let currentPresence = state[key];
+      this.map(leaves, (key2, leftPresence) => {
+        let currentPresence = state[key2];
         if (!currentPresence) {
           return;
         }
@@ -5672,9 +5672,9 @@ Suggested solution: ${env.workaround}`;
         currentPresence.metas = currentPresence.metas.filter((p) => {
           return refsToRemove.indexOf(p.phx_ref) < 0;
         });
-        onLeave(key, currentPresence, leftPresence);
+        onLeave(key2, currentPresence, leftPresence);
         if (currentPresence.metas.length === 0) {
-          delete state[key];
+          delete state[key2];
         }
       });
       return state;
@@ -5690,12 +5690,12 @@ Suggested solution: ${env.workaround}`;
      */
     static list(presences, chooser) {
       if (!chooser) {
-        chooser = function(key, pres) {
+        chooser = function(key2, pres) {
           return pres;
         };
       }
-      return this.map(presences, (key, presence) => {
-        return chooser(key, presence);
+      return this.map(presences, (key2, presence) => {
+        return chooser(key2, presence);
       });
     }
     // private
@@ -5705,7 +5705,7 @@ Suggested solution: ${env.workaround}`;
     * @param {(key: string, obj: PresenceState) => T} func
     */
     static map(obj, func) {
-      return Object.getOwnPropertyNames(obj).map((key) => func(key, obj[key]));
+      return Object.getOwnPropertyNames(obj).map((key2) => func(key2, obj[key2]));
     }
     // Presence keys are chosen on the server and may collide with
     // Object.prototype properties ("__proto__", "constructor", ...), so any
@@ -5718,8 +5718,8 @@ Suggested solution: ${env.workaround}`;
         return obj;
       }
       let cleaned = /* @__PURE__ */ Object.create(null);
-      Object.getOwnPropertyNames(obj).forEach((key) => {
-        cleaned[key] = obj[key];
+      Object.getOwnPropertyNames(obj).forEach((key2) => {
+        cleaned[key2] = obj[key2];
       });
       return cleaned;
     }
@@ -6192,11 +6192,11 @@ Suggested solution: ${env.workaround}`;
       this.conn.onmessage = (event) => this.onConnMessage(event);
       this.conn.onclose = (event) => this.onConnClose(event);
     }
-    getSession(key) {
-      return this.sessionStore && this.sessionStore.getItem(key);
+    getSession(key2) {
+      return this.sessionStore && this.sessionStore.getItem(key2);
     }
-    storeSession(key, val) {
-      this.sessionStore && this.sessionStore.setItem(key, val);
+    storeSession(key2, val) {
+      this.sessionStore && this.sessionStore.setItem(key2, val);
     }
     connectWithFallback(fallbackTransport, fallbackThreshold = 2500) {
       clearTimeout(this.fallbackTimer);
@@ -6407,8 +6407,8 @@ Suggested solution: ${env.workaround}`;
      *                 `onOpen`, `onClose`, `onError,` and `onMessage`
      */
     off(refs) {
-      for (let key in this.stateChangeCallbacks) {
-        this.stateChangeCallbacks[key] = this.stateChangeCallbacks[key].filter(([ref]) => {
+      for (let key2 in this.stateChangeCallbacks) {
+        this.stateChangeCallbacks[key2] = this.stateChangeCallbacks[key2].filter(([ref]) => {
           return refs.indexOf(ref) === -1;
         });
       }
@@ -6546,12 +6546,12 @@ Suggested solution: ${env.workaround}`;
     constructor(channel, opts) {
       const phoenixOptions = phoenixPresenceOptions(opts);
       this.presence = new Presence(channel.getChannel(), phoenixOptions);
-      this.presence.onJoin((key, currentPresence, newPresence) => {
-        const onJoinPayload = _PresenceAdapter.onJoinPayload(key, currentPresence, newPresence);
+      this.presence.onJoin((key2, currentPresence, newPresence) => {
+        const onJoinPayload = _PresenceAdapter.onJoinPayload(key2, currentPresence, newPresence);
         channel.getChannel().trigger("presence", onJoinPayload);
       });
-      this.presence.onLeave((key, currentPresence, leftPresence) => {
-        const onLeavePayload = _PresenceAdapter.onLeavePayload(key, currentPresence, leftPresence);
+      this.presence.onLeave((key2, currentPresence, leftPresence) => {
+        const onLeavePayload = _PresenceAdapter.onLeavePayload(key2, currentPresence, leftPresence);
         channel.getChannel().trigger("presence", onLeavePayload);
       });
       this.presence.onSync(() => {
@@ -6586,28 +6586,28 @@ Suggested solution: ${env.workaround}`;
      */
     static transformState(state) {
       state = cloneState(state);
-      return Object.getOwnPropertyNames(state).reduce((newState, key) => {
-        const presences = state[key];
-        newState[key] = transformState(presences);
+      return Object.getOwnPropertyNames(state).reduce((newState, key2) => {
+        const presences = state[key2];
+        newState[key2] = transformState(presences);
         return newState;
       }, {});
     }
-    static onJoinPayload(key, currentPresence, newPresence) {
+    static onJoinPayload(key2, currentPresence, newPresence) {
       const currentPresences = parseCurrentPresences(currentPresence);
       const newPresences = transformState(newPresence);
       return {
         event: "join",
-        key,
+        key: key2,
         currentPresences,
         newPresences
       };
     }
-    static onLeavePayload(key, currentPresence, leftPresence) {
+    static onLeavePayload(key2, currentPresence, leftPresence) {
       const currentPresences = parseCurrentPresences(currentPresence);
       const leftPresences = transformState(leftPresence);
       return {
         event: "leave",
-        key,
+        key: key2,
         currentPresences,
         leftPresences
       };
@@ -7759,18 +7759,18 @@ Suggested solution: ${env.workaround}`;
       clear() {
         store2.clear();
       },
-      getItem(key) {
-        return store2.has(key) ? store2.get(key) : null;
+      getItem(key2) {
+        return store2.has(key2) ? store2.get(key2) : null;
       },
       key(index) {
         var _a;
         return (_a = Array.from(store2.keys())[index]) !== null && _a !== void 0 ? _a : null;
       },
-      removeItem(key) {
-        store2.delete(key);
+      removeItem(key2) {
+        store2.delete(key2);
       },
-      setItem(key, value) {
-        store2.set(key, String(value));
+      setItem(key2, value) {
+        store2.set(key2, String(value));
       }
     };
   }
@@ -8441,9 +8441,9 @@ Suggested solution: ${env.workaround}`;
   function buildUrl(baseUrl, path, query) {
     const url = new URL(path, baseUrl);
     if (query) {
-      for (const [key, value] of Object.entries(query)) {
+      for (const [key2, value] of Object.entries(query)) {
         if (value !== void 0) {
-          url.searchParams.set(key, value);
+          url.searchParams.set(key2, value);
         }
       }
     }
@@ -9036,13 +9036,13 @@ Suggested solution: ${env.workaround}`;
   function setHeader(headers, name2, value) {
     const result = _objectSpread22({}, headers);
     const nameLower = name2.toLowerCase();
-    for (const key of Object.keys(result)) if (key.toLowerCase() === nameLower) delete result[key];
+    for (const key2 of Object.keys(result)) if (key2.toLowerCase() === nameLower) delete result[key2];
     result[nameLower] = value;
     return result;
   }
   function normalizeHeaders(headers) {
     const result = {};
-    for (const [key, value] of Object.entries(headers)) result[key.toLowerCase()] = value;
+    for (const [key2, value] of Object.entries(headers)) result[key2.toLowerCase()] = value;
     return result;
   }
   var resolveFetch2 = (customFetch) => {
@@ -9058,8 +9058,8 @@ Suggested solution: ${env.workaround}`;
     if (Array.isArray(item)) return item.map((el) => recursiveToCamel(el));
     else if (typeof item === "function" || item !== Object(item)) return item;
     const result = {};
-    Object.entries(item).forEach(([key, value]) => {
-      const newKey = key.replace(/([-_][a-z])/gi, (c) => c.toUpperCase().replace(/[-_]/g, ""));
+    Object.entries(item).forEach(([key2, value]) => {
+      const newKey = key2.replace(/([-_][a-z])/gi, (c) => c.toUpperCase().replace(/[-_]/g, ""));
       result[newKey] = recursiveToCamel(value);
     });
     return result;
@@ -9110,7 +9110,7 @@ Suggested solution: ${env.workaround}`;
       var _contentType;
       const headers = (options === null || options === void 0 ? void 0 : options.headers) || {};
       let contentType;
-      for (const [key, value] of Object.entries(headers)) if (key.toLowerCase() === "content-type") contentType = value;
+      for (const [key2, value] of Object.entries(headers)) if (key2.toLowerCase() === "content-type") contentType = value;
       params.headers = setHeader(headers, "Content-Type", (_contentType = contentType) !== null && _contentType !== void 0 ? _contentType : "application/json");
       params.body = JSON.stringify(body);
     } else params.body = body;
@@ -9361,7 +9361,7 @@ Suggested solution: ${env.workaround}`;
           if (metadata) headers["x-metadata"] = _this.toBase64(_this.encodeMetadata(metadata));
           if ((typeof ReadableStream !== "undefined" && body instanceof ReadableStream || body && typeof body === "object" && "pipe" in body && typeof body.pipe === "function") && !options.duplex) options.duplex = "half";
         }
-        if (fileOptions === null || fileOptions === void 0 ? void 0 : fileOptions.headers) for (const [key, value] of Object.entries(fileOptions.headers)) headers = setHeader(headers, key, value);
+        if (fileOptions === null || fileOptions === void 0 ? void 0 : fileOptions.headers) for (const [key2, value] of Object.entries(fileOptions.headers)) headers = setHeader(headers, key2, value);
         const cleanPath = _this._removeEmptyFolders(path);
         const _path = _this._getFinalPath(cleanPath);
         const data = await (method == "PUT" ? put : post)(_this.fetch, `${_this.url}/object/${_path}`, body, _objectSpread22({ headers }, (options === null || options === void 0 ? void 0 : options.duplex) ? { duplex: options.duplex } : {}));
@@ -9507,7 +9507,7 @@ Suggested solution: ${env.workaround}`;
           if (metadata) headers["x-metadata"] = _this3.toBase64(_this3.encodeMetadata(metadata));
           if ((typeof ReadableStream !== "undefined" && body instanceof ReadableStream || body && typeof body === "object" && "pipe" in body && typeof body.pipe === "function") && !options.duplex) options.duplex = "half";
         }
-        if (fileOptions === null || fileOptions === void 0 ? void 0 : fileOptions.headers) for (const [key, value] of Object.entries(fileOptions.headers)) headers = setHeader(headers, key, value);
+        if (fileOptions === null || fileOptions === void 0 ? void 0 : fileOptions.headers) for (const [key2, value] of Object.entries(fileOptions.headers)) headers = setHeader(headers, key2, value);
         return {
           path: cleanPath,
           fullPath: (await put(_this3.fetch, url.toString(), body, _objectSpread22({ headers }, (options === null || options === void 0 ? void 0 : options.duplex) ? { duplex: options.duplex } : {}))).Key
@@ -12265,14 +12265,14 @@ Suggested solution: ${env.workaround}`;
     if (url.hash && url.hash[0] === "#") {
       try {
         const hashSearchParams = new URLSearchParams(url.hash.substring(1));
-        hashSearchParams.forEach((value, key) => {
-          result[key] = value;
+        hashSearchParams.forEach((value, key2) => {
+          result[key2] = value;
         });
       } catch (_e) {
       }
     }
-    url.searchParams.forEach((value, key) => {
-      result[key] = value;
+    url.searchParams.forEach((value, key2) => {
+      result[key2] = value;
     });
     return result;
   }
@@ -12285,11 +12285,11 @@ Suggested solution: ${env.workaround}`;
   var looksLikeFetchResponse = (maybeResponse) => {
     return typeof maybeResponse === "object" && maybeResponse !== null && "status" in maybeResponse && "ok" in maybeResponse && "json" in maybeResponse && typeof maybeResponse.json === "function";
   };
-  var setItemAsync = async (storage, key, data) => {
-    await storage.setItem(key, JSON.stringify(data));
+  var setItemAsync = async (storage, key2, data) => {
+    await storage.setItem(key2, JSON.stringify(data));
   };
-  var getItemAsync = async (storage, key) => {
-    const value = await storage.getItem(key);
+  var getItemAsync = async (storage, key2) => {
+    const value = await storage.getItem(key2);
     if (!value) {
       return null;
     }
@@ -12299,8 +12299,8 @@ Suggested solution: ${env.workaround}`;
       return null;
     }
   };
-  var removeItemAsync = async (storage, key) => {
-    await storage.removeItem(key);
+  var removeItemAsync = async (storage, key2) => {
+    await storage.removeItem(key2);
   };
   var Deferred = class _Deferred {
     constructor() {
@@ -13836,14 +13836,14 @@ Suggested solution: ${env.workaround}`;
   // node_modules/@supabase/auth-js/dist/module/lib/local-storage.js
   function memoryLocalStorageAdapter(store2 = {}) {
     return {
-      getItem: (key) => {
-        return store2[key] || null;
+      getItem: (key2) => {
+        return store2[key2] || null;
       },
-      setItem: (key, value) => {
-        store2[key] = value;
+      setItem: (key2, value) => {
+        store2[key2] = value;
       },
-      removeItem: (key) => {
-        delete store2[key];
+      removeItem: (key2) => {
+        delete store2[key2];
       }
     };
   }
@@ -14356,23 +14356,23 @@ ${suffix}`;
     for (const source of sources) {
       if (!source)
         continue;
-      for (const key in source) {
-        const value = source[key];
+      for (const key2 in source) {
+        const value = source[key2];
         if (value === void 0)
           continue;
         if (Array.isArray(value)) {
-          result[key] = value;
+          result[key2] = value;
         } else if (isArrayBufferLike(value)) {
-          result[key] = value;
+          result[key2] = value;
         } else if (isObject(value)) {
-          const existing = result[key];
+          const existing = result[key2];
           if (isObject(existing)) {
-            result[key] = deepMerge(existing, value);
+            result[key2] = deepMerge(existing, value);
           } else {
-            result[key] = deepMerge(value);
+            result[key2] = deepMerge(value);
           }
         } else {
-          result[key] = value;
+          result[key2] = value;
         }
       }
     }
@@ -19548,12 +19548,12 @@ ${suffix}`;
       }
     }
     async fetchJwk(kid, jwks = { keys: [] }) {
-      let jwk = jwks.keys.find((key) => key.kid === kid);
+      let jwk = jwks.keys.find((key2) => key2.kid === kid);
       if (jwk) {
         return jwk;
       }
       const now = Date.now();
-      jwk = this.jwks.keys.find((key) => key.kid === kid);
+      jwk = this.jwks.keys.find((key2) => key2.kid === kid);
       if (jwk && this.jwks_cached_at + JWKS_TTL > now) {
         return jwk;
       }
@@ -19568,7 +19568,7 @@ ${suffix}`;
       }
       this.jwks = data;
       this.jwks_cached_at = now;
-      jwk = data.keys.find((key) => key.kid === kid);
+      jwk = data.keys.find((key2) => key2.kid === kid);
       if (!jwk) {
         return null;
       }
@@ -20182,13 +20182,13 @@ ${suffix}`;
   var resolveHeadersConstructor = () => {
     return Headers;
   };
-  var isNewApiKey = (key) => key.startsWith("sb_publishable_") || key.startsWith("sb_secret_");
+  var isNewApiKey = (key2) => key2.startsWith("sb_publishable_") || key2.startsWith("sb_secret_");
   var TEMP_KEY_PREFIX = "sb_temp_";
   var warnedKeySubtypes = /* @__PURE__ */ new Set();
-  var checkApiKeyFormat = (key) => {
+  var checkApiKeyFormat = (key2) => {
     var _key$match$, _key$match;
-    if (!key.startsWith("sb_") || isNewApiKey(key) || key.startsWith(TEMP_KEY_PREFIX)) return;
-    const subtype = (_key$match$ = (_key$match = key.match(/^sb_[a-zA-Z0-9]+_/)) === null || _key$match === void 0 ? void 0 : _key$match[0]) !== null && _key$match$ !== void 0 ? _key$match$ : "unknown";
+    if (!key2.startsWith("sb_") || isNewApiKey(key2) || key2.startsWith(TEMP_KEY_PREFIX)) return;
+    const subtype = (_key$match$ = (_key$match = key2.match(/^sb_[a-zA-Z0-9]+_/)) === null || _key$match === void 0 ? void 0 : _key$match[0]) !== null && _key$match$ !== void 0 ? _key$match$ : "unknown";
     if (warnedKeySubtypes.has(subtype)) return;
     warnedKeySubtypes.add(subtype);
     console.warn("@supabase/supabase-js: Unrecognized Supabase API key format. The client will proceed and send this key as-is; if you see authentication errors you may need to upgrade @supabase/supabase-js to a version that recognizes this key type.");
@@ -20737,7 +20737,7 @@ ${suffix}`;
         fetch: fetch$1,
         lockAcquireTimeout,
         skipAutoInitialize,
-        hasCustomAuthorizationHeader: Object.keys(this.headers).some((key) => key.toLowerCase() === "authorization")
+        hasCustomAuthorizationHeader: Object.keys(this.headers).some((key2) => key2.toLowerCase() === "authorization")
       });
     }
     _initRealtimeClient(options) {
@@ -21177,8 +21177,8 @@ ${suffix}`;
   ];
   var esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   var uid = () => crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2);
-  var hasWord = (card, key, words) => {
-    if (card?.keywords?.includes(key)) return true;
+  var hasWord = (card, key2, words) => {
+    if (card?.keywords?.includes(key2)) return true;
     const t = `${card?.effect || ""}`.toLowerCase();
     return words.some((w) => t.includes(w));
   };
@@ -21500,9 +21500,9 @@ ${suffix}`;
         continue;
       }
       total += n2;
-      const key = c.code || c.id;
-      perCode[key] = (perCode[key] || 0) + n2;
-      if (perCode[key] > 4 && !c.keywords?.includes("unlimited")) errs.push(`\xAB ${c.name} \xBB : 4 exemplaires maximum.`);
+      const key2 = c.code || c.id;
+      perCode[key2] = (perCode[key2] || 0) + n2;
+      if (perCode[key2] > 4 && !c.keywords?.includes("unlimited")) errs.push(`\xAB ${c.name} \xBB : 4 exemplaires maximum.`);
       if (owned && n2 > (S.collection[id] || 0)) errs.push(`\xAB ${c.name} \xBB : vous n'en poss\xE9dez que ${S.collection[id] || 0}.`);
       if (c.type === "leader") errs.push(`\xAB ${c.name} \xBB est un Leader : il ne va pas dans le deck.`);
       if (!owned && c.rarity === "S") errs.push(`\xAB ${c.name} \xBB est une 1on1 : interdite dans un deck pr\xE9construit.`);
@@ -21899,6 +21899,7 @@ ${suffix}`;
           <button class="btn ghost" id="ed-legacy" title="Cartes cr\xE9\xE9es avec la premi\xE8re version du site, dans ce navigateur">R\xE9cup\xE9rer l'ancienne version</button>
           <button class="btn ghost" id="ed-export">Exporter</button>
           <label class="btn ghost"><input type="file" id="ed-import" accept=".json,application/json" hidden>Importer</label>
+          <label class="btn ghost" title="Plusieurs images d'un coup : nommez chaque fichier avec le num\xE9ro ou le nom de la carte (ex. FT-003.jpg ou Pel\xE9.jpg)"><input type="file" id="ed-images" accept="image/*" multiple hidden>Importer des images</label>
         </div>
       </div>
       <div class="filters">
@@ -22027,6 +22028,11 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     val("ed-export").addEventListener("click", () => {
       download("mes-cartes.json", { format: "optcg-maison-cartes", cards: S.cards });
     });
+    val("ed-images").addEventListener("change", (e) => {
+      const files = [...e.target.files];
+      e.target.value = "";
+      if (files.length) importImages(files);
+    });
     val("ed-import").addEventListener("change", async (e) => {
       const f = e.target.files[0];
       e.target.value = "";
@@ -22064,6 +22070,51 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     renderList();
   }
   var maxColors = () => cur.type === "leader" ? 2 : 1;
+  var key = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "");
+  function matchCard(file) {
+    const k = key(file.name.replace(/\.[^.]+$/, ""));
+    if (!k) return null;
+    return S.cards.find((c) => key(c.code) === k) || S.cards.find((c) => key(c.name) === k) || null;
+  }
+  function importImages(files) {
+    const pairs = files.map((f) => ({ f, c: matchCard(f) }));
+    const ok = pairs.filter((p) => p.c);
+    const ko = pairs.filter((p) => !p.c);
+    const o = document.createElement("div");
+    o.className = "overlay";
+    o.innerHTML = `<div class="dialog wide" role="dialog" aria-label="Importer des images">
+    <h3>Importer ${files.length} image(s)</h3>
+    ${ok.length ? `<p><b>${ok.length}</b> image(s) reconnue(s) :</p><ul class="img-import">${ok.map((p) => `<li>${esc(p.f.name)} \u2192 <b>${esc(p.c.name)}</b> <span class="muted">${esc(p.c.code || "")}</span>${p.c.image ? ` <span class="badge">remplace l'image actuelle</span>` : ""}</li>`).join("")}</ul>` : ""}
+    ${ko.length ? `<p class="msg err">${ko.length} image(s) sans carte correspondante (elles seront ignor\xE9es) : ${ko.map((p) => esc(p.f.name)).join(", ")}</p>` : ""}
+    <p class="small muted">Nommez chaque fichier avec le num\xE9ro de la carte (ex. FT-003.jpg) ou son nom exact (ex. Pel\xE9.jpg).</p>
+    <p class="msg ii-msg" role="status"></p>
+    <div class="row-btns">${ok.length ? `<button class="btn primary" data-go>Envoyer ${ok.length} image(s)</button>` : ""}<button class="btn ghost" data-close>Fermer</button></div></div>`;
+    document.body.append(o);
+    o.addEventListener("click", async (e) => {
+      if (e.target.closest("[data-close]")) {
+        o.remove();
+        return;
+      }
+      const go = e.target.closest("[data-go]");
+      if (!go) return;
+      go.disabled = true;
+      const out = o.querySelector(".ii-msg");
+      let n2 = 0;
+      try {
+        for (const p of ok) {
+          out.textContent = `Envoi ${n2 + 1} / ${ok.length} : ${p.c.name}\u2026`;
+          await saveCards([{ ...p.c, image: await resizeImage(p.f) }]);
+          n2++;
+        }
+        out.textContent = `${n2} image(s) enregistr\xE9e(s).`;
+        msg(`${n2} image(s) import\xE9e(s).`);
+      } catch (err) {
+        out.textContent = `Erreur apr\xE8s ${n2} image(s) : ${err.message || err}`;
+        out.classList.add("err");
+      }
+      go.remove();
+    });
+  }
   function msg(t, err = false) {
     const m = root().querySelector("#ed-msg");
     m.textContent = t;
@@ -23652,11 +23703,11 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       inst.nx = { x, skip: G.turn.player === x };
     }
     if (a.k === "power") {
-      const key = dur === "battle" ? "bm" : dur === "perm" ? "pm" : dur === "next" ? "nm" : "m";
-      inst[key] = (inst[key] || 0) + (Number(a.amount) || 0);
+      const key2 = dur === "battle" ? "bm" : dur === "perm" ? "pm" : dur === "next" ? "nm" : "m";
+      inst[key2] = (inst[key2] || 0) + (Number(a.amount) || 0);
     } else if (a.k === "cost") {
-      const key = dur === "perm" ? "cm" : dur === "next" ? "cnx" : "cmt";
-      inst[key] = (inst[key] || 0) + (Number(a.amount) || 0);
+      const key2 = dur === "perm" ? "cm" : dur === "next" ? "cnx" : "cmt";
+      inst[key2] = (inst[key2] || 0) + (Number(a.amount) || 0);
     } else if (a.k === "grantKw") {
       inst.kw = { ...inst.kw || {}, [a.kw]: dur };
     } else if (a.k === "protect") {
@@ -23668,9 +23719,9 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     else if (a.k === "negate") inst.neg = true;
   }
   function clearDur(inst, dur) {
-    for (const key of ["kw", "prot"]) {
-      if (!inst[key]) continue;
-      for (const [k, v] of Object.entries(inst[key])) if (v === dur) delete inst[key][k];
+    for (const key2 of ["kw", "prot"]) {
+      if (!inst[key2]) continue;
+      for (const [k, v] of Object.entries(inst[key2])) if (v === dur) delete inst[key2][k];
     }
   }
   function endBattleMods() {

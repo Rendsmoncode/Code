@@ -569,3 +569,4 @@ details { margin-top: 12px; }
 .theme-opt img { width: 100%; aspect-ratio: 9/16; object-fit: cover; object-position: top; border-radius: 8px; }
 .theme-opt span { font-size: .8em; color: var(--muted); }
 .theme-opt.on { border-color: var(--accent); }
+.img-import { max-height: 40vh; overflow: auto; margin: 6px 0; padding-left: 18px; font-size: .9em; }
