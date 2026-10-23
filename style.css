@@ -255,6 +255,10 @@ details { margin-top: 12px; }
 @media (max-width: 760px) {
   main { padding: 10px; }
   .top { flex-wrap: wrap; gap: 8px; padding: 8px 12px; }
+  .top nav { flex-wrap: wrap; width: 100%; }
+  .top { position: static; }
+  .concede { position: static; display: block; margin: 0 auto 6px; }
+  .top nav button { padding: 6px 10px; }
   .editor, .decks, .deck-build, .lobby-actions, .grid2 { grid-template-columns: 1fr; }
   .ed-preview { position: static; max-width: 260px; margin: 0 auto; }
   .gside { grid-template-columns: 1fr; }
@@ -400,3 +404,7 @@ details { margin-top: 12px; }
 .iv-link input { flex: 1; min-width: 260px; }
 .invite-hello { background: #1d2a1a; border: 1px solid var(--ok); border-radius: 8px; padding: 10px 12px; margin: 0; line-height: 1.45; }
 .badge:not(.ok):not(.ko) { background: var(--panel-2); color: var(--muted); }
+
+/* Carte en grand sur écran tactile */
+.zoom .big-card { max-width: 280px; margin: 0 auto 10px; }
+.zoom .pv-text { font-size: .95em; }

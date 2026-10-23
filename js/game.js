@@ -1809,9 +1809,20 @@ function viewerHTML() {
   </div></div>`;
 }
 
+// Écran tactile (téléphone, tablette) : pas de survol, on passe par « Voir la carte ».
+const noHover = () => matchMedia('(hover: none)').matches || navigator.maxTouchPoints > 0;
+function zoomCard(el) {
+  G.preview = { cid: el.dataset.cid, side: el.dataset.side || 'me', u: el.dataset.u };
+  const pv = root().querySelector('#gm-preview');
+  if (pv) pv.innerHTML = previewHTML();
+  const c = (G.preview.side === 'opp' ? G.oppCards : G.myCards)[G.preview.cid];
+  ask(c?.name || '', `<div class="zoom">${previewHTML()}</div>`, [{ label: 'Fermer', value: true, cls: 'primary' }]);
+}
+const zoomItem = (el) => (noHover() && el?.dataset.cid ? [{ label: '🔍 Voir la carte', fn: () => zoomCard(el) }] : []);
+
 function previewHTML() {
   const p = G.preview;
-  if (!p) return '<p class="muted small">Survolez une carte pour la voir en grand.</p>';
+  if (!p) return `<p class="muted small">${noHover() ? 'Touchez une carte puis « 🔍 Voir la carte » pour la lire en grand.' : 'Survolez une carte pour la voir en grand.'}</p>`;
   const c = p.side === 'opp' ? G.oppCards[p.cid] : G.myCards[p.cid];
   if (!c) return '';
   let extra = '';
@@ -1927,14 +1938,15 @@ async function onBoardClick(e) {
   }
   if (side === 'opp') {
     if (el.dataset.pile === 'trash') openViewer('trash', null, 'opp');
+    else if (noHover() && el.dataset.cid) zoomCard(el);
     return;
   }
   if (el.dataset.pile) {
     const items = menuForPile(el.dataset.pile);
-    if (items) showMenu(items, x, y);
+    if (items || zoomItem(el).length) showMenu([...zoomItem(el), ...(items || [])], x, y);
     return;
   }
-  showMenu(menuForCard(el.dataset.u), x, y);
+  showMenu([...zoomItem(el), ...menuForCard(el.dataset.u)], x, y);
 }
 
 function doAction(a, el) {
