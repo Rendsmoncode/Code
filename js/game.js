@@ -577,6 +577,9 @@ function sendAttack() {
   const atk = locate(b.attacker)?.inst;
   if (!atk) { G.battle = null; return commit(); }
   b.atkPower = myPower(atk);
+  // [Double attaque] / [Exil] : seulement si la carte les a (d'elle-même ou grâce à un effet, y compris ses effets [Attaque]).
+  b.double = hasKw(atk, 'double');
+  b.banish = hasKw(atk, 'banish');
   b.step = 'defense';
   const { role, ...wire } = b;
   send({ t: 'attack', b: wire });
@@ -608,6 +611,16 @@ async function block(inst) {
   log(`bloque avec ${name(c)}.`);
   battleUpd();
   await fireCard(inst, 'onBlock');
+}
+
+// Boutons des cartes de la main utilisables en Contre (Personnages avec une valeur de Contre, Événements).
+function counterBtns() {
+  const list = G.me.hand.filter((i) => { const c = myCard(i); return (c.type === 'character' && Number(c.counter) > 0) || c.type === 'event'; });
+  if (!list.length) return '<p class="small muted">Aucune carte Contre dans votre main.</p>';
+  return `<div class="row-btns ctr-list">${list.map((i) => {
+    const c = myCard(i);
+    return `<button class="btn small" data-do="ctr" data-u="${i.u}" title="Défausser cette carte">${esc(c.name)} ${c.type === 'event' ? '(Événement)' : `+${c.counter}`}</button>`;
+  }).join('')}</div>`;
 }
 
 function counterChar(inst) {
@@ -1468,9 +1481,7 @@ function menuForCard(u) {
       act('🛡 Bloquer', () => block(inst), { cls: 'hl' });
     }
     if (zone !== 'stage' && myTurn() && !b) {
-      act(`Attacher 1 DON!! (${G.me.donActive} actif${G.me.donActive > 1 ? 's' : ''})`, () => {
-        G.me.donActive--; inst.d = (inst.d || 0) + 1; done(`attache 1 DON!! à ${name(c)}.`)();
-      }, { disabled: !G.me.donActive });
+      act(`Donner des DON!! (${G.me.donActive} actif${G.me.donActive > 1 ? 's' : ''})`, () => giveDon(inst), { disabled: !G.me.donActive });
     }
     man(inst.r ? 'Redresser (actif)' : 'Reposer', () => { inst.r = !inst.r; done(`${inst.r ? 'repose' : 'redresse'} ${name(c)}.`)(); });
     if (zone !== 'stage') {
@@ -1509,8 +1520,12 @@ function menuForPile(pile) {
   const it = [];
   const act = (label, fn, opt = {}) => it.push({ label, fn, ...opt });
   if (pile === 'trash') { openViewer('trash'); return null; }
+  if (pile === 'don' && myTurn() && !G.battle) {
+    act(`✨ Donner des DON!! (${me.donActive} actif${me.donActive > 1 ? 's' : ''})`, () => { G.select = { kind: 'don' }; render(); },
+      { cls: 'hl', disabled: !me.donActive });
+  }
   if (!G.manual) {
-    return [{ label: 'Actions libres verrouillées : utilisez « Effet manuel » pour un effet en texte libre', fn: () => {}, disabled: true }];
+    return [...it, { label: 'Actions libres verrouillées : utilisez « Effet manuel » pour un effet en texte libre', fn: () => {}, disabled: true }];
   }
   if (pile === 'deck') {
     act('Piocher 1 carte', () => { if (me.deck.length) { me.hand.push(me.deck.shift()); log('pioche 1 carte.'); } commit(); }, { cls: 'hl' });
@@ -1681,6 +1696,22 @@ function toast(text) {
 }
 
 // ---------- rendu ----------
+// Donner des DON!! actifs à son Leader ou à un Personnage : on choisit le nombre.
+async function giveDon(inst) {
+  G.select = null;
+  const max = G.me.donActive;
+  if (!max) { render(); return; }
+  const c = myCard(inst);
+  const n = max === 1 ? 1 : await ask(`Donner des DON!! à ${c?.name || ''}`, `<p class="muted">Combien de DON!! actifs lui donner ? (${max} disponible${max > 1 ? 's' : ''})</p>`,
+    [...Array.from({ length: max }, (_, i) => ({ label: String(i + 1), value: i + 1, cls: i + 1 === max ? 'primary' : '' })), { label: 'Annuler', value: 0, cls: 'ghost' }]);
+  if (!n || !locate(inst.u)) { render(); return; }
+  const k = Math.min(n, G.me.donActive);
+  G.me.donActive -= k;
+  inst.d = (inst.d || 0) + k;
+  log(`donne ${k} DON!! à ${name(c)}.`);
+  commit();
+}
+
 function slot(inst, side, zone) {
   const mine = side === 'me';
   const c = mine ? myCard(inst) : oppCard(inst);
@@ -1689,6 +1720,7 @@ function slot(inst, side, zone) {
   if (inst.r) cls.push('rested');
   if (G.select?.kind === 'attack' && !mine && ((zone === 'leader' && !G.select.onlyChars) || (zone === 'chars' && inst.r))) cls.push('target');
   if (G.select?.attacker === inst.u) cls.push('attacking');
+  if (G.select?.kind === 'don' && mine && (zone === 'leader' || zone === 'chars')) cls.push('target');
   if (G.battle && (G.battle.attacker === inst.u)) cls.push('attacking');
   if (G.battle && (G.battle.target === inst.u)) cls.push('defending');
   return `<div class="${cls.join(' ')}" data-u="${inst.u}" data-side="${side}" data-zone="${zone}" data-cid="${inst.c}" tabindex="0">
@@ -1781,6 +1813,7 @@ function mobileBoardHTML() {
   const panel = G.phase !== 'play' || G.battle || G.manual || G.oppManual || G.disconnected;
   let turn = G.phase === 'play' ? `${mt ? 'À vous' : `Tour de ${esc(G.oppName)}`} · Tour ${G.turn.count}` : '';
   if (G.select?.kind === 'attack') turn = G.select.onlyChars ? 'Cible : un Personnage reposé' : 'Cible : Leader ou Personnage reposé';
+  if (G.select?.kind === 'don') turn = 'DON!! : touchez qui les reçoit';
   const oh = o?.hand || 0;
   const chat = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.5 7.2L4 20l1-4.4A8 8 0 1 1 21 12z"/></svg>';
   const h = G.me.hand;
@@ -1838,21 +1871,20 @@ function centerHTML() {
     if (atkSide && b.step === 'attack') {
       inner = `<p class="phase-t">Étape d'attaque</p>${vs}
         <p class="small muted">Résolvez vos effets [Attaque] (menu de vos cartes pour la puissance), puis envoyez l'attaque.</p>
-        <label class="small"><input type="checkbox" data-flag="double" ${b.double ? 'checked' : ''}> Double attaque</label>
-        <label class="small"><input type="checkbox" data-flag="banish" ${b.banish ? 'checked' : ''}> Exil</label>
         <div class="row-btns"><button class="btn primary" data-do="send-atk">Envoyer l'attaque</button><button class="btn ghost" data-do="cancel-atk">Annuler</button></div>`;
     } else if (atkSide) {
       inner = `<p class="phase-t">Combat</p>${vs}<p class="small muted">${esc(G.oppName)} choisit son Bloqueur et ses Contres…</p>`;
     } else {
       inner = `<p class="phase-t">Vous êtes attaqué !</p>${vs}
-        <p class="small muted">Cliquez sur un Personnage <span class="kw">Bloqueur</span> pour bloquer, et sur des cartes de votre main pour Contrer.</p>
-        <div class="row-btns"><button class="btn small" data-do="ctr-plus">+1000</button><button class="btn small" data-do="ctr-minus">−1000</button></div>
+        <p class="small muted">Cliquez sur un Personnage <span class="kw">Bloqueur</span> pour bloquer, ou défaussez une carte de votre main pour Contrer :</p>
+        ${counterBtns()}
         <div class="row-btns"><button class="btn primary" data-do="resolve">Valider la défense</button></div>`;
     }
   } else if (G.phase === 'play') {
     const mt = myTurn();
     inner = `<p class="turn ${mt ? 'mine' : ''}">Tour ${t.count} · ${mt ? 'À vous de jouer' : `Tour de ${esc(G.oppName)}`}</p>
       ${G.select?.kind === 'attack' ? '<p class="small hl-t">Choisissez la cible : le Leader adverse ou un Personnage adverse <b>reposé</b>. (Échap pour annuler)</p>' : ''}
+      ${G.select?.kind === 'don' ? '<p class="small hl-t">Touchez votre Leader ou le Personnage qui reçoit les DON!!. (Échap pour annuler)</p>' : ''}
       ${mt ? '<div class="row-btns"><button class="btn primary" data-do="end">Fin du tour</button></div>' : ''}`;
   }
   let manual = '';
@@ -2029,6 +2061,14 @@ async function onBoardClick(e) {
   const x = e.clientX || el.getBoundingClientRect().left;
   const y = e.clientY || el.getBoundingClientRect().top;
   if (G.phase === 'mulligan') return;
+  // DON!! : choix du Leader ou du Personnage qui les reçoit
+  if (G.select?.kind === 'don') {
+    const loc = side === 'me' && el.dataset.u ? locate(el.dataset.u) : null;
+    if (loc && (el.dataset.zone === 'leader' || el.dataset.zone === 'chars')) return giveDon(loc.inst);
+    G.select = null;
+    render();
+    return;
+  }
   // sélection d'une cible d'attaque
   if (G.select?.kind === 'attack') {
     if (side === 'opp' && el.dataset.u) {
@@ -2064,8 +2104,12 @@ function doAction(a, el) {
     case 'send-atk': return sendAttack();
     case 'cancel-atk': return cancelAttack();
     case 'resolve': return resolveBattle();
-    case 'ctr-plus': G.battle.counter += 1000; log('ajoute +1000 en défense (effet).'); return battleUpd();
-    case 'ctr-minus': G.battle.counter -= 1000; log('retire 1000 en défense (effet).'); return battleUpd();
+    case 'ctr': {
+      // Un Contre vient toujours d'une vraie carte de la main, qui part à la défausse.
+      const inst = G.me.hand.find((i) => String(i.u) === el.dataset.u);
+      if (!inst) return undefined;
+      return myCard(inst).type === 'event' ? counterEvent(inst) : counterChar(inst);
+    }
     case 'concede': if (confirm('Abandonner la partie ?')) lose('Abandon.'); return undefined;
     case 'manual-start': return chooseManualCard();
     case 'manual-end': return endManual();

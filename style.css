@@ -801,3 +801,45 @@ details { margin-top: 12px; }
 .gm-qty { display: flex; align-items: center; gap: 6px; }
 .gm-qty b { min-width: 26px; text-align: center; font: 400 16px "Archivo Black", sans-serif; }
 @media (max-width: 760px) { .gm-row { grid-template-columns: 40px 1fr; } .gm-qty { grid-column: 1 / -1; justify-content: flex-end; } .gm-boost { margin-left: 0; } }
+
+/* ---------- plateau sur ordinateur : tout tient dans l'écran, cartes grandes, carte survolée en très grand ---------- */
+@media (min-width: 761px) {
+  main:has(.game:not(.mobile)) { padding-block: 6px; }
+  .game:not(.mobile) { grid-template-columns: minmax(0, 1fr) clamp(260px, 25vw, 380px); height: calc(100dvh - 74px); align-items: stretch; gap: 10px; }
+  .game:not(.mobile) .board {
+    --wb: clamp(56px, min(calc((100dvh - 250px) / 6.2), calc((100vw - 470px) / 10.6)), 130px); --w: var(--wb);
+    display: flex; flex-direction: column; justify-content: center; overflow: hidden; padding: 6px 10px 0; min-height: 0;
+  }
+  .game:not(.mobile) .names { display: none; }
+  .game:not(.mobile) .side { gap: 6px; padding: 2px 0; }
+  .game:not(.mobile) .side.opp { --w: calc(var(--wb) * .8); }
+  .game:not(.mobile) .row { gap: 8px; }
+  .game:not(.mobile) .leader-zone .slot { width: var(--w); }
+  .game:not(.mobile) .pile .lbl { font-size: .65em; margin-top: 0; }
+  .game:not(.mobile) .ohand { min-height: 0; }
+  .game:not(.mobile) .ohand .card.mini { width: 20px; }
+  /* bandeau central sur une seule ligne */
+  .game:not(.mobile) .center { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 14px; padding: 6px 12px; margin: 2px auto; max-width: min(100%, 900px); }
+  .game:not(.mobile) .center p { margin: 0; }
+  .game:not(.mobile) .center .row-btns { margin: 0; }
+  .game:not(.mobile) .concede { position: static; order: 9; }
+  /* ta main dépasse du bas de l'écran et se soulève au survol */
+  .game:not(.mobile) .side.me .hand { margin-bottom: calc(var(--w) * -0.5); min-height: 0; padding-top: 4px; }
+  .game:not(.mobile) .side.me .hand .hcard { width: var(--w); }
+  .game:not(.mobile) .side.me .hand .hcard:hover, .game:not(.mobile) .side.me .hand .hcard:focus-visible { transform: translateY(calc(var(--w) * -0.62)) scale(1.06); z-index: 5; }
+  /* colonne de droite : la carte en très grand, le journal en dessous */
+  .game:not(.mobile) .gside { position: static; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+  .game:not(.mobile) .preview { flex: none; padding: 12px; }
+  .game:not(.mobile) .preview .big-card { max-width: none; width: min(100%, calc((100dvh - 300px) * 63 / 88)); margin: 0 auto; }
+  .game:not(.mobile) .preview .pv-text { display: none; }
+  .game:not(.mobile) .preview > p { margin: 8px 0 0; text-align: center; }
+  .game:not(.mobile) .logp { flex: 1; min-height: 120px; display: flex; flex-direction: column; padding: 10px 12px; }
+  .game:not(.mobile) .logp h3 { margin: 0 0 6px; font-size: .9rem; }
+  .game:not(.mobile) .log { flex: 1; height: auto; min-height: 0; }
+}
+@media (min-width: 761px) and (hover: hover) {
+  /* survol : la carte grossit sur place (la version géante s'affiche à droite) */
+  /* Carte survolée : légère mise en avant (le grand aperçu à droite montre tout le détail, Contre compris). */
+  .game:not(.mobile) .slot > .card { transition: transform .15s ease, box-shadow .15s ease; }
+  .game:not(.mobile) .slot:hover > .card { transform: translateY(-3px); box-shadow: 0 0 0 2px #fff9, 0 8px 20px #000a; }
+}

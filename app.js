@@ -23887,6 +23887,8 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       return commit();
     }
     b.atkPower = myPower(atk);
+    b.double = hasKw(atk, "double");
+    b.banish = hasKw(atk, "banish");
     b.step = "defense";
     const { role, ...wire2 } = b;
     send({ t: "attack", b: wire2 });
@@ -23915,6 +23917,17 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     log(`bloque avec ${name(c)}.`);
     battleUpd();
     await fireCard(inst, "onBlock");
+  }
+  function counterBtns() {
+    const list = G.me.hand.filter((i) => {
+      const c = myCard(i);
+      return c.type === "character" && Number(c.counter) > 0 || c.type === "event";
+    });
+    if (!list.length) return '<p class="small muted">Aucune carte Contre dans votre main.</p>';
+    return `<div class="row-btns ctr-list">${list.map((i) => {
+      const c = myCard(i);
+      return `<button class="btn small" data-do="ctr" data-u="${i.u}" title="D\xE9fausser cette carte">${esc(c.name)} ${c.type === "event" ? "(\xC9v\xE9nement)" : `+${c.counter}`}</button>`;
+    }).join("")}</div>`;
   }
   function counterChar(inst) {
     const c = myCard(inst);
@@ -24917,11 +24930,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         act("\u{1F6E1} Bloquer", () => block(inst), { cls: "hl" });
       }
       if (zone !== "stage" && myTurn() && !b) {
-        act(`Attacher 1 DON!! (${G.me.donActive} actif${G.me.donActive > 1 ? "s" : ""})`, () => {
-          G.me.donActive--;
-          inst.d = (inst.d || 0) + 1;
-          done(`attache 1 DON!! \xE0 ${name(c)}.`)();
-        }, { disabled: !G.me.donActive });
+        act(`Donner des DON!! (${G.me.donActive} actif${G.me.donActive > 1 ? "s" : ""})`, () => giveDon(inst), { disabled: !G.me.donActive });
       }
       man(inst.r ? "Redresser (actif)" : "Reposer", () => {
         inst.r = !inst.r;
@@ -25010,8 +25019,18 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       openViewer("trash");
       return null;
     }
+    if (pile2 === "don" && myTurn() && !G.battle) {
+      act(
+        `\u2728 Donner des DON!! (${me.donActive} actif${me.donActive > 1 ? "s" : ""})`,
+        () => {
+          G.select = { kind: "don" };
+          render2();
+        },
+        { cls: "hl", disabled: !me.donActive }
+      );
+    }
     if (!G.manual) {
-      return [{ label: "Actions libres verrouill\xE9es : utilisez \xAB Effet manuel \xBB pour un effet en texte libre", fn: () => {
+      return [...it, { label: "Actions libres verrouill\xE9es : utilisez \xAB Effet manuel \xBB pour un effet en texte libre", fn: () => {
       }, disabled: true }];
     }
     if (pile2 === "deck") {
@@ -25279,6 +25298,29 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     document.body.append(t);
     setTimeout(() => t.remove(), 3200);
   }
+  async function giveDon(inst) {
+    G.select = null;
+    const max = G.me.donActive;
+    if (!max) {
+      render2();
+      return;
+    }
+    const c = myCard(inst);
+    const n3 = max === 1 ? 1 : await ask(
+      `Donner des DON!! \xE0 ${c?.name || ""}`,
+      `<p class="muted">Combien de DON!! actifs lui donner ? (${max} disponible${max > 1 ? "s" : ""})</p>`,
+      [...Array.from({ length: max }, (_, i) => ({ label: String(i + 1), value: i + 1, cls: i + 1 === max ? "primary" : "" })), { label: "Annuler", value: 0, cls: "ghost" }]
+    );
+    if (!n3 || !locate(inst.u)) {
+      render2();
+      return;
+    }
+    const k = Math.min(n3, G.me.donActive);
+    G.me.donActive -= k;
+    inst.d = (inst.d || 0) + k;
+    log(`donne ${k} DON!! \xE0 ${name(c)}.`);
+    commit();
+  }
   function slot(inst, side, zone) {
     const mine = side === "me";
     const c = mine ? myCard(inst) : oppCard(inst);
@@ -25287,6 +25329,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     if (inst.r) cls.push("rested");
     if (G.select?.kind === "attack" && !mine && (zone === "leader" && !G.select.onlyChars || zone === "chars" && inst.r)) cls.push("target");
     if (G.select?.attacker === inst.u) cls.push("attacking");
+    if (G.select?.kind === "don" && mine && (zone === "leader" || zone === "chars")) cls.push("target");
     if (G.battle && G.battle.attacker === inst.u) cls.push("attacking");
     if (G.battle && G.battle.target === inst.u) cls.push("defending");
     return `<div class="${cls.join(" ")}" data-u="${inst.u}" data-side="${side}" data-zone="${zone}" data-cid="${inst.c}" tabindex="0">
@@ -25368,6 +25411,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     const panel = G.phase !== "play" || G.battle || G.manual || G.oppManual || G.disconnected;
     let turn = G.phase === "play" ? `${mt ? "\xC0 vous" : `Tour de ${esc(G.oppName)}`} \xB7 Tour ${G.turn.count}` : "";
     if (G.select?.kind === "attack") turn = G.select.onlyChars ? "Cible : un Personnage repos\xE9" : "Cible : Leader ou Personnage repos\xE9";
+    if (G.select?.kind === "don") turn = "DON!! : touchez qui les re\xE7oit";
     const oh = o?.hand || 0;
     const chat = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.5 7.2L4 20l1-4.4A8 8 0 1 1 21 12z"/></svg>';
     const h = G.me.hand;
@@ -25422,21 +25466,20 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       if (atkSide && b.step === "attack") {
         inner = `<p class="phase-t">\xC9tape d'attaque</p>${vs}
         <p class="small muted">R\xE9solvez vos effets [Attaque] (menu de vos cartes pour la puissance), puis envoyez l'attaque.</p>
-        <label class="small"><input type="checkbox" data-flag="double" ${b.double ? "checked" : ""}> Double attaque</label>
-        <label class="small"><input type="checkbox" data-flag="banish" ${b.banish ? "checked" : ""}> Exil</label>
         <div class="row-btns"><button class="btn primary" data-do="send-atk">Envoyer l'attaque</button><button class="btn ghost" data-do="cancel-atk">Annuler</button></div>`;
       } else if (atkSide) {
         inner = `<p class="phase-t">Combat</p>${vs}<p class="small muted">${esc(G.oppName)} choisit son Bloqueur et ses Contres\u2026</p>`;
       } else {
         inner = `<p class="phase-t">Vous \xEAtes attaqu\xE9 !</p>${vs}
-        <p class="small muted">Cliquez sur un Personnage <span class="kw">Bloqueur</span> pour bloquer, et sur des cartes de votre main pour Contrer.</p>
-        <div class="row-btns"><button class="btn small" data-do="ctr-plus">+1000</button><button class="btn small" data-do="ctr-minus">\u22121000</button></div>
+        <p class="small muted">Cliquez sur un Personnage <span class="kw">Bloqueur</span> pour bloquer, ou d\xE9faussez une carte de votre main pour Contrer :</p>
+        ${counterBtns()}
         <div class="row-btns"><button class="btn primary" data-do="resolve">Valider la d\xE9fense</button></div>`;
       }
     } else if (G.phase === "play") {
       const mt = myTurn();
       inner = `<p class="turn ${mt ? "mine" : ""}">Tour ${t.count} \xB7 ${mt ? "\xC0 vous de jouer" : `Tour de ${esc(G.oppName)}`}</p>
       ${G.select?.kind === "attack" ? '<p class="small hl-t">Choisissez la cible : le Leader adverse ou un Personnage adverse <b>repos\xE9</b>. (\xC9chap pour annuler)</p>' : ""}
+      ${G.select?.kind === "don" ? '<p class="small hl-t">Touchez votre Leader ou le Personnage qui re\xE7oit les DON!!. (\xC9chap pour annuler)</p>' : ""}
       ${mt ? '<div class="row-btns"><button class="btn primary" data-do="end">Fin du tour</button></div>' : ""}`;
     }
     let manual = "";
@@ -25625,6 +25668,13 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     const x = e.clientX || el.getBoundingClientRect().left;
     const y = e.clientY || el.getBoundingClientRect().top;
     if (G.phase === "mulligan") return;
+    if (G.select?.kind === "don") {
+      const loc = side === "me" && el.dataset.u ? locate(el.dataset.u) : null;
+      if (loc && (el.dataset.zone === "leader" || el.dataset.zone === "chars")) return giveDon(loc.inst);
+      G.select = null;
+      render2();
+      return;
+    }
     if (G.select?.kind === "attack") {
       if (side === "opp" && el.dataset.u) {
         const inst = findOpp(el.dataset.u);
@@ -25666,14 +25716,11 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         return cancelAttack();
       case "resolve":
         return resolveBattle();
-      case "ctr-plus":
-        G.battle.counter += 1e3;
-        log("ajoute +1000 en d\xE9fense (effet).");
-        return battleUpd();
-      case "ctr-minus":
-        G.battle.counter -= 1e3;
-        log("retire 1000 en d\xE9fense (effet).");
-        return battleUpd();
+      case "ctr": {
+        const inst = G.me.hand.find((i) => String(i.u) === el.dataset.u);
+        if (!inst) return void 0;
+        return myCard(inst).type === "event" ? counterEvent(inst) : counterChar(inst);
+      }
       case "concede":
         if (confirm("Abandonner la partie ?")) lose("Abandon.");
         return void 0;
