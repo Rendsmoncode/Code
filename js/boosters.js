@@ -1,6 +1,6 @@
 // Onglets « Boosters » (ouverture) et « Collection ».
 import { S, openBoosters, refreshStatus, onChange } from './store.js';
-import { RARITIES, RARITY_ORDER, TYPES, esc, cardHTML } from './cards.js';
+import { RARITIES, RARITY_ORDER, TYPES, esc, cardHTML, showCardBig } from './cards.js';
 import { logoSVG } from './logo.js';
 import { refreshAchievements } from './achievements.js';
 
@@ -135,9 +135,12 @@ export function initBoosters() {
       ${pulls.length > 5 ? '<button class="btn ghost" data-do="all">Tout révéler</button>' : ''}</div>`;
     document.body.append(ov);
     const stage = ov.querySelector('.bx-stage');
-    let i = -1;
+    // seq : ordre des cartes à révéler (« Tout révéler » n'y laisse que les Légendaires et 1on1 restantes).
+    let seq = pulls.map((_, k) => k);
+    let pos = -1;
     let lock = false;
     let done = false;
+    let held = false; // appui long en cours : le relâchement ne doit pas passer à la carte suivante
 
     async function next() {
       if (lock) return;
@@ -145,14 +148,14 @@ export function initBoosters() {
       const old = stage.querySelector('.bx-card');
       if (old) { old.classList.add('out'); ov.querySelector('.bx-info').innerHTML = ''; await wait(260); old.remove(); }
       if (done) return; // « Tout révéler » pendant l'animation
-      i++;
+      pos++;
       ov.className = 'bx';
       ov.querySelector('.bx-fx').innerHTML = '';
-      if (i >= pulls.length) { summary(); return; }
-      const p = pulls[i];
+      if (pos >= seq.length) { summary(); return; }
+      const p = pulls[seq[pos]];
       const c = S.byId[p.id];
       const r = c?.rarity;
-      ov.querySelector('.bx-hint').textContent = `${i + 1} / ${pulls.length}`;
+      ov.querySelector('.bx-hint').textContent = `${seq[pos] + 1} / ${pulls.length}`;
       if (SPECIAL[r]) {
         // Animation d'arrivée propre à la rareté, puis la carte apparaît avec son effet.
         ov.classList.add(`fx-${r}`, 'intro');
@@ -161,7 +164,7 @@ export function initBoosters() {
         if (done) return;
         ov.classList.remove('intro');
       }
-      stage.insertAdjacentHTML('beforeend', `<button class="bx-card in r-${r}" aria-label="Carte suivante">${cardHTML(c)}</button>`);
+      stage.insertAdjacentHTML('beforeend', `<button class="bx-card in r-${r}" data-id="${esc(p.id)}" aria-label="Carte suivante (appui long : voir en grand)">${cardHTML(c)}</button>`);
       ov.querySelector('.bx-info').innerHTML = `<span class="rar-chip r-${r}">${RARITIES[r]?.label || ''}</span>${p.new ? '<span class="bx-new">Nouvelle !</span>' : ''}
         ${r === 'S' ? '<div class="bx-unique">Exemplaire unique</div>' : ''}`;
       await wait(SPECIAL[r] ? 500 : 250);
@@ -186,7 +189,7 @@ export function initBoosters() {
       const again = Math.min(10, left, Math.max(1, pulls.length / 5));
       stage.innerHTML = `<div class="bx-sum">${groups.map((g) => {
         const c = S.byId[g.id];
-        return `<div class="bx-mini r-${c?.rarity}">${cardHTML(c)}<span class="rar-chip r-${c?.rarity}">${RARITIES[c?.rarity]?.short || ''}</span>
+        return `<div class="bx-mini r-${c?.rarity}" data-id="${esc(g.id)}" role="button" tabindex="0" title="Voir en grand">${cardHTML(c)}<span class="rar-chip r-${c?.rarity}">${RARITIES[c?.rarity]?.short || ''}</span>
           ${g.new ? '<span class="bx-new">Nouvelle</span>' : ''}${g.n > 1 ? `<span class="bx-n">×${g.n}</span>` : ''}</div>`;
       }).join('')}</div>
       <div class="bx-acts">${left ? `<button class="btn main" data-do="again">${again > 1 ? `Ouvrir ${again} autres` : 'Ouvrir un autre'} · ${left}</button>` : ''}<button class="btn ghost" data-do="close">Terminer</button></div>`;
@@ -207,24 +210,50 @@ export function initBoosters() {
 
     ov.addEventListener('click', (e) => {
       const d = e.target.closest('[data-do]')?.dataset.do;
-      if (d === 'all') { summary(); return; }
+      if (d === 'all') {
+        // On saute tout, sauf les Légendaires et 1on1 pas encore révélées : elles gardent leur animation.
+        seq = [...seq.slice(0, pos + 1), ...seq.slice(pos + 1).filter((k) => ['L', 'S'].includes(S.byId[pulls[k].id]?.rarity))];
+        ov.querySelector('.bx-skip')?.remove();
+        if (pos + 1 >= seq.length) summary();
+        else if (!lock) next();
+        return;
+      }
       if (d === 'sr') {
         // Saute directement à la première SR (les cartes sont rangées de la Commune à la 1on1).
-        const first = pulls.findIndex((p) => rank(p.id) >= SR);
+        const first = seq.findIndex((k) => rank(pulls[k].id) >= SR);
         if (lock) return;
         e.target.closest('[data-do]').remove();
-        if (first > i + 1) { i = first - 1; stage.querySelector('.bx-card')?.remove(); next(); }
+        if (first > pos + 1) { pos = first - 1; stage.querySelector('.bx-card')?.remove(); next(); }
         return;
       }
       if (d === 'close' || d === 'again') {
         ov.remove();
+        for (const ev of ['pointerup', 'pointercancel']) document.removeEventListener(ev, release);
         busy = false;
         renderHead();
         if (d === 'again') { qty = Math.max(1, Math.min(10, pulls.length / 5)); renderHead(); q('.bs-open').click(); }
         return;
       }
+      // Récapitulatif : toucher une carte l'affiche en grand.
+      const mini = e.target.closest('.bx-mini');
+      if (mini) { showCardBig(S.byId[mini.dataset.id]); return; }
+      if (held) { held = false; return; }
       if (!ov.classList.contains('done')) next();
     });
+    // Appui long sur la carte révélée : elle s'affiche en grand tant qu'on reste appuyé.
+    let timer = null;
+    let closeBig = null;
+    ov.addEventListener('pointerdown', (e) => {
+      const card = e.target.closest('.bx-card');
+      held = false;
+      if (!card) return;
+      clearTimeout(timer);
+      timer = setTimeout(() => { held = true; closeBig = showCardBig(S.byId[card.dataset.id], { hold: true }); }, 400);
+    });
+    // (sur le document : la vue en grand passe par-dessus et reçoit le relâchement)
+    const release = () => { clearTimeout(timer); if (closeBig) { closeBig(); closeBig = null; } };
+    for (const ev of ['pointerup', 'pointercancel']) document.addEventListener(ev, release);
+    ov.addEventListener('contextmenu', (e) => { if (e.target.closest('.bx-card')) e.preventDefault(); });
     start();
   }
 }
@@ -241,14 +270,13 @@ function fxHTML(r) {
 
 export function initCollection() {
   const el = document.getElementById('tab-collection');
-  let filter = { own: '', rarity: '', type: '', q: '' };
+  let filter = { rarity: '', type: '', q: '' };
   el.innerHTML = `
   <section class="panel">
     <div class="list-head"><h2>Ma collection</h2><div class="cl-progress muted"></div></div>
     <div class="cl-rarities"></div>
     <div class="filters">
       <input class="cl-q" type="search" placeholder="Rechercher…" aria-label="Rechercher">
-      <select class="cl-own" aria-label="Possession"><option value="">Toutes les cartes</option><option value="yes">Possédées</option><option value="no">Manquantes</option></select>
       <select class="cl-rarity" aria-label="Rareté"><option value="">Toutes raretés</option>${Object.entries(RARITIES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('')}</select>
       <select class="cl-type" aria-label="Type"><option value="">Tous types</option>${Object.entries(TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>
     </div>
@@ -256,8 +284,16 @@ export function initCollection() {
   </section>`;
   const q = (s) => el.querySelector(s);
   q('.filters').addEventListener('input', () => {
-    filter = { q: q('.cl-q').value.toLowerCase(), own: q('.cl-own').value, rarity: q('.cl-rarity').value, type: q('.cl-type').value };
+    filter = { q: q('.cl-q').value.toLowerCase(), rarity: q('.cl-rarity').value, type: q('.cl-type').value };
     render();
+  });
+  q('.cl-grid').addEventListener('click', (e) => {
+    const g = e.target.closest('.grid-card');
+    if (g) showCardBig(S.byId[g.dataset.id]);
+  });
+  q('.cl-grid').addEventListener('keydown', (e) => {
+    const g = e.target.closest('.grid-card');
+    if (g && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); showCardBig(S.byId[g.dataset.id]); }
   });
   onChange(render);
   render();
@@ -273,17 +309,16 @@ export function initCollection() {
       const have = owned.filter((c) => c.rarity === r).length;
       return all ? `<span class="rar-chip r-${r}">${RARITIES[r].label} ${have}/${all}</span>` : '';
     }).join('');
-    const list = cards.filter((c) => (!filter.rarity || c.rarity === filter.rarity)
+    // Seules les cartes possédées sont montrées (les manquantes ne comptent que dans les chiffres).
+    const list = owned.filter((c) => (!filter.rarity || c.rarity === filter.rarity)
       && (!filter.type || c.type === filter.type)
-      && (filter.own !== 'yes' || S.collection[c.id])
-      && (filter.own !== 'no' || !S.collection[c.id])
       && (!filter.q || `${c.name} ${c.code} ${c.traits} ${c.effect}`.toLowerCase().includes(filter.q)))
       .sort((a, b) => RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity));
     q('.cl-grid').innerHTML = list.map((c) => {
       const n = S.collection[c.id] || 0;
       const owner = c.rarity === 'S' ? S.oneOfOne[c.id] : null;
       const tag = owner ? `<span class="one-owner">Possédée par ${esc(owner)}</span>` : '';
-      return `<div class="grid-card ${n ? '' : 'missing'}" title="${esc(c.name)}">${cardHTML(c)}${n ? `<span class="qty">×${n}</span>` : ''}${tag}</div>`;
-    }).join('') || '<p class="muted">Aucune carte.</p>';
+      return `<div class="grid-card" data-id="${esc(c.id)}" role="button" tabindex="0" title="${esc(c.name)} : voir en grand">${cardHTML(c)}${n > 1 ? `<span class="qty">×${n}</span>` : ''}${tag}</div>`;
+    }).join('') || `<p class="muted">${owned.length ? 'Aucune carte ne correspond.' : 'Aucune carte pour l\'instant : ouvrez des boosters !'}</p>`;
   }
 }

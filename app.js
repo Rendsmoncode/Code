@@ -21315,6 +21315,28 @@ ${suffix}`;
   function readJSONFile(file) {
     return file.text().then((t) => JSON.parse(t));
   }
+  function showCardBig(card, { hold = false } = {}) {
+    if (!card) return null;
+    document.querySelector(".cardview")?.remove();
+    const ov = document.createElement("div");
+    ov.className = "cardview";
+    ov.setAttribute("role", "dialog");
+    ov.setAttribute("aria-label", card.name || "Carte");
+    ov.innerHTML = `<div class="cv-card">${cardHTML(card)}</div>${hold ? "" : '<p class="cv-hint">Touchez pour fermer</p>'}`;
+    const close = () => {
+      ov.remove();
+      document.removeEventListener("keydown", onKey);
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") close();
+    };
+    if (!hold) {
+      ov.addEventListener("click", close);
+      document.addEventListener("keydown", onKey);
+    }
+    document.body.append(ov);
+    return close;
+  }
 
   // js/store.js
   var SUPABASE_URL = "https://bhhakcbodwtmopstgetu.supabase.co";
@@ -25938,9 +25960,11 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       ${pulls.length > 5 ? '<button class="btn ghost" data-do="all">Tout r\xE9v\xE9ler</button>' : ""}</div>`;
       document.body.append(ov);
       const stage = ov.querySelector(".bx-stage");
-      let i = -1;
+      let seq = pulls.map((_, k) => k);
+      let pos = -1;
       let lock = false;
       let done = false;
+      let held = false;
       async function next() {
         if (lock) return;
         lock = true;
@@ -25952,17 +25976,17 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
           old.remove();
         }
         if (done) return;
-        i++;
+        pos++;
         ov.className = "bx";
         ov.querySelector(".bx-fx").innerHTML = "";
-        if (i >= pulls.length) {
+        if (pos >= seq.length) {
           summary();
           return;
         }
-        const p = pulls[i];
+        const p = pulls[seq[pos]];
         const c = S.byId[p.id];
         const r = c?.rarity;
-        ov.querySelector(".bx-hint").textContent = `${i + 1} / ${pulls.length}`;
+        ov.querySelector(".bx-hint").textContent = `${seq[pos] + 1} / ${pulls.length}`;
         if (SPECIAL[r]) {
           ov.classList.add(`fx-${r}`, "intro");
           ov.querySelector(".bx-fx").innerHTML = fxHTML(r);
@@ -25970,7 +25994,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
           if (done) return;
           ov.classList.remove("intro");
         }
-        stage.insertAdjacentHTML("beforeend", `<button class="bx-card in r-${r}" aria-label="Carte suivante">${cardHTML(c)}</button>`);
+        stage.insertAdjacentHTML("beforeend", `<button class="bx-card in r-${r}" data-id="${esc(p.id)}" aria-label="Carte suivante (appui long : voir en grand)">${cardHTML(c)}</button>`);
         ov.querySelector(".bx-info").innerHTML = `<span class="rar-chip r-${r}">${RARITIES[r]?.label || ""}</span>${p.new ? '<span class="bx-new">Nouvelle !</span>' : ""}
         ${r === "S" ? '<div class="bx-unique">Exemplaire unique</div>' : ""}`;
         await wait(SPECIAL[r] ? 500 : 250);
@@ -25996,7 +26020,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         const again = Math.min(10, left, Math.max(1, pulls.length / 5));
         stage.innerHTML = `<div class="bx-sum">${groups.map((g) => {
           const c = S.byId[g.id];
-          return `<div class="bx-mini r-${c?.rarity}">${cardHTML(c)}<span class="rar-chip r-${c?.rarity}">${RARITIES[c?.rarity]?.short || ""}</span>
+          return `<div class="bx-mini r-${c?.rarity}" data-id="${esc(g.id)}" role="button" tabindex="0" title="Voir en grand">${cardHTML(c)}<span class="rar-chip r-${c?.rarity}">${RARITIES[c?.rarity]?.short || ""}</span>
           ${g.new ? '<span class="bx-new">Nouvelle</span>' : ""}${g.n > 1 ? `<span class="bx-n">\xD7${g.n}</span>` : ""}</div>`;
         }).join("")}</div>
       <div class="bx-acts">${left ? `<button class="btn main" data-do="again">${again > 1 ? `Ouvrir ${again} autres` : "Ouvrir un autre"} \xB7 ${left}</button>` : ""}<button class="btn ghost" data-do="close">Terminer</button></div>`;
@@ -26015,15 +26039,18 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       ov.addEventListener("click", (e) => {
         const d = e.target.closest("[data-do]")?.dataset.do;
         if (d === "all") {
-          summary();
+          seq = [...seq.slice(0, pos + 1), ...seq.slice(pos + 1).filter((k) => ["L", "S"].includes(S.byId[pulls[k].id]?.rarity))];
+          ov.querySelector(".bx-skip")?.remove();
+          if (pos + 1 >= seq.length) summary();
+          else if (!lock) next();
           return;
         }
         if (d === "sr") {
-          const first = pulls.findIndex((p) => rank(p.id) >= SR);
+          const first = seq.findIndex((k) => rank(pulls[k].id) >= SR);
           if (lock) return;
           e.target.closest("[data-do]").remove();
-          if (first > i + 1) {
-            i = first - 1;
+          if (first > pos + 1) {
+            pos = first - 1;
             stage.querySelector(".bx-card")?.remove();
             next();
           }
@@ -26031,6 +26058,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         }
         if (d === "close" || d === "again") {
           ov.remove();
+          for (const ev of ["pointerup", "pointercancel"]) document.removeEventListener(ev, release);
           busy2 = false;
           renderHead();
           if (d === "again") {
@@ -26040,7 +26068,39 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
           }
           return;
         }
+        const mini = e.target.closest(".bx-mini");
+        if (mini) {
+          showCardBig(S.byId[mini.dataset.id]);
+          return;
+        }
+        if (held) {
+          held = false;
+          return;
+        }
         if (!ov.classList.contains("done")) next();
+      });
+      let timer = null;
+      let closeBig = null;
+      ov.addEventListener("pointerdown", (e) => {
+        const card = e.target.closest(".bx-card");
+        held = false;
+        if (!card) return;
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          held = true;
+          closeBig = showCardBig(S.byId[card.dataset.id], { hold: true });
+        }, 400);
+      });
+      const release = () => {
+        clearTimeout(timer);
+        if (closeBig) {
+          closeBig();
+          closeBig = null;
+        }
+      };
+      for (const ev of ["pointerup", "pointercancel"]) document.addEventListener(ev, release);
+      ov.addEventListener("contextmenu", (e) => {
+        if (e.target.closest(".bx-card")) e.preventDefault();
       });
       start2();
     }
@@ -26056,14 +26116,13 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   }
   function initCollection() {
     const el = document.getElementById("tab-collection");
-    let filter2 = { own: "", rarity: "", type: "", q: "" };
+    let filter2 = { rarity: "", type: "", q: "" };
     el.innerHTML = `
   <section class="panel">
     <div class="list-head"><h2>Ma collection</h2><div class="cl-progress muted"></div></div>
     <div class="cl-rarities"></div>
     <div class="filters">
       <input class="cl-q" type="search" placeholder="Rechercher\u2026" aria-label="Rechercher">
-      <select class="cl-own" aria-label="Possession"><option value="">Toutes les cartes</option><option value="yes">Poss\xE9d\xE9es</option><option value="no">Manquantes</option></select>
       <select class="cl-rarity" aria-label="Raret\xE9"><option value="">Toutes raret\xE9s</option>${Object.entries(RARITIES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join("")}</select>
       <select class="cl-type" aria-label="Type"><option value="">Tous types</option>${Object.entries(TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select>
     </div>
@@ -26071,8 +26130,19 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   </section>`;
     const q = (s) => el.querySelector(s);
     q(".filters").addEventListener("input", () => {
-      filter2 = { q: q(".cl-q").value.toLowerCase(), own: q(".cl-own").value, rarity: q(".cl-rarity").value, type: q(".cl-type").value };
+      filter2 = { q: q(".cl-q").value.toLowerCase(), rarity: q(".cl-rarity").value, type: q(".cl-type").value };
       render3();
+    });
+    q(".cl-grid").addEventListener("click", (e) => {
+      const g = e.target.closest(".grid-card");
+      if (g) showCardBig(S.byId[g.dataset.id]);
+    });
+    q(".cl-grid").addEventListener("keydown", (e) => {
+      const g = e.target.closest(".grid-card");
+      if (g && (e.key === "Enter" || e.key === " ")) {
+        e.preventDefault();
+        showCardBig(S.byId[g.dataset.id]);
+      }
     });
     onChange(render3);
     render3();
@@ -26086,13 +26156,13 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         const have = owned.filter((c) => c.rarity === r).length;
         return all ? `<span class="rar-chip r-${r}">${RARITIES[r].label} ${have}/${all}</span>` : "";
       }).join("");
-      const list = cards.filter((c) => (!filter2.rarity || c.rarity === filter2.rarity) && (!filter2.type || c.type === filter2.type) && (filter2.own !== "yes" || S.collection[c.id]) && (filter2.own !== "no" || !S.collection[c.id]) && (!filter2.q || `${c.name} ${c.code} ${c.traits} ${c.effect}`.toLowerCase().includes(filter2.q))).sort((a, b) => RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity));
+      const list = owned.filter((c) => (!filter2.rarity || c.rarity === filter2.rarity) && (!filter2.type || c.type === filter2.type) && (!filter2.q || `${c.name} ${c.code} ${c.traits} ${c.effect}`.toLowerCase().includes(filter2.q))).sort((a, b) => RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity));
       q(".cl-grid").innerHTML = list.map((c) => {
         const n3 = S.collection[c.id] || 0;
         const owner = c.rarity === "S" ? S.oneOfOne[c.id] : null;
         const tag = owner ? `<span class="one-owner">Poss\xE9d\xE9e par ${esc(owner)}</span>` : "";
-        return `<div class="grid-card ${n3 ? "" : "missing"}" title="${esc(c.name)}">${cardHTML(c)}${n3 ? `<span class="qty">\xD7${n3}</span>` : ""}${tag}</div>`;
-      }).join("") || '<p class="muted">Aucune carte.</p>';
+        return `<div class="grid-card" data-id="${esc(c.id)}" role="button" tabindex="0" title="${esc(c.name)} : voir en grand">${cardHTML(c)}${n3 > 1 ? `<span class="qty">\xD7${n3}</span>` : ""}${tag}</div>`;
+      }).join("") || `<p class="muted">${owned.length ? "Aucune carte ne correspond." : "Aucune carte pour l'instant : ouvrez des boosters !"}</p>`;
     }
   }
 

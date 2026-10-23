@@ -178,3 +178,20 @@ export function download(filename, data) {
 export function readJSONFile(file) {
   return file.text().then((t) => JSON.parse(t));
 }
+
+// Carte affichée en très grand par-dessus la page (collection, boosters). Un toucher / clic / Échap la ferme.
+// hold : la vue se ferme quand on relâche (appui long pendant l'ouverture d'un booster).
+export function showCardBig(card, { hold = false } = {}) {
+  if (!card) return null;
+  document.querySelector('.cardview')?.remove();
+  const ov = document.createElement('div');
+  ov.className = 'cardview';
+  ov.setAttribute('role', 'dialog');
+  ov.setAttribute('aria-label', card.name || 'Carte');
+  ov.innerHTML = `<div class="cv-card">${cardHTML(card)}</div>${hold ? '' : '<p class="cv-hint">Touchez pour fermer</p>'}`;
+  const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  if (!hold) { ov.addEventListener('click', close); document.addEventListener('keydown', onKey); }
+  document.body.append(ov);
+  return close;
+}

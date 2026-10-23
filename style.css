@@ -875,3 +875,12 @@ details { margin-top: 12px; }
   .game:not(.mobile) .slot > .card { transition: transform .15s ease, box-shadow .15s ease; }
   .game:not(.mobile) .slot:hover > .card { transform: translateY(-3px); box-shadow: 0 0 0 2px #fff9, 0 8px 20px #000a; }
 }
+
+/* ---------- carte en très grand (collection, boosters) ---------- */
+.cardview { position: fixed; inset: 0; z-index: 300; background: #05060acc; backdrop-filter: blur(6px); display: grid; place-items: center; align-content: center; gap: 12px; padding: 16px; cursor: zoom-out; animation: cv-in .18s ease-out; }
+.cardview .cv-card { width: min(92vw, calc((100dvh - 80px) * 63 / 88), 520px); }
+.cardview .cv-card .card { width: 100%; }
+.cv-hint { margin: 0; color: #fff9; font-size: .85em; }
+@keyframes cv-in { from { opacity: 0; transform: scale(.96); } }
+.cl-grid .grid-card, .bx-mini { cursor: zoom-in; }
+.bx-card { -webkit-touch-callout: none; user-select: none; }
