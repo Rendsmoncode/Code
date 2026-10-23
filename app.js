@@ -21528,14 +21528,24 @@ ${suffix}`;
     if (total !== 50) errs.push(`Le deck contient ${total} cartes : il en faut exactement 50.`);
     return { ok: errs.length === 0, errs: [...new Set(errs)], total };
   }
-  async function openBooster() {
-    const pulls = check(await sb.rpc("open_booster"));
+  async function openBoosters(n3 = 1) {
+    const pulls = [];
+    let error = null;
+    for (let i = 0; i < Math.min(10, n3); i++) {
+      try {
+        pulls.push(...check(await sb.rpc("open_booster")));
+      } catch (e) {
+        error = e;
+        break;
+      }
+    }
+    if (!pulls.length && error) throw error;
     await refreshCollection();
     if (pulls.some((p) => S.byId[p.id]?.rarity === "S")) {
       S.oneOfOne = Object.fromEntries((check(await sb.rpc("one_of_one_owners")) || []).map((r) => [r.card_id, r.username]));
     }
     await refreshStatus();
-    return pulls;
+    return { pulls, error };
   }
   async function claimStarter(id) {
     check(await sb.rpc("claim_starter", { starter_id: id }));
@@ -25522,6 +25532,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     ["1 carte", "Rare ou mieux : 1 Super rare (SR) tous les 4 boosters, 1 Ultra rare (UR) tous les 15, 1 L\xE9gendaire (LR) tous les 50, 1 \xAB 1on1 \xBB tous les 2 000"]
   ];
   var busy2 = false;
+  var qty = 1;
   var SPECIAL = { UR: 1100, L: 1700, S: 2600 };
   var rank = (id) => RARITY_ORDER.indexOf(S.byId[id]?.rarity);
   function packHTML(cls = "", set = "SB01") {
@@ -25547,15 +25558,21 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     return { free, next, total: free + st.gifted, left: next ? Math.max(0, Math.ceil((next - now) / 1e3)) : 0 };
   }
   var mmss = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
-  var openFromHome = () => document.querySelector("#tab-boosters .bs-open")?.click();
+  var openFromHome = () => {
+    qty = 1;
+    document.querySelector("#tab-boosters .bs-open")?.click();
+  };
   function initBoosters() {
     const el = document.getElementById("tab-boosters");
     el.innerHTML = `
   <div class="boosters">
     <section class="bs-head">
-      <div class="bs-pack">${packHTML()}</div>
+      <div class="bs-pack">${packHTML("g2")}${packHTML("g1")}${packHTML()}<span class="bs-x"></span></div>
       <div class="bs-count"></div>
       <p class="bs-detail"></p>
+      <div class="bs-qty" role="group" aria-label="Nombre de boosters \xE0 ouvrir">
+        <button class="btn" data-q="-1" aria-label="Un de moins">\u2212</button><span></span><button class="btn" data-q="1" aria-label="Un de plus">+</button>
+        <button class="btn bs-max" data-q="max">Max</button></div>
       <button class="btn bs-open">Ouvrir</button>
       <p class="msg bs-msg" role="status"></p>
     </section>
@@ -25573,8 +25590,12 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       q(".bs-msg").classList.remove("err");
       q(".bs-open").disabled = true;
       try {
-        const pulls = await openBooster();
-        const pack = q(".bpack");
+        const { pulls, error } = await openBoosters(qty);
+        if (error) {
+          q(".bs-msg").textContent = `Seulement ${pulls.length / 5} booster(s) ouvert(s) : ${error.message}`;
+          q(".bs-msg").classList.add("err");
+        }
+        const pack = q(".bs-pack .bpack:not(.g1):not(.g2)");
         pack.classList.add("tear");
         await wait(650);
         pack.classList.remove("tear");
@@ -25584,6 +25605,13 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         q(".bs-msg").classList.add("err");
         busy2 = false;
       }
+      renderHead();
+    });
+    el.querySelector(".bs-qty").addEventListener("click", (e) => {
+      const d = e.target.closest("[data-q]")?.dataset.q;
+      if (!d) return;
+      const total = boosterState()?.total || 0;
+      qty = d === "max" ? Math.min(10, total) : qty + Number(d);
       renderHead();
     });
     setInterval(renderHead, 1e3);
@@ -25600,16 +25628,27 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       q(".bs-count").textContent = `${total} booster${total > 1 ? "s" : ""}`;
       q(".bs-detail").innerHTML = next ? `Prochain booster gratuit dans <b>${mmss(left)}</b>` : "R\xE9serve de boosters gratuits pleine";
       if (S.status.gifted) q(".bs-detail").innerHTML += ` \xB7 dont <b>${S.status.gifted}</b> offert${S.status.gifted > 1 ? "s" : ""}`;
+      qty = Math.max(1, Math.min(qty, 10, total || 1));
+      q(".bs-qty span").textContent = qty;
+      q('[data-q="-1"]').disabled = qty <= 1;
+      q('[data-q="1"]').disabled = qty >= Math.min(10, total);
+      q(".bs-max").disabled = qty >= Math.min(10, total);
+      q(".bs-qty").hidden = total < 2;
+      q(".bs-pack").classList.toggle("multi", qty > 1);
+      q(".bs-x").textContent = qty > 1 ? `\xD7${qty}` : "";
+      q(".bs-open").textContent = qty > 1 ? `Ouvrir ${qty} boosters` : "Ouvrir";
       q(".bs-open").disabled = busy2 || total === 0;
     }
     function reveal2(pulls) {
       const ov = document.createElement("div");
       ov.className = "bx";
-      ov.innerHTML = `<div class="bx-fx"></div><div class="bx-stage"></div><div class="bx-info"></div><div class="bx-hint"></div>`;
+      ov.innerHTML = `<div class="bx-fx"></div><div class="bx-stage"></div><div class="bx-info"></div><div class="bx-hint"></div>
+      ${pulls.length > 5 ? '<button class="btn ghost bx-all" data-do="all">Tout r\xE9v\xE9ler</button>' : ""}`;
       document.body.append(ov);
       const stage = ov.querySelector(".bx-stage");
       let i = -1;
       let lock = false;
+      let done = false;
       async function next() {
         if (lock) return;
         lock = true;
@@ -25620,6 +25659,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
           await wait(260);
           old.remove();
         }
+        if (done) return;
         i++;
         ov.className = "bx";
         ov.querySelector(".bx-fx").innerHTML = "";
@@ -25635,6 +25675,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
           ov.classList.add(`fx-${r}`, "intro");
           ov.querySelector(".bx-fx").innerHTML = fxHTML(r);
           await wait(SPECIAL[r]);
+          if (done) return;
           ov.classList.remove("intro");
         }
         stage.insertAdjacentHTML("beforeend", `<button class="bx-card in r-${r}" aria-label="Carte suivante">${cardHTML(c)}</button>`);
@@ -25644,24 +25685,45 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         lock = false;
       }
       function summary() {
-        ov.className = "bx done";
+        done = true;
+        ov.className = `bx done${pulls.length > 5 ? " many" : ""}`;
+        ov.querySelector(".bx-fx").innerHTML = "";
         ov.querySelector(".bx-hint").textContent = "";
         ov.querySelector(".bx-info").innerHTML = "";
+        ov.querySelector(".bx-all")?.remove();
+        const groups = [];
+        for (const p of pulls) {
+          const g = groups.find((x) => x.id === p.id);
+          if (g) {
+            g.n++;
+            g.new || (g.new = p.new);
+          } else groups.push({ id: p.id, n: 1, new: p.new });
+        }
         const left = boosterState()?.total || 0;
-        stage.innerHTML = `<div class="bx-sum">${pulls.map((p) => {
-          const c = S.byId[p.id];
-          return `<div class="bx-mini r-${c?.rarity}">${cardHTML(c)}<span class="rar-chip r-${c?.rarity}">${RARITIES[c?.rarity]?.short || ""}</span>${p.new ? '<span class="bx-new">Nouvelle</span>' : ""}</div>`;
+        const again = Math.min(10, left, Math.max(1, pulls.length / 5));
+        stage.innerHTML = `<div class="bx-sum">${groups.map((g) => {
+          const c = S.byId[g.id];
+          return `<div class="bx-mini r-${c?.rarity}">${cardHTML(c)}<span class="rar-chip r-${c?.rarity}">${RARITIES[c?.rarity]?.short || ""}</span>
+          ${g.new ? '<span class="bx-new">Nouvelle</span>' : ""}${g.n > 1 ? `<span class="bx-n">\xD7${g.n}</span>` : ""}</div>`;
         }).join("")}</div>
-      <div class="bx-acts">${left ? `<button class="btn main" data-do="again">Ouvrir un autre \xB7 ${left}</button>` : ""}<button class="btn ghost" data-do="close">Terminer</button></div>`;
+      <div class="bx-acts">${left ? `<button class="btn main" data-do="again">${again > 1 ? `Ouvrir ${again} autres` : "Ouvrir un autre"} \xB7 ${left}</button>` : ""}<button class="btn ghost" data-do="close">Terminer</button></div>`;
         lock = false;
       }
       ov.addEventListener("click", (e) => {
         const d = e.target.closest("[data-do]")?.dataset.do;
+        if (d === "all") {
+          summary();
+          return;
+        }
         if (d === "close" || d === "again") {
           ov.remove();
           busy2 = false;
           renderHead();
-          if (d === "again") q(".bs-open").click();
+          if (d === "again") {
+            qty = Math.max(1, Math.min(10, pulls.length / 5));
+            renderHead();
+            q(".bs-open").click();
+          }
           return;
         }
         if (!ov.classList.contains("done")) next();

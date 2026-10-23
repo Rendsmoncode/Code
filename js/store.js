@@ -227,14 +227,20 @@ export function validateDeck(deck, { owned = true } = {}) {
 }
 
 // ---------- boosters ----------
-export async function openBooster() {
-  const pulls = check(await sb.rpc('open_booster'));
+// Ouvre n boosters d'affilée (10 au maximum). Si l'un échoue, on garde les cartes déjà tirées.
+export async function openBoosters(n = 1) {
+  const pulls = [];
+  let error = null;
+  for (let i = 0; i < Math.min(10, n); i++) {
+    try { pulls.push(...check(await sb.rpc('open_booster'))); } catch (e) { error = e; break; }
+  }
+  if (!pulls.length && error) throw error;
   await refreshCollection();
   if (pulls.some((p) => S.byId[p.id]?.rarity === 'S')) {
     S.oneOfOne = Object.fromEntries((check(await sb.rpc('one_of_one_owners')) || []).map((r) => [r.card_id, r.username]));
   }
   await refreshStatus();
-  return pulls;
+  return { pulls, error };
 }
 
 export async function claimStarter(id) {
