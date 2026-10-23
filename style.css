@@ -521,6 +521,7 @@ details { margin-top: 12px; }
 .fxe-filter { padding-left: 8px; border-left: 2px solid var(--line); }
 .fxe-tools { margin-left: auto; display: inline-flex; gap: 4px; }
 .fxe-add { font-size: .85em; }
+.fxe-quick { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 6px; }
 .fxe-text { margin: 0; padding: 8px 10px; border-radius: 8px; background: #000; font-style: italic; font-size: .9em; color: #e9e2c8; }
 .fxe-text:empty { display: none; }
 

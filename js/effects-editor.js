@@ -6,6 +6,14 @@ import {
 import { esc, ATTRIBUTES } from './cards.js';
 
 const SECTIONS = { conds: ['Conditions', CONDS], costs: ['Coûts', COSTS], actions: ['Actions', ACTIONS] };
+// Raccourcis des actions les plus fréquentes (un clic = l'action ajoutée avec des réglages courants).
+const QUICK = [
+  { label: 'Piocher', k: 'draw', over: { n: 1 } },
+  { label: 'Searcher', k: 'look', over: { n: 5, take: 1 } },
+  { label: 'Ramp', k: 'donAdd', over: { n: 1, state: 'active' } },
+  { label: 'KO', k: 'ko' },
+  { label: 'Puissance', k: 'power', over: { amount: 2000 } },
+];
 const KW_SHOWN = ['blocker', 'rush', 'rushChar', 'double', 'banish', 'unblockable', 'unlimited'];
 
 // card est modifié directement ; onChange() est appelé après chaque modification.
@@ -22,6 +30,10 @@ export function mountEffectsEditor(el, getCard, onChange) {
     const row = b.closest('[data-j]');
     if (act === 'add-effect') card.effects.push({ when: 'onPlay', once: false, conds: [], costs: [], actions: [] });
     else if (act === 'del-effect') card.effects.splice(i, 1);
+    else if (act === 'quick') {
+      const q = QUICK[+b.dataset.q];
+      card.effects[i].actions.push({ k: q.k, ...defaults(ACTIONS[q.k].params), ...structuredClone(q.over || {}) });
+    }
     else if (act === 'del') card.effects[i][row.dataset.sec].splice(+row.dataset.j, 1);
     else if (act === 'up' && +row.dataset.j > 0) {
       const arr = card.effects[i][row.dataset.sec];
@@ -125,6 +137,7 @@ function sectionHTML(eff, sec, continuous = false) {
     }).join('');
   } else options = Object.entries(defs).map(([k, d]) => `<option value="${k}">${esc(d.label)}</option>`).join('');
   return `<div class="fxe-sec"><div class="fxe-sec-title">${title}</div>${rows}
+    ${sec === 'actions' ? `<div class="fxe-quick">${QUICK.filter((q) => !continuous || CONTINUOUS_ACTIONS.includes(q.k)).map((q) => `<button type="button" class="btn small" data-act="quick" data-q="${QUICK.indexOf(q)}" title="${esc(ACTIONS[q.k].label)}">+ ${q.label}</button>`).join('')}</div>` : ''}
     <select data-add="${sec}" class="fxe-add"><option value="">+ Ajouter ${sec === 'conds' ? 'une condition' : sec === 'costs' ? 'un coût' : 'une action'}…</option>${options}</select></div>`;
 }
 
