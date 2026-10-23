@@ -131,7 +131,7 @@ export async function refreshStatus() {
   return S.status;
 }
 
-async function refreshCollection() {
+export async function refreshCollection() {
   S.collection = Object.fromEntries(check(await sb.from('collection').select('card_id, qty')).map((r) => [r.card_id, r.qty]));
 }
 
@@ -293,6 +293,13 @@ export async function giveBoosters(target, amount) {
   await refreshStatus();
   return n;
 }
+
+// ---------- Game Master (propriétaire) ----------
+export const gmCollection = async (target) => Object.fromEntries(check(await sb.rpc('gm_collection', { target })).map((r) => [r.card_id, r.qty]));
+export const gmAddCard = async (target, cid, delta) => check(await sb.rpc('gm_add_card', { target, cid, delta }));
+export const gmResetCollection = async (target) => check(await sb.rpc('gm_reset_collection', { target }));
+export const gmRestoreBackup = async (bid) => check(await sb.rpc('gm_restore_backup', { bid }));
+export const gmBackups = async () => check(await sb.rpc('gm_backups'));
 
 // ---------- invitations ----------
 export const inviteLink = (token) => `${location.origin}${location.pathname}?invite=${token}`;

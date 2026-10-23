@@ -21588,6 +21588,11 @@ ${suffix}`;
     await refreshStatus();
     return n3;
   }
+  var gmCollection = async (target) => Object.fromEntries(check(await sb.rpc("gm_collection", { target })).map((r) => [r.card_id, r.qty]));
+  var gmAddCard = async (target, cid, delta) => check(await sb.rpc("gm_add_card", { target, cid, delta }));
+  var gmResetCollection = async (target) => check(await sb.rpc("gm_reset_collection", { target }));
+  var gmRestoreBackup = async (bid) => check(await sb.rpc("gm_restore_backup", { bid }));
+  var gmBackups = async () => check(await sb.rpc("gm_backups"));
   var inviteLink = (token) => `${location.origin}${location.pathname}?invite=${token}`;
   async function inviteInfo(token) {
     const { data, error } = await sb.rpc("invite_info", { t: token });
@@ -23005,6 +23010,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     shield: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/>',
     out: '<path d="M10 4H5v16h5M14 8l4 4-4 4M18 12H9"/>',
     trophy: '<path d="M7 4h10v5a5 5 0 0 1-10 0zM7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3M12 14v4M8 21h8M9 18h6"/>',
+    crown: '<path d="M3 8l4 4 5-7 5 7 4-4-2 11H5z"/>',
     lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>'
   };
   var icon = (k) => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${I[k]}</svg>`;
@@ -26220,6 +26226,143 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     render3();
   }
 
+  // js/gm.js
+  function initGM() {
+    const el = document.getElementById("tab-gm");
+    el.innerHTML = `
+  <div class="gm">
+    <div class="ach-head"><h2>Game Master</h2></div>
+    <section class="panel gm-who">
+      <label>Joueur <select class="gm-player" aria-label="Joueur"></select></label>
+      <span class="gm-sum muted"></span>
+      <div class="gm-boost row-btns"><input class="gm-n" type="number" min="1" max="10000" value="10" aria-label="Boosters">
+        <button class="btn" data-do="boost">Donner des boosters</button></div>
+    </section>
+    <p class="msg gm-msg" role="status"></p>
+    <section class="panel">
+      <h3>Cartes</h3>
+      <div class="filters">
+        <input class="gm-q" type="search" placeholder="Chercher une carte (nom, type, code)\u2026" aria-label="Chercher une carte">
+        <select class="gm-own" aria-label="Filtre"><option value="">Toutes les cartes</option><option value="yes" selected>Poss\xE9d\xE9es par ce joueur</option><option value="no">Non poss\xE9d\xE9es</option></select>
+        <select class="gm-rar" aria-label="Raret\xE9"><option value="">Toutes raret\xE9s</option>${RARITY_ORDER.map((r) => `<option value="${r}">${RARITIES[r].label}</option>`).join("")}</select>
+      </div>
+      <div class="gm-list"></div>
+    </section>
+    <section class="panel">
+      <h3>Remise \xE0 z\xE9ro</h3>
+      <p class="muted small">La collection est sauvegard\xE9e avant d'\xEAtre vid\xE9e : tu pourras la rendre \xE0 tout moment ci-dessous.</p>
+      <button class="btn danger" data-do="reset">R\xE9initialiser la collection de ce joueur</button>
+      <h3>Collections sauvegard\xE9es</h3>
+      <div class="gm-backups"></div>
+    </section>
+  </div>`;
+    const q = (s) => el.querySelector(s);
+    let player = "";
+    let coll = {};
+    let loaded = false;
+    const msg2 = (t, err = false) => {
+      q(".gm-msg").textContent = t;
+      q(".gm-msg").classList.toggle("err", err);
+    };
+    async function loadPlayers() {
+      const players = await listPlayers();
+      q(".gm-player").innerHTML = players.map((p) => `<option value="${esc(p.username)}">${esc(p.username)}${p.username === S.status.username ? " (moi)" : ""} \xB7 ${p.boosters} boosters offerts</option>`).join("");
+      if (player) q(".gm-player").value = player;
+      player = q(".gm-player").value;
+    }
+    async function loadColl() {
+      coll = player ? await gmCollection(player) : {};
+      renderList2();
+    }
+    function renderList2() {
+      const f = { q: q(".gm-q").value.toLowerCase(), own: q(".gm-own").value, rar: q(".gm-rar").value };
+      const kinds = Object.keys(coll).length;
+      const total = Object.values(coll).reduce((a, b) => a + b, 0);
+      q(".gm-sum").textContent = `${kinds} cartes diff\xE9rentes \xB7 ${total} exemplaires`;
+      const list = S.cards.filter((c) => (!f.rar || c.rarity === f.rar) && (f.own !== "yes" || coll[c.id]) && (f.own !== "no" || !coll[c.id]) && (!f.q || `${c.name} ${c.traits} ${c.code}`.toLowerCase().includes(f.q))).sort((a, b) => RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity) || a.name.localeCompare(b.name)).slice(0, 200);
+      q(".gm-list").innerHTML = list.map((c) => {
+        const n3 = coll[c.id] || 0;
+        const owner = c.rarity === "S" ? S.oneOfOne[c.id] : null;
+        return `<div class="gm-row ${n3 ? "" : "none"}" data-id="${esc(c.id)}">
+        <div class="gm-mini">${cardHTML(c, { cls: "mini" })}</div>
+        <div class="gm-name"><b>${esc(c.name)}</b><small><span class="rar-chip r-${c.rarity}">${RARITIES[c.rarity]?.short}</span>${esc(c.traits || "")}${owner && owner !== player ? ` \xB7 1on1 poss\xE9d\xE9e par ${esc(owner)}` : ""}</small></div>
+        <div class="gm-qty"><button class="btn small" data-d="-1" ${n3 ? "" : "disabled"} aria-label="Retirer 1">\u2212</button><b>${n3}</b><button class="btn small" data-d="1" aria-label="Donner 1">+</button>
+          ${n3 ? `<button class="btn small ghost" data-d="${-n3}" title="Retirer tous les exemplaires">Tout retirer</button>` : ""}</div></div>`;
+      }).join("") || '<p class="muted">Aucune carte.</p>';
+    }
+    async function renderBackups() {
+      const list = await gmBackups();
+      q(".gm-backups").innerHTML = list.length ? `<table class="tbl"><thead><tr><th>Date</th><th>Joueur</th><th>Cartes</th><th>\xC9tat</th><th></th></tr></thead><tbody>
+      ${list.map((b) => `<tr><td>${new Date(b.created_at).toLocaleString("fr-FR")}</td><td>${esc(b.username)}</td><td>${b.nb} diff\xE9rentes \xB7 ${b.total} ex.</td>
+        <td>${b.restored_at ? `Rendue le ${new Date(b.restored_at).toLocaleString("fr-FR")}` : "En attente"}</td>
+        <td><button class="btn small" data-restore="${b.id}">${b.restored_at ? "Rendre \xE0 nouveau" : "Rendre"}</button></td></tr>`).join("")}</tbody></table>` : `<p class="muted">Aucune sauvegarde pour l'instant.</p>`;
+    }
+    const sync = async () => {
+      if (player === S.status.username) await refreshCollection();
+    };
+    async function run(fn) {
+      try {
+        await fn();
+      } catch (e) {
+        msg2(e.message, true);
+      }
+    }
+    q(".gm-player").addEventListener("change", () => run(async () => {
+      player = q(".gm-player").value;
+      msg2("");
+      await loadColl();
+    }));
+    q(".filters").addEventListener("input", renderList2);
+    el.addEventListener("click", (e) => run(async () => {
+      const d = e.target.closest("[data-d]");
+      if (d) {
+        const id = d.closest("[data-id]").dataset.id;
+        const c = S.byId[id];
+        if (+d.dataset.d > 0 && c?.rarity === "S" && S.oneOfOne[id] && S.oneOfOne[id] !== player && !confirm(`\xAB ${c.name} \xBB est une 1on1 d\xE9j\xE0 poss\xE9d\xE9e par ${S.oneOfOne[id]}. La donner quand m\xEAme ?`)) return;
+        const n3 = await gmAddCard(player, id, +d.dataset.d);
+        if (n3) coll[id] = n3;
+        else delete coll[id];
+        msg2(`${c?.name} : ${player} en a maintenant ${n3}.`);
+        renderList2();
+        await sync();
+        return;
+      }
+      const act = e.target.closest("[data-do]")?.dataset.do;
+      if (act === "boost") {
+        const n3 = Math.max(1, Number(q(".gm-n").value) || 0);
+        await giveBoosters(player, n3);
+        msg2(`${n3} booster${n3 > 1 ? "s" : ""} donn\xE9${n3 > 1 ? "s" : ""} \xE0 ${player}.`);
+        await loadPlayers();
+      }
+      if (act === "reset") {
+        if (!confirm(`Vider toute la collection de ${player} ? Elle sera sauvegard\xE9e et tu pourras la rendre \xE0 tout moment.`)) return;
+        await gmResetCollection(player);
+        msg2(`Collection de ${player} remise \xE0 z\xE9ro (sauvegard\xE9e).`);
+        await loadColl();
+        await renderBackups();
+        await sync();
+      }
+      const r = e.target.closest("[data-restore]");
+      if (r) {
+        const n3 = await gmRestoreBackup(+r.dataset.restore);
+        msg2(`Collection rendue : ${n3} cartes diff\xE9rentes ajout\xE9es.`);
+        await loadColl();
+        await renderBackups();
+        await sync();
+      }
+    }));
+    new MutationObserver(() => {
+      if (!el.hidden && !loaded) {
+        loaded = true;
+        run(async () => {
+          await loadPlayers();
+          await loadColl();
+          await renderBackups();
+        });
+      }
+    }).observe(el, { attributes: true, attributeFilter: ["hidden"] });
+  }
+
   // js/app.js
   document.querySelector(".top .brand").innerHTML = logoSVG("", true);
   document.querySelectorAll("[data-ico]").forEach((b) => b.insertAdjacentHTML("afterbegin", icon(b.dataset.ico)));
@@ -26256,6 +26399,9 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     document.querySelectorAll(".admin-only").forEach((t) => {
       t.hidden = !admin;
     });
+    document.querySelectorAll(".owner-only").forEach((t) => {
+      t.hidden = !isOwner();
+    });
     document.querySelector(".who").innerHTML = `<button class="me menu-btn" aria-label="Menu"><span>${esc(S.status.username)}</span>
     ${admin ? `<span class="badge ok">${S.status.role === "owner" ? "Propri\xE9taire" : "Admin"}</span>` : ""}<span class="av">${icon("user")}</span></button>`;
     document.querySelector(".logout").addEventListener("click", signOut);
@@ -26277,6 +26423,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       initEditor();
       initAdmin();
     }
+    if (isOwner()) initGM();
     let first = "home";
     if (new URLSearchParams(location.search).get("join")) first = "play";
     show(first);

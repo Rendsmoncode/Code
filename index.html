@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Nakama TCG</title>
   <link rel="icon" href="img/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=mvl5e8eb">
-  <link rel="stylesheet" href="cards.css?v=mvl5e8eb">
+  <link rel="stylesheet" href="style.css?v=mvl5qbit">
+  <link rel="stylesheet" href="cards.css?v=mvl5qbit">
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <!-- app.js est généré depuis js/ par : npm run build -->
-  <script src="app.js?v=mvl5e8eb" defer></script>
+  <script src="app.js?v=mvl5qbit" defer></script>
 </head>
 <body>
   <header class="top">
@@ -30,6 +30,7 @@
       <button data-tab="credits" data-ico="star">Crédits photo</button>
       <button data-tab="cards" data-ico="edit" class="admin-only" hidden>Cartes</button>
       <button data-tab="admin" data-ico="shield" class="admin-only" hidden>Admin</button>
+      <button data-tab="gm" data-ico="crown" class="owner-only" hidden>Game Master</button>
       <button class="settings-btn" data-ico="gear">Paramètres</button>
       <button class="logout" data-ico="out">Déconnexion</button>
     </div>
@@ -44,6 +45,7 @@
     <section class="tab" id="tab-credits" role="tabpanel" hidden></section>
     <section class="tab" id="tab-cards" role="tabpanel" hidden></section>
     <section class="tab" id="tab-admin" role="tabpanel" hidden></section>
+    <section class="tab" id="tab-gm" role="tabpanel" hidden></section>
   </main>
 </body>
 </html>

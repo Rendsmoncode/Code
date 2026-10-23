@@ -89,6 +89,16 @@ create table if not exists public.achievements (
   primary key (user_id, code)
 );
 
+-- Game Master : sauvegardes des collections remises à zéro : on peut les rendre à tout moment.
+create table if not exists public.collection_backups (
+  id bigserial primary key,
+  user_id uuid not null references public.profiles on delete cascade,
+  username text not null,
+  cards jsonb not null,                 -- {"id_carte": quantité, ...}
+  created_at timestamptz not null default now(),
+  restored_at timestamptz
+);
+
 -- ---------- Fonctions utilitaires ----------
 
 create or replace function public.is_admin() returns boolean
@@ -417,6 +427,7 @@ alter table public.decks enable row level security;
 alter table public.invites enable row level security;
 alter table public.stats enable row level security;
 alter table public.achievements enable row level security;
+alter table public.collection_backups enable row level security;
 
 drop policy if exists "mes stats" on public.stats;
 create policy "mes stats" on public.stats for select to authenticated using (user_id = auth.uid());
@@ -534,6 +545,91 @@ begin
   return array_to_json(fresh);
 end $$;
 
+-- =====================================================================
+-- Game Master (réservé au propriétaire) : cartes de n'importe qui, remise à zéro réversible
+-- =====================================================================
+
+create or replace function public.is_owner() returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.profiles where id = auth.uid() and role = 'owner');
+$$;
+
+create or replace function public.gm_uid(target text) returns uuid
+language plpgsql stable security definer set search_path = public as $$
+declare uid uuid;
+begin
+  if not public.is_owner() then raise exception 'Réservé au propriétaire.'; end if;
+  select id into uid from public.profiles where username = lower(target);
+  if uid is null then raise exception 'Joueur introuvable.'; end if;
+  return uid;
+end $$;
+
+-- Collection d'un joueur.
+create or replace function public.gm_collection(target text) returns table (card_id text, qty int)
+language sql stable security definer set search_path = public as $$
+  select c.card_id, c.qty from public.collection c where c.user_id = public.gm_uid(target);
+$$;
+
+-- Donne (delta > 0) ou retire (delta < 0) des exemplaires d'une carte. Renvoie la nouvelle quantité.
+create or replace function public.gm_add_card(target text, cid text, delta int) returns int
+language plpgsql security definer set search_path = public as $$
+declare
+  uid uuid := public.gm_uid(target);
+  n int;
+begin
+  if not exists (select 1 from public.cards where id = cid) then raise exception 'Carte introuvable.'; end if;
+  select coalesce(max(qty), 0) + delta into n from public.collection where user_id = uid and card_id = cid;
+  if n <= 0 then
+    delete from public.collection where user_id = uid and card_id = cid;
+    return 0;
+  end if;
+  insert into public.collection (user_id, card_id, qty) values (uid, cid, n)
+    on conflict (user_id, card_id) do update set qty = excluded.qty;
+  return n;
+end $$;
+
+-- Remet à zéro la collection d'un joueur, après l'avoir sauvegardée. Renvoie le numéro de la sauvegarde.
+create or replace function public.gm_reset_collection(target text) returns bigint
+language plpgsql security definer set search_path = public as $$
+declare
+  uid uuid := public.gm_uid(target);
+  bid bigint;
+begin
+  insert into public.collection_backups (user_id, username, cards)
+    select uid, lower(target), coalesce(jsonb_object_agg(card_id, qty), '{}') from public.collection where user_id = uid
+    returning id into bid;
+  delete from public.collection where user_id = uid;
+  return bid;
+end $$;
+
+-- Rend une collection sauvegardée (les cartes s'ajoutent à ce que le joueur possède aujourd'hui).
+create or replace function public.gm_restore_backup(bid bigint) returns int
+language plpgsql security definer set search_path = public as $$
+declare
+  b public.collection_backups;
+  n int := 0;
+begin
+  if not public.is_owner() then raise exception 'Réservé au propriétaire.'; end if;
+  select * into b from public.collection_backups where id = bid;
+  if not found then raise exception 'Sauvegarde introuvable.'; end if;
+  insert into public.collection (user_id, card_id, qty)
+    select b.user_id, k, v::int from jsonb_each_text(b.cards) e(k, v) where exists (select 1 from public.cards where id = k)
+    on conflict (user_id, card_id) do update set qty = public.collection.qty + excluded.qty;
+  get diagnostics n = row_count;
+  update public.collection_backups set restored_at = now() where id = bid;
+  return n;
+end $$;
+
+-- Liste des sauvegardes (les plus récentes d'abord).
+create or replace function public.gm_backups() returns table (id bigint, username text, nb int, total int, created_at timestamptz, restored_at timestamptz)
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.is_owner() then raise exception 'Réservé au propriétaire.'; end if;
+  return query select b.id, b.username, (select count(*)::int from jsonb_object_keys(b.cards)),
+    (select coalesce(sum(v::int), 0)::int from jsonb_each_text(b.cards) e(k, v)), b.created_at, b.restored_at
+    from public.collection_backups b order by b.created_at desc;
+end $$;
+
 -- ---------- Droits d'accès (l'exposition automatique des tables est désactivée) ----------
 
 revoke all on all tables in schema public from anon;
@@ -546,7 +642,9 @@ revoke execute on all functions in schema public from public, anon, authenticate
 grant execute on function public.is_admin(), public.booster_status(), public.open_booster(), public.one_of_one_owners(),
   public.claim_starter(text), public.admin_give_boosters(text, int), public.admin_set_role(text, text),
   public.admin_create_invite(text, text, int), public.is_revealed(text), public.open_boosters(int),
-  public.record_game(boolean, text, int, boolean), public.check_achievements()
+  public.record_game(boolean, text, int, boolean), public.check_achievements(),
+  public.is_owner(), public.gm_collection(text), public.gm_add_card(text, text, int), public.gm_reset_collection(text),
+  public.gm_restore_backup(bigint), public.gm_backups()
   to authenticated;
 grant usage on schema public to anon;
 grant execute on function public.invite_info(text) to anon, authenticated;

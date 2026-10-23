@@ -47,6 +47,13 @@ export function makeMock() {
       if (fn === 'open_boosters') { if (body.n > 10 && p.boosters < body.n) return json(route, { message: 'Au-delà de 10, on ne peut ouvrir d\'un coup que des boosters offerts.' }, 400);
         const out = []; for (let i = 0; i < body.n; i++) { const r = openOne(body.n > 10); if (!r) { if (!i) return json(route, { message: 'Aucun booster disponible pour le moment.' }, 400); break; } out.push(...r); }
         stats().best_batch = Math.max(stats().best_batch, out.length / 5); return json(route, out); }
+      const owner = p?.role === 'owner'; const tu = () => Object.keys(st.profiles).find((k) => st.profiles[k].username === body.target);
+      if (fn.startsWith('gm_') && !owner) return json(route, { message: 'Réservé au propriétaire.' }, 400);
+      if (fn === 'gm_collection') return json(route, Object.entries(st.coll[tu()] || {}).map(([card_id, qty]) => ({ card_id, qty })));
+      if (fn === 'gm_add_card') { const u = tu(); const c = (st.coll[u] ||= {}); const n = (c[body.cid] || 0) + body.delta; if (n <= 0) delete c[body.cid]; else c[body.cid] = n; return json(route, Math.max(0, n)); }
+      if (fn === 'gm_reset_collection') { const u = tu(); st.backups ||= []; st.backups.unshift({ id: st.backups.length + 1, username: body.target, user: u, cards: { ...(st.coll[u] || {}) }, created_at: new Date().toISOString(), restored_at: null }); st.coll[u] = {}; return json(route, st.backups[0].id); }
+      if (fn === 'gm_restore_backup') { const b = st.backups.find((x) => x.id === body.bid); const c = (st.coll[b.user] ||= {}); for (const [k, v] of Object.entries(b.cards)) c[k] = (c[k] || 0) + v; b.restored_at = new Date().toISOString(); return json(route, Object.keys(b.cards).length); }
+      if (fn === 'gm_backups') return json(route, (st.backups || []).map((b) => ({ id: b.id, username: b.username, nb: Object.keys(b.cards).length, total: Object.values(b.cards).reduce((x, y) => x + y, 0), created_at: b.created_at, restored_at: b.restored_at })));
       if (fn === 'record_game') { const s = stats(); s.games++; if (body.won) { s.wins++; s.win_streak++; } else s.win_streak = 0; s.best_win_streak = Math.max(s.best_win_streak, s.win_streak); return json(route, null); }
       if (fn === 'check_achievements') { const s = stats(); const own = Object.keys(st.coll[uid] || {}).map((id) => st.cards[id]); const ach = (st.ach[uid] ||= {});
         const rules = [['open1', s.boosters_opened >= 1, 1], ['open10', s.boosters_opened >= 10, 1], ['batch10', s.best_batch >= 10, 2], ['win1', s.wins >= 1, 1], ['god', s.god_packs >= 1, 10],

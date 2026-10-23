@@ -784,3 +784,20 @@ details { margin-top: 12px; }
   background: linear-gradient(90deg, #ff4d6d, #ffb84d, #f7f052, #4dff9a, #4dc3ff, #b44dff, #ff4d6d) 0 0 / 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
   animation: god-in 2.8s ease-out both, fx-holo 2s linear infinite; }
 @keyframes god-in { 0% { transform: translateY(-50%) scale(.3); opacity: 0; } 25% { transform: translateY(-50%) scale(1.15); opacity: 1; } 40%, 85% { transform: translateY(-50%) scale(1); opacity: 1; } 100% { transform: translateY(-50%) scale(1.4); opacity: 0; } }
+
+/* ---------- Game Master ---------- */
+.gm { max-width: 980px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.gm-who { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; }
+.gm-who label { display: flex; gap: 8px; align-items: center; font-weight: 700; }
+.gm-boost { margin-left: auto; }
+.gm-boost input { width: 90px; }
+.gm-list { display: grid; gap: 6px; max-height: 70vh; overflow-y: auto; margin-top: 10px; }
+.gm-row { display: grid; grid-template-columns: 46px 1fr auto; gap: 12px; align-items: center; background: var(--panel-2); border-radius: 12px; padding: 6px 10px; }
+.gm-row.none { opacity: .6; }
+.gm-mini .card { width: 46px; }
+.gm-name b { display: block; }
+.gm-name small { color: var(--muted); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.gm-name .rar-chip { margin: 0; padding: 1px 8px; }
+.gm-qty { display: flex; align-items: center; gap: 6px; }
+.gm-qty b { min-width: 26px; text-align: center; font: 400 16px "Archivo Black", sans-serif; }
+@media (max-width: 760px) { .gm-row { grid-template-columns: 40px 1fr; } .gm-qty { grid-column: 1 / -1; justify-content: flex-end; } .gm-boost { margin-left: 0; } }

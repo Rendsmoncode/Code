@@ -1,4 +1,4 @@
-import { S, load, refreshStatus, currentUser, isAdmin, signOut } from './store.js';
+import { S, load, refreshStatus, currentUser, isAdmin, isOwner, signOut } from './store.js';
 import { esc } from './cards.js';
 import { showAuth, maybeAskStarter } from './auth.js';
 import { initEditor } from './editor.js';
@@ -12,6 +12,7 @@ import { logoSVG } from './logo.js';
 import { icon } from './icons.js';
 import { initHome } from './home.js';
 import { initAchievements } from './achievements.js';
+import { initGM } from './gm.js';
 
 document.querySelector('.top .brand').innerHTML = logoSVG('', true);
 document.querySelectorAll('[data-ico]').forEach((b) => b.insertAdjacentHTML('afterbegin', icon(b.dataset.ico)));
@@ -42,6 +43,7 @@ async function start() {
   await refreshStatus();
   const admin = isAdmin();
   document.querySelectorAll('.admin-only').forEach((t) => { t.hidden = !admin; });
+  document.querySelectorAll('.owner-only').forEach((t) => { t.hidden = !isOwner(); });
   document.querySelector('.who').innerHTML = `<button class="me menu-btn" aria-label="Menu"><span>${esc(S.status.username)}</span>
     ${admin ? `<span class="badge ok">${S.status.role === 'owner' ? 'Propriétaire' : 'Admin'}</span>` : ''}<span class="av">${icon('user')}</span></button>`;
   document.querySelector('.logout').addEventListener('click', signOut);
@@ -58,6 +60,7 @@ async function start() {
   initCredits();
   initAchievements();
   if (admin) { initEditor(); initAdmin(); }
+  if (isOwner()) initGM();
 
   let first = 'home';
   if (new URLSearchParams(location.search).get('join')) first = 'play';
