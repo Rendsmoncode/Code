@@ -18,21 +18,31 @@ function getPlayer() {
   player.preload = 'auto';
   return player;
 }
-// Son des 1on1 : lecteur audio débloqué au premier toucher (iOS accepte ensuite de le relancer seul).
+// Musique de cérémonie des 1on1 (sons/1on1.mp3, composée pour le jeu) : elle accompagne toute la séquence
+// et son « bing » tombe quand le sceau s'écrase. Lecteur débloqué au premier toucher (exigé par iOS).
+const MUSIC = 'sons/1on1.mp3';
+export const VIDEO_LEN = 6.8; // durée commune de toutes les vidéos 1on1 (image figée comprise)
+const SHRINK = 0.75; // la vidéo rétrécit jusqu'à la carte
+const STAMP_HIT = 0.64; // le sceau touche la carte 0,64 s après le début de son animation
+const HIT = VIDEO_LEN + SHRINK + STAMP_HIT; // 8,19 s : le « bing » de la musique
 const sfx = new Audio();
 sfx.preload = 'auto';
+let ceremony = false; // une séquence vidéo + musique est en cours
 function unlock() {
   if (unlocked || !sfx.paused) return;
   unlocked = true;
   sfx.src = SILENCE;
-  sfx.play().then(() => { sfx.pause(); sfx.src = 'sons/1on1.mp3'; sfx.load(); }).catch(() => { unlocked = false; });
+  sfx.play().then(() => { sfx.pause(); sfx.src = MUSIC; sfx.load(); }).catch(() => { unlocked = false; });
 }
-// Son de la rareté 1on1 : l'impact, joué quand le sceau 1ON1 s'écrase sur la carte.
-export function playImpactSound() {
-  if (!sfx.src.endsWith('sons/1on1.mp3')) sfx.src = 'sons/1on1.mp3';
-  sfx.currentTime = 0;
+function music(at = 0) {
+  if (!sfx.src.endsWith(MUSIC)) sfx.src = MUSIC;
+  sfx.currentTime = at;
   sfx.volume = 0.9;
   sfx.play().catch(() => {});
+}
+// Le sceau commence à s'écraser : sans séquence vidéo en cours, on lance la fin de la musique pour que le « bing » tombe pile.
+export function sealSound() {
+  if (!ceremony) music(HIT - STAMP_HIT);
 }
 for (const ev of ['pointerup', 'touchend', 'keydown']) document.addEventListener(ev, unlock, { capture: true, passive: true });
 
@@ -68,10 +78,11 @@ export function playCardVideo(card, host) {
   wrap.append(v);
   host.classList.add('vid-on');
   let done = false;
+  let aborted = false;
   let resolveEnd;
   const ended = new Promise((r) => { resolveEnd = r; });
-  stopCurrent = () => { stopCurrent = null; resolveEnd(); };
-  v.addEventListener('ended', () => resolveEnd(), { once: true });
+  stopCurrent = (abort = false) => { stopCurrent = null; aborted = abort; resolveEnd(); };
+
   return (async () => {
     await metadata(v);
     const vw = v.videoWidth || 1080;
@@ -105,13 +116,20 @@ export function playCardVideo(card, host) {
     layout();
     addEventListener('resize', layout);
     v.currentTime = 0;
-    v.muted = true; // la vidéo est muette : c'est le son de la rareté 1on1 qui accompagne la révélation
-    v.play().catch(() => resolveEnd());
-    await ended;
+    v.muted = true; // la vidéo est muette : c'est la musique des 1on1 qui l'accompagne
+    ceremony = true;
+    await v.play().catch(() => {});
+    music(0); // même départ pour la vidéo et la musique
+    const t0 = performance.now();
+    // toutes les vidéos durent VIDEO_LEN : au-delà on coupe, en deçà l'image reste figée
+    await Promise.race([ended, wait(VIDEO_LEN * 1000)]);
+    // toucher pour passer : la musique saute au même moment, pour que le « bing » reste calé sur le sceau
+    if ((performance.now() - t0) / 1000 < VIDEO_LEN - 0.1 && !sfx.paused) sfx.currentTime = VIDEO_LEN;
     if (done) return true;
     done = true;
     removeEventListener('resize', layout);
     v.pause();
+    if (aborted) { ceremony = false; sfx.pause(); wrap.remove(); host.classList.remove('vid-on'); return false; }
     if (full) {
       // la vidéo figée rétrécit jusqu'à la carte ; ce qui dépasse s'efface
       const z = layout();
@@ -125,13 +143,18 @@ export function playCardVideo(card, host) {
     // fondu : la carte (et ses effets) revient, la vidéo figée s'efface
     host.classList.add('vid-end');
     wrap.classList.add('out');
-    stampSeal(host); // le sceau 1ON1 vient se plaquer sur la carte
+    stampSeal(host); // le sceau 1ON1 vient se plaquer sur la carte, sur le « bing »
     await wait(650);
     wrap.remove();
     host.classList.remove('vid-on', 'vid-end');
+    setTimeout(() => { ceremony = false; }, 1200);
     return true;
   })();
 }
-export function stopCardVideo() { stopCurrent?.(); }
+// abort : la vue est fermée, on arrête tout (vidéo et musique) ; sinon on passe directement à la fin.
+export function stopCardVideo(abort = false) {
+  if (stopCurrent) stopCurrent(abort);
+  else if (abort) sfx.pause();
+}
 
-setVideoModule({ hasVideo, playCardVideo, stopCardVideo, playImpactSound });
+setVideoModule({ hasVideo, playCardVideo, stopCardVideo, sealSound });

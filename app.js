@@ -21329,7 +21329,7 @@ ${suffix}`;
     ov.setAttribute("aria-label", card.name || "Carte");
     ov.innerHTML = `<div class="cv-card">${cardHTML(card)}</div>${hold ? "" : '<p class="cv-hint">Touchez pour fermer</p>'}`;
     const close = () => {
-      videoMod?.stopCardVideo();
+      videoMod?.stopCardVideo(true);
       ov.remove();
       document.removeEventListener("keydown", onKey);
     };
@@ -21351,10 +21351,7 @@ ${suffix}`;
     host2.classList.remove("stamp");
     void host2.offsetWidth;
     host2.classList.add("stamp");
-    clearTimeout(host2.stampSound);
-    host2.stampSound = setTimeout(() => {
-      if (host2.isConnected) videoMod?.playImpactSound();
-    }, 640);
+    videoMod?.sealSound();
     setTimeout(() => host2.classList.remove("stamp"), 1800);
   }
 
@@ -21682,26 +21679,35 @@ ${suffix}`;
     player.preload = "auto";
     return player;
   }
+  var MUSIC = "sons/1on1.mp3";
+  var VIDEO_LEN = 6.8;
+  var SHRINK = 0.75;
+  var STAMP_HIT = 0.64;
+  var HIT = VIDEO_LEN + SHRINK + STAMP_HIT;
   var sfx = new Audio();
   sfx.preload = "auto";
+  var ceremony = false;
   function unlock() {
     if (unlocked || !sfx.paused) return;
     unlocked = true;
     sfx.src = SILENCE;
     sfx.play().then(() => {
       sfx.pause();
-      sfx.src = "sons/1on1.mp3";
+      sfx.src = MUSIC;
       sfx.load();
     }).catch(() => {
       unlocked = false;
     });
   }
-  function playImpactSound() {
-    if (!sfx.src.endsWith("sons/1on1.mp3")) sfx.src = "sons/1on1.mp3";
-    sfx.currentTime = 0;
+  function music(at = 0) {
+    if (!sfx.src.endsWith(MUSIC)) sfx.src = MUSIC;
+    sfx.currentTime = at;
     sfx.volume = 0.9;
     sfx.play().catch(() => {
     });
+  }
+  function sealSound() {
+    if (!ceremony) music(HIT - STAMP_HIT);
   }
   for (const ev of ["pointerup", "touchend", "keydown"]) document.addEventListener(ev, unlock, { capture: true, passive: true });
   var hasVideo = (card) => Boolean(card?.rarity === "S" && card.video);
@@ -21735,15 +21741,16 @@ ${suffix}`;
     wrap.append(v);
     host2.classList.add("vid-on");
     let done = false;
+    let aborted = false;
     let resolveEnd;
     const ended = new Promise((r) => {
       resolveEnd = r;
     });
-    stopCurrent = () => {
+    stopCurrent = (abort = false) => {
       stopCurrent = null;
+      aborted = abort;
       resolveEnd();
     };
-    v.addEventListener("ended", () => resolveEnd(), { once: true });
     return (async () => {
       await metadata(v);
       const vw = v.videoWidth || 1080;
@@ -21775,12 +21782,24 @@ ${suffix}`;
       addEventListener("resize", layout);
       v.currentTime = 0;
       v.muted = true;
-      v.play().catch(() => resolveEnd());
-      await ended;
+      ceremony = true;
+      await v.play().catch(() => {
+      });
+      music(0);
+      const t0 = performance.now();
+      await Promise.race([ended, wait(VIDEO_LEN * 1e3)]);
+      if ((performance.now() - t0) / 1e3 < VIDEO_LEN - 0.1 && !sfx.paused) sfx.currentTime = VIDEO_LEN;
       if (done) return true;
       done = true;
       removeEventListener("resize", layout);
       v.pause();
+      if (aborted) {
+        ceremony = false;
+        sfx.pause();
+        wrap.remove();
+        host2.classList.remove("vid-on");
+        return false;
+      }
       if (full) {
         const z = layout();
         const r = host2.querySelector(".card")?.getBoundingClientRect() || host2.getBoundingClientRect();
@@ -21796,13 +21815,17 @@ ${suffix}`;
       await wait(650);
       wrap.remove();
       host2.classList.remove("vid-on", "vid-end");
+      setTimeout(() => {
+        ceremony = false;
+      }, 1200);
       return true;
     })();
   }
-  function stopCardVideo() {
-    stopCurrent?.();
+  function stopCardVideo(abort = false) {
+    if (stopCurrent) stopCurrent(abort);
+    else if (abort) sfx.pause();
   }
-  setVideoModule({ hasVideo, playCardVideo, stopCardVideo, playImpactSound });
+  setVideoModule({ hasVideo, playCardVideo, stopCardVideo, sealSound });
 
   // js/icons.js
   var I = {

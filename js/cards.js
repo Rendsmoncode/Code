@@ -193,7 +193,7 @@ export function showCardBig(card, { hold = false, video = false } = {}) {
   ov.setAttribute('role', 'dialog');
   ov.setAttribute('aria-label', card.name || 'Carte');
   ov.innerHTML = `<div class="cv-card">${cardHTML(card)}</div>${hold ? '' : '<p class="cv-hint">Touchez pour fermer</p>'}`;
-  const close = () => { videoMod?.stopCardVideo(); ov.remove(); document.removeEventListener('keydown', onKey); };
+  const close = () => { videoMod?.stopCardVideo(true); ov.remove(); document.removeEventListener('keydown', onKey); };
   const onKey = (e) => { if (e.key === 'Escape') close(); };
   if (!hold) { ov.addEventListener('click', close); document.addEventListener('keydown', onKey); }
   document.body.append(ov);
@@ -209,7 +209,6 @@ export function stampSeal(host) {
   host.classList.remove('stamp');
   void host.offsetWidth; // relance l'animation
   host.classList.add('stamp');
-  clearTimeout(host.stampSound);
-  host.stampSound = setTimeout(() => { if (host.isConnected) videoMod?.playImpactSound(); }, 640); // au moment de l'impact
+  videoMod?.sealSound(); // le « bing » de la musique 1on1 tombe au moment de l'impact
   setTimeout(() => host.classList.remove('stamp'), 1800);
 }
