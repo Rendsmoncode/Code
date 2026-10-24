@@ -21272,7 +21272,8 @@ ${suffix}`;
     const boxVars = bx ? `;--info-l:${bx.l}cqw;--info-r:${100 - bx.l - bx.w}cqw;--info-b:${bx.b * 1.397}cqw;--info-fs:${bx.fs || 1}` : "";
     const vars = `--c1:${hex[0]};--c2:${c2};--c1l:${shade(hex[0], 0.45)};--c1d:${shade(hex[0], -0.55)};--c1k:${shade(hex[0], -0.85)};--c2d:${shade(c2, -0.55)}${boxVars}`;
     const ink = card.ink === "dark" ? " ink-dark" : "";
-    return `<div class="card t-${t} r-${r}${ink} ${o.cls || ""}" style="${vars}" ${o.attrs || ""}>
+    const alt = card.alt ? " alt" : "";
+    return `<div class="card t-${t} r-${r}${ink}${alt} ${o.cls || ""}" style="${vars}" ${o.attrs || ""}>
     <div class="frame">
       <div class="art${card.image ? "" : " empty"}">${artImg}</div>
       ${cost}${pow}${ctr}${attr}
@@ -21287,7 +21288,22 @@ ${suffix}`;
       <div class="foil"></div>
     </div>
     ${r === "S" ? '<div class="seal" aria-hidden="true">1<small>ON</small>1</div>' : ""}
+    ${card.alt ? altHTML() : ""}
   </div>`;
+  }
+  var STAR_SVG = '<svg viewBox="0 0 100 100" aria-hidden="true"><path d="M50 8 C53 38 62 47 92 50 C62 53 53 62 50 92 C47 62 38 53 8 50 C38 47 47 38 50 8 Z" fill="currentColor"/></svg>';
+  var MINI = [[12, 18, 3.4], [30, 8, 2.8], [84, 34, 3.2], [70, 60, 2.8], [18, 52, 3.2], [48, 26, 2.6], [90, 70, 3.2], [8, 66, 2.8], [60, 12, 3], [38, 44, 2.6], [76, 22, 2.8], [24, 30, 3]];
+  function altHTML() {
+    const minis = MINI.map(([x, y, sz], k) => `<i style="--x:${x}%;--y:${y}%;--s:${sz}cqw;--d:${(2.2 + k * 37 % 14 / 10).toFixed(2)}s;--w:${(-k * 0.27).toFixed(2)}s${k % 3 === 1 ? ";--c:#cfe0ff" : ""}">${STAR_SVG}</i>`).join("");
+    return `<div class="mstars" aria-hidden="true">${minis}</div><div class="astar" title="Alt">${STAR_SVG}</div><div class="aboom"></div>`;
+  }
+  if (typeof document !== "undefined") {
+    document.addEventListener("animationiteration", (e) => {
+      const i = e.target;
+      if (!i.parentElement?.classList?.contains("mstars")) return;
+      i.style.setProperty("--x", `${8 + Math.random() * 84}%`);
+      i.style.setProperty("--y", `${6 + Math.random() * 70}%`);
+    }, true);
   }
   function resizeImage(file, max = 500) {
     return new Promise((resolve, reject) => {
@@ -21343,15 +21359,15 @@ ${suffix}`;
     document.body.append(ov);
     const host2 = ov.querySelector(".cv-card");
     if (video && videoMod?.hasVideo(card)) videoMod.playCardVideo(card, host2);
-    else if (!hold && card.rarity === "S") stampSeal(host2);
+    else if (!hold && (card.rarity === "S" || card.alt)) stampSeal(host2);
     return close;
   }
   function stampSeal(host2) {
-    if (!host2?.querySelector(".seal")) return;
+    if (!host2?.querySelector(".seal, .astar")) return;
     host2.classList.remove("stamp");
     void host2.offsetWidth;
     host2.classList.add("stamp");
-    videoMod?.sealSound();
+    videoMod?.sealSound(Boolean(host2.querySelector(".card.alt")));
     setTimeout(() => host2.classList.remove("stamp"), 1800);
   }
   var vv = typeof window !== "undefined" && window.visualViewport;
@@ -21416,10 +21432,17 @@ ${suffix}`;
     return S.user;
   }
   var fromRow = (r) => ({ ...r.data, id: r.id, rarity: r.rarity, inBoosters: r.in_boosters });
+  var ALT_OWN = ["id", "rarity", "inBoosters", "image", "art", "box", "ink", "video", "vx", "alt", "base", "credit"];
   function reindex() {
     S.cards.sort((a, b) => (a.code || "").localeCompare(b.code || "") || (a.name || "").localeCompare(b.name || ""));
     S.byId = Object.fromEntries(S.cards.map((c) => [c.id, c]));
+    for (const c of S.cards) {
+      const base = c.alt && S.byId[c.base];
+      if (!base || base.alt) continue;
+      for (const [k, v] of Object.entries(base)) if (!ALT_OWN.includes(k)) c[k] = structuredClone(v);
+    }
   }
+  var altsOf = (id) => S.cards.filter((c) => c.alt && c.base === id);
   function allTraits() {
     const set = /* @__PURE__ */ new Set();
     for (const c of S.cards) String(c.traits || "").split("/").map((t) => t.trim()).filter(Boolean).forEach((t) => set.add(t));
@@ -21479,6 +21502,8 @@ ${suffix}`;
     S.starters = check(starters);
     S.oneOfOne = Object.fromEntries((owners.error ? [] : owners.data || []).map((r) => [r.card_id, r.username]));
     await signImages(S.cards.flatMap((c) => [oldImagePath(c.image), oldImagePath(c.video)]));
+    await loadMusic().catch(() => {
+    });
     reindex();
     emit();
   }
@@ -21494,6 +21519,33 @@ ${suffix}`;
   }
   async function refreshCollection() {
     S.collection = Object.fromEntries(check(await sb.from("collection").select("card_id, qty")).map((r) => [r.card_id, r.qty]));
+  }
+  S.music = {};
+  async function loadMusic() {
+    const { data, error } = await sb.storage.from("cards").list("sons", { limit: 100, sortBy: { column: "name", order: "desc" } });
+    if (error) return;
+    for (const kind of ["alt"]) {
+      const f = (data || []).find((x) => x.name.startsWith(`${kind}-`) && x.name.endsWith(".mp3"));
+      if (!f) {
+        delete S.music[kind];
+        continue;
+      }
+      const path = `sons/${f.name}`;
+      await signImages([path]);
+      S.music[kind] = { path, name: f.name, url: signed[path]?.url };
+    }
+  }
+  async function uploadMusic(kind, file) {
+    const path = `sons/${kind}-${Date.now()}.mp3`;
+    check(await sb.storage.from("cards").upload(path, file, { contentType: "audio/mpeg", cacheControl: "31536000" }));
+    const old = S.music[kind]?.path;
+    if (old) await sb.storage.from("cards").remove([old]);
+    await loadMusic();
+  }
+  async function deleteMusic(kind) {
+    const old = S.music[kind]?.path;
+    if (old) check(await sb.storage.from("cards").remove([old]));
+    await loadMusic();
   }
   async function uploadVideo(cardId, file) {
     const path = `${cardId}-video-${Date.now()}.mp4`;
@@ -21612,6 +21664,8 @@ ${suffix}`;
     if (pulls.some((p) => !S.byId[p.id])) {
       S.cards = check(await sb.from("cards").select("*")).map(fromRow);
       await signImages(S.cards.flatMap((c) => [oldImagePath(c.image), oldImagePath(c.video)]));
+      await loadMusic().catch(() => {
+      });
       reindex();
     }
     await refreshCollection();
@@ -21685,42 +21739,91 @@ ${suffix}`;
     player.preload = "auto";
     return player;
   }
-  var MUSIC = "sons/1on1.mp3";
-  var INTRO = 2.6;
+  var TRACKS = {
+    "1on1": { src: () => "sons/1on1.mp3", intro: 2.6 },
+    alt: { src: () => S.music?.alt?.url || "", intro: 2.574 }
+  };
   var VIDEO_LEN = 6.8;
   var SHRINK = 0.75;
   var STAMP_HIT = 0.64;
-  var HIT = INTRO + VIDEO_LEN + SHRINK + STAMP_HIT;
+  var HIT = TRACKS["1on1"].intro + VIDEO_LEN + SHRINK + STAMP_HIT;
+  var DUCK = 0.3;
   var sfx = new Audio();
   sfx.preload = "auto";
+  var cling = new Audio("sons/cling.mp3");
+  cling.preload = "auto";
   var ceremony = false;
+  var current = "";
+  var fadeTimer = null;
   function unlock() {
     if (unlocked || !sfx.paused) return;
     unlocked = true;
     sfx.src = SILENCE;
+    cling.muted = true;
+    cling.play().then(() => {
+      cling.pause();
+      cling.muted = false;
+      cling.currentTime = 0;
+    }).catch(() => {
+      cling.muted = false;
+    });
     sfx.play().then(() => {
       sfx.pause();
-      sfx.src = MUSIC;
+      sfx.src = TRACKS["1on1"].src();
       sfx.load();
     }).catch(() => {
       unlocked = false;
     });
   }
-  function music(at = 0) {
-    if (!sfx.src.endsWith(MUSIC)) sfx.src = MUSIC;
+  var sameSrc = (a, b) => a && b && (a === b || a.endsWith(b) || decodeURI(a).endsWith(b));
+  function ramp(to, ms, then) {
+    clearInterval(fadeTimer);
+    const from = sfx.volume;
+    const t0 = performance.now();
+    fadeTimer = setInterval(() => {
+      const p = Math.min(1, (performance.now() - t0) / ms);
+      sfx.volume = Math.max(0, Math.min(1, from + (to - from) * p));
+      if (p >= 1) {
+        clearInterval(fadeTimer);
+        then?.();
+      }
+    }, 30);
+  }
+  function music(kind, at = 0) {
+    const src = TRACKS[kind].src();
+    if (!src) return false;
+    clearInterval(fadeTimer);
+    if (!sameSrc(sfx.src, src)) sfx.src = src;
+    current = kind;
     sfx.currentTime = at;
     sfx.volume = 0.9;
     sfx.play().catch(() => {
     });
+    return true;
   }
-  function startCeremony() {
-    music(0);
+  function startCeremony(kind = "1on1") {
+    music(kind, 0);
   }
-  function sealSound() {
-    if (!ceremony) music(HIT - STAMP_HIT);
+  function stopMusic() {
+    if (sfx.paused) return;
+    ramp(0, 600, () => sfx.pause());
+    current = "";
+  }
+  function sealSound(alt = false) {
+    if (alt) {
+      setTimeout(() => {
+        cling.currentTime = 0;
+        cling.volume = 1;
+        cling.play().catch(() => {
+        });
+        if (current === "alt" && !sfx.paused) ramp(DUCK, 300);
+      }, STAMP_HIT * 1e3);
+      return;
+    }
+    if (!ceremony) music("1on1", HIT - STAMP_HIT);
   }
   for (const ev of ["pointerup", "touchend", "keydown"]) document.addEventListener(ev, unlock, { capture: true, passive: true });
-  var hasVideo = (card) => Boolean(card?.rarity === "S" && card.video);
+  var hasVideo = (card) => Boolean((card?.rarity === "S" || card?.alt) && card.video);
   function preloadVideo(card) {
     if (!hasVideo(card)) return;
     const v = getPlayer();
@@ -21795,19 +21898,21 @@ ${suffix}`;
       ceremony = true;
       await v.play().catch(() => {
       });
-      const playing = !sfx.paused && sfx.src.endsWith(MUSIC) && sfx.currentTime < INTRO + 1.5;
-      if (!playing) music(INTRO);
+      const kind = card.alt ? "alt" : "1on1";
+      const INTRO = TRACKS[kind].intro;
+      const playing = !sfx.paused && current === kind && sfx.currentTime < INTRO + 1.5;
+      if (!playing) music(kind, INTRO);
       else if (Math.abs(sfx.currentTime - INTRO) > 0.12) sfx.currentTime = INTRO;
       const t0 = performance.now();
       await Promise.race([ended, wait(VIDEO_LEN * 1e3)]);
-      if ((performance.now() - t0) / 1e3 < VIDEO_LEN - 0.1 && !sfx.paused) sfx.currentTime = INTRO + VIDEO_LEN;
+      if ((performance.now() - t0) / 1e3 < VIDEO_LEN - 0.1 && !sfx.paused && current === kind) sfx.currentTime = INTRO + VIDEO_LEN;
       if (done) return true;
       done = true;
       removeEventListener("resize", layout);
       v.pause();
       if (aborted) {
         ceremony = false;
-        sfx.pause();
+        stopMusic();
         wrap.remove();
         host2.classList.remove("vid-on");
         return false;
@@ -21835,9 +21940,9 @@ ${suffix}`;
   }
   function stopCardVideo(abort = false) {
     if (stopCurrent) stopCurrent(abort);
-    else if (abort) sfx.pause();
+    else if (abort) stopMusic();
   }
-  setVideoModule({ hasVideo, playCardVideo, stopCardVideo, sealSound });
+  setVideoModule({ hasVideo, playCardVideo, stopCardVideo, sealSound, startCeremony, stopMusic });
 
   // js/icons.js
   var I = {
@@ -22160,6 +22265,7 @@ ${suffix}`;
         lock = true;
         const old = stage.querySelector(".bx-card");
         if (old) {
+          stopMusic();
           old.classList.add("out");
           ov.querySelector(".bx-info").innerHTML = "";
           await wait2(260);
@@ -22177,7 +22283,16 @@ ${suffix}`;
         const c = S.byId[p.id];
         const r = c?.rarity;
         ov.querySelector(".bx-hint").textContent = `${seq[pos] + 1} / ${pulls.length}`;
-        if (SPECIAL[r]) {
+        if (c?.alt) {
+          ov.classList.add("fx-ALT", "intro");
+          preloadVideo(c);
+          startCeremony("alt");
+          ov.querySelector(".bx-fx").innerHTML = altFxHTML();
+          await wait2(ALT_INTRO);
+          if (done) return;
+          ov.classList.remove("intro");
+          ov.querySelector(".bx-fx").innerHTML = '<div class="afx-flash"></div>';
+        } else if (SPECIAL[r]) {
           ov.classList.add(`fx-${r}`, "intro");
           preloadVideo(c);
           if (r === "S") startCeremony();
@@ -22187,18 +22302,19 @@ ${suffix}`;
           ov.classList.remove("intro");
         }
         stage.insertAdjacentHTML("beforeend", `<button class="bx-card in r-${r}" data-id="${esc(p.id)}" aria-label="Carte suivante (appui long : voir en grand)">${cardHTML(c)}</button>`);
-        ov.querySelector(".bx-info").innerHTML = `<span class="rar-chip r-${r}">${RARITIES[r]?.label || ""}</span>${p.n > 1 ? `<span class="bx-new">\xD7${p.n}</span>` : ""}${p.new ? '<span class="bx-new">Nouvelle !</span>' : ""}
+        ov.querySelector(".bx-info").innerHTML = `<span class="rar-chip r-${r}">${RARITIES[r]?.label || ""}</span>${c?.alt ? '<span class="rar-chip r-ALT">Alt</span>' : ""}${p.n > 1 ? `<span class="bx-new">\xD7${p.n}</span>` : ""}${p.new ? '<span class="bx-new">Nouvelle !</span>' : ""}
         ${r === "S" ? '<div class="bx-unique">Exemplaire unique</div>' : ""}`;
         if (hasVideo(c)) {
           lock = false;
           await playCardVideo(c, stage.querySelector(".bx-card:last-child"));
           return;
         }
-        if (r === "S") stampSeal(stage.querySelector(".bx-card:last-child"));
-        await wait2(SPECIAL[r] ? 500 : 250);
+        if (r === "S" || c?.alt) stampSeal(stage.querySelector(".bx-card:last-child"));
+        await wait2(SPECIAL[r] || c?.alt ? 500 : 250);
         lock = false;
       }
       function summary() {
+        stopMusic();
         if (!done) refreshAchievements();
         done = true;
         ov.className = `bx done${pulls.length > 5 ? " many" : ""}`;
@@ -22255,6 +22371,7 @@ ${suffix}`;
           return;
         }
         if (d === "close" || d === "again") {
+          stopMusic();
           ov.remove();
           for (const ev of ["pointerup", "pointercancel"]) document.removeEventListener(ev, release);
           busy = false;
@@ -22312,6 +22429,13 @@ ${suffix}`;
   var wait2 = (ms) => new Promise((r) => {
     setTimeout(r, ms);
   });
+  var ALT_INTRO = 2574;
+  function altFxHTML() {
+    const minis = Array.from({ length: 22 }, (_, k) => `<i class="afx-m" style="--x:${(8 + Math.random() * 84).toFixed(1)}%;--y:${(8 + Math.random() * 84).toFixed(1)}%;--s:${(1.6 + Math.random() * 2.4).toFixed(1)}vmin;--w:${(k * 0.06).toFixed(2)}s">${STAR_SVG}</i>`).join("");
+    return `<div class="afx-bg"></div><div class="afx-rays"></div>${minis}
+    ${["0s", ".407s", "1.219s", "1.486s"].map((d) => `<div class="afx-ring" style="--d:${d}"></div>`).join("")}
+    <div class="afx-star">${STAR_SVG}</div>`;
+  }
   function fxHTML(r) {
     const sparks = (n3) => Array.from({ length: n3 }, () => `<i style="--x:${(Math.random() * 100).toFixed(1)}%;--d:${(Math.random() * 1.6).toFixed(2)}s;--s:${(0.5 + Math.random()).toFixed(2)}"></i>`).join("");
     if (r === "UR") return '<div class="fx-rays"></div><div class="fx-glow"></div>';
@@ -22379,7 +22503,11 @@ ${suffix}`;
         const have = owned.filter((c) => c.rarity === r).length;
         return all ? `<span class="rar-chip r-${r}">${RARITIES[r].label} ${have}/${all}</span>` : "";
       }).join("");
-      const list = owned.filter((c) => (!filter2.rarity || c.rarity === filter2.rarity) && (!filter2.type || c.type === filter2.type) && (!filter2.q || `${c.name} ${c.code} ${c.traits} ${c.effect}`.toLowerCase().includes(filter2.q))).sort((a, b) => RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity));
+      const list = owned.filter((c) => (!filter2.rarity || c.rarity === filter2.rarity) && (!filter2.type || c.type === filter2.type) && (!filter2.q || `${c.name} ${c.code} ${c.traits} ${c.effect}`.toLowerCase().includes(filter2.q))).sort((a, b) => {
+        const ka = a.alt && S.byId[a.base] || a;
+        const kb = b.alt && S.byId[b.base] || b;
+        return RARITY_ORDER.indexOf(kb.rarity) - RARITY_ORDER.indexOf(ka.rarity) || (ka.name || "").localeCompare(kb.name || "") || (ka.id < kb.id ? -1 : ka.id > kb.id ? 1 : 0) || (a.alt ? 1 : 0) - (b.alt ? 1 : 0);
+      });
       q(".cl-grid").innerHTML = list.map((c) => {
         const n3 = S.collection[c.id] || 0;
         const owner = c.rarity === "S" ? S.oneOfOne[c.id] : null;
@@ -22784,6 +22912,7 @@ ${suffix}`;
     <div class="ed-top">
     <form class="panel ed-form" autocomplete="off">
       <h2 id="ed-title">Nouvelle carte</h2>
+      <div class="ed-alt"></div>
       <div class="field"><label>Type</label>
         <div class="seg" id="ed-type">${Object.entries(TYPES).map(([k, v]) => `<button type="button" data-type="${k}">${v}</button>`).join("")}</div></div>
       <div class="grid2">
@@ -22984,7 +23113,7 @@ ${suffix}`;
         }
         const { videoLocal, ...plain } = cur;
         const c = { ...structuredClone(plain), colors: cur.colors.slice(0, maxColors()) };
-        if (c.rarity !== "S") {
+        if (c.rarity !== "S" && !c.alt) {
           delete c.video;
           delete c.vx;
         }
@@ -23072,6 +23201,25 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         img: val("ed-fimg").value
       };
       renderList();
+    });
+    r.querySelector(".ed-alt").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-alt]");
+      if (!b) return;
+      const act = b.dataset.alt;
+      if (act === "new") {
+        const base = S.byId[cur.id];
+        if (!base || base.alt) return;
+        cur = { ...structuredClone(base), id: uid(), alt: true, base: base.id, rarity: base.rarity === "S" ? "S" : "L" };
+        delete cur.video;
+        delete cur.vx;
+        delete cur.credit;
+        fill();
+        msg("Version Alt pr\xEAte : choisis son illustration, sa vid\xE9o et sa raret\xE9, puis enregistre.");
+      } else if (S.byId[act]) {
+        cur = structuredClone(S.byId[act]);
+        fill();
+        msg("");
+      }
     });
     val("ed-grid").addEventListener("click", (e) => {
       const id = e.target.closest("[data-id]")?.dataset.id;
@@ -23365,7 +23513,12 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     show2(".f-trigger", t !== "leader");
     fxEd?.render();
     fillLayout();
-    r.querySelector("#ed-title").textContent = S.byId[cur.id] ? `Modifier \xAB ${cur.name} \xBB` : "Nouvelle carte";
+    r.querySelector("#ed-title").textContent = S.byId[cur.id] ? `Modifier \xAB ${cur.name} \xBB${cur.alt ? " (Alt)" : ""}` : cur.alt ? `Nouvelle version Alt de \xAB ${cur.name} \xBB` : "Nouvelle carte";
+    const base = cur.alt && S.byId[cur.base];
+    const alts = !cur.alt && S.byId[cur.id] ? altsOf(cur.id) : [];
+    r.querySelector(".ed-alt").innerHTML = cur.alt ? `<p class="ed-alt-note"><b>\u2605 Version Alt</b> de \xAB ${esc(base?.name || "?")} \xBB. Le nom, le co\xFBt, la puissance et les effets viennent de la carte de base (les modifier ici n'a pas d'effet) : seules l'illustration, la vid\xE9o et la raret\xE9 sont propres \xE0 l'Alt.
+        ${base ? `<button type="button" class="btn small ghost" data-alt="${esc(base.id)}">Ouvrir la carte de base</button>` : ""}</p>` : S.byId[cur.id] ? `<div class="row-btns ed-alt-row"><button type="button" class="btn small" data-alt="new">\u2605 Cr\xE9er une version Alt</button>
+        ${alts.map((a) => `<button type="button" class="btn small ghost" data-alt="${esc(a.id)}">\u2605 Alt ${RARITIES[a.rarity]?.short || ""}</button>`).join("")}</div>` : "";
     preview();
   }
   var traitsOf = (c) => String(c?.traits || "").split("/").map((t) => t.trim()).filter(Boolean);
@@ -23499,7 +23652,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     const r = root();
     const box = r.querySelector(".f-video");
     if (!box) return;
-    box.hidden = cur.rarity !== "S";
+    box.hidden = cur.rarity !== "S" && !cur.alt;
     const has = Boolean(cur.videoLocal || cur.video);
     r.querySelector(".ed-vname").textContent = pendingVideo ? `${pendingVideo.name} (envoy\xE9e \xE0 l'enregistrement)` : has ? "Vid\xE9o enregistr\xE9e" : "Aucune vid\xE9o";
     r.querySelector("#ed-vtest").disabled = !has;
@@ -26530,6 +26683,17 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       <h3>Joueurs</h3>
       <div class="ad-players"></div>
     </section>
+    <section class="panel ad-music">
+      <h2>Musiques</h2>
+      <p class="muted small">Chanson jou\xE9e quand on tire une carte <b>Alt</b> : elle d\xE9marre avec l'animation de l'\xE9toile, la carte appara\xEEt 2,57 s plus tard (sur le drop), puis la chanson baisse quand l'\xE9toile se colle et continue tant qu'on reste sur la carte. Fichier MP3, stock\xE9 en priv\xE9 (seuls les joueurs connect\xE9s l'entendent).</p>
+      <div class="row-btns">
+        <label class="btn"><input type="file" class="mu-file" accept="audio/mpeg,audio/*" hidden>Envoyer la chanson des Alt\u2026</label>
+        <button type="button" class="btn ghost mu-play">\xC9couter</button>
+        <button type="button" class="btn danger mu-del">Retirer</button>
+        <span class="muted small mu-name"></span>
+      </div>
+      <p class="msg mu-msg" role="status"></p>
+    </section>
     <div class="ad-starters"></div>
   </div>`;
     const q = (s) => el.querySelector(s);
@@ -26537,6 +26701,59 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       q(".ad-msg").textContent = t;
       q(".ad-msg").classList.toggle("err", err);
     };
+    const mmsg = (t, err = false) => {
+      q(".mu-msg").textContent = t;
+      q(".mu-msg").classList.toggle("err", err);
+    };
+    let preview2 = null;
+    const renderMusic = () => {
+      const m = S.music?.alt;
+      q(".mu-name").textContent = m ? "Une chanson est en place." : "Aucune chanson pour l'instant.";
+      q(".mu-play").disabled = !m;
+      q(".mu-del").disabled = !m;
+    };
+    renderMusic();
+    q(".mu-file").addEventListener("change", async (e) => {
+      const f = e.target.files[0];
+      e.target.value = "";
+      if (!f) return;
+      if (f.size > 25e6) {
+        mmsg("Fichier trop lourd : 25 Mo maximum.", true);
+        return;
+      }
+      mmsg("Envoi\u2026");
+      try {
+        await uploadMusic("alt", f);
+        mmsg("Chanson des Alt enregistr\xE9e.");
+      } catch (err) {
+        mmsg(err.message, true);
+      }
+      renderMusic();
+    });
+    q(".mu-play").addEventListener("click", () => {
+      if (preview2 && !preview2.paused) {
+        preview2.pause();
+        q(".mu-play").textContent = "\xC9couter";
+        return;
+      }
+      preview2 = new Audio(S.music?.alt?.url);
+      preview2.play().catch(() => {
+      });
+      q(".mu-play").textContent = "Stop";
+      preview2.onended = () => {
+        q(".mu-play").textContent = "\xC9couter";
+      };
+    });
+    q(".mu-del").addEventListener("click", async () => {
+      if (!confirm("Retirer la chanson des Alt ?")) return;
+      try {
+        await deleteMusic("alt");
+        mmsg("Chanson retir\xE9e.");
+      } catch (err) {
+        mmsg(err.message, true);
+      }
+      renderMusic();
+    });
     let players = [];
     async function refresh() {
       try {

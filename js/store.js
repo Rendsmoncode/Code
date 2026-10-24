@@ -62,10 +62,20 @@ export async function currentUser() {
 // ---------- chargement ----------
 const fromRow = (r) => ({ ...r.data, id: r.id, rarity: r.rarity, inBoosters: r.in_boosters });
 
+// Une carte Alt garde son illustration, sa vidéo et sa rareté, et reprend tout le reste de sa carte de base
+// (nom, numéro, coût, puissance, effets…) : modifier la base modifie aussi l'Alt.
+const ALT_OWN = ['id', 'rarity', 'inBoosters', 'image', 'art', 'box', 'ink', 'video', 'vx', 'alt', 'base', 'credit'];
 function reindex() {
   S.cards.sort((a, b) => (a.code || '').localeCompare(b.code || '') || (a.name || '').localeCompare(b.name || ''));
   S.byId = Object.fromEntries(S.cards.map((c) => [c.id, c]));
+  for (const c of S.cards) {
+    const base = c.alt && S.byId[c.base];
+    if (!base || base.alt) continue;
+    for (const [k, v] of Object.entries(base)) if (!ALT_OWN.includes(k)) c[k] = structuredClone(v);
+  }
 }
+// Les versions Alt d'une carte.
+export const altsOf = (id) => S.cards.filter((c) => c.alt && c.base === id);
 
 // Toutes les familles (types) utilisées sur les cartes du jeu, triées.
 export function allTraits() {
@@ -120,6 +130,7 @@ export async function load() {
   // Tolérant : la fonction n'existe pas tant que le script SQL n'a pas été relancé.
   S.oneOfOne = Object.fromEntries((owners.error ? [] : owners.data || []).map((r) => [r.card_id, r.username]));
   await signImages(S.cards.flatMap((c) => [oldImagePath(c.image), oldImagePath(c.video)]));
+  await loadMusic().catch(() => {});
   reindex();
   emit();
 }
@@ -142,6 +153,33 @@ export async function refreshCollection() {
 }
 
 // ---------- cartes (admins) ----------
+// ---------- musiques des révélations (Admin → Musiques) ----------
+// Fichiers privés du stockage : sons/<type>-<date>.mp3 (le plus récent compte). type : alt.
+S.music = {};
+export async function loadMusic() {
+  const { data, error } = await sb.storage.from('cards').list('sons', { limit: 100, sortBy: { column: 'name', order: 'desc' } });
+  if (error) return;
+  for (const kind of ['alt']) {
+    const f = (data || []).find((x) => x.name.startsWith(`${kind}-`) && x.name.endsWith('.mp3'));
+    if (!f) { delete S.music[kind]; continue; }
+    const path = `sons/${f.name}`;
+    await signImages([path]);
+    S.music[kind] = { path, name: f.name, url: signed[path]?.url };
+  }
+}
+export async function uploadMusic(kind, file) {
+  const path = `sons/${kind}-${Date.now()}.mp3`;
+  check(await sb.storage.from('cards').upload(path, file, { contentType: 'audio/mpeg', cacheControl: '31536000' }));
+  const old = S.music[kind]?.path;
+  if (old) await sb.storage.from('cards').remove([old]);
+  await loadMusic();
+}
+export async function deleteMusic(kind) {
+  const old = S.music[kind]?.path;
+  if (old) check(await sb.storage.from('cards').remove([old]));
+  await loadMusic();
+}
+
 // Vidéo d'une 1on1 (fichier MP4 choisi dans l'onglet Cartes). Renvoie son adresse.
 export async function uploadVideo(cardId, file) {
   const path = `${cardId}-video-${Date.now()}.mp4`;
@@ -262,6 +300,7 @@ export async function openBoosters(n = 1) {
   if (pulls.some((p) => !S.byId[p.id])) {
     S.cards = check(await sb.from('cards').select('*')).map(fromRow);
     await signImages(S.cards.flatMap((c) => [oldImagePath(c.image), oldImagePath(c.video)]));
+  await loadMusic().catch(() => {});
     reindex();
   }
   await refreshCollection();

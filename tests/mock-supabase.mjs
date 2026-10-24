@@ -34,7 +34,9 @@ export function makeMock() {
     if (path === '/auth/v1/logout') return route.fulfill({ status: 204 });
     if (path === '/auth/v1/user') return json(route, st.users[uid].u);
     if (path === '/storage/v1/object/sign/cards') return json(route, (body.paths || []).map((p) => ({ path: p, signedURL: `/object/sign/cards/${p}?token=t`, signedUrl: `https://mock.supabase.co/storage/v1/object/sign/cards/${p}?token=t`, error: null })));
-    if (path.startsWith('/storage/v1/object/cards/')) return json(route, { Key: 'cards/' + path.split('/').pop(), Id: 'x' });
+    if (path === '/storage/v1/object/list/cards') return json(route, (st.files || []).filter((f) => f.startsWith(`${body.prefix}/`)).map((f) => ({ name: f.slice(body.prefix.length + 1), id: f })).sort((a, b) => (a.name < b.name ? 1 : -1)));
+    if (path === '/storage/v1/object/cards' && route.request().method() === 'DELETE') { st.files = (st.files || []).filter((f) => !(body.prefixes || []).includes(f)); return json(route, []); }
+    if (path.startsWith('/storage/v1/object/cards/')) { const f = decodeURIComponent(path.slice('/storage/v1/object/cards/'.length)); (st.files ||= []).push(f); return json(route, { Key: 'cards/' + f, Id: 'x' }); }
     if (path.startsWith('/rest/v1/rpc/')) {
       const fn = path.split('/').pop();
       if (fn === 'booster_status') return json(route, status(p));

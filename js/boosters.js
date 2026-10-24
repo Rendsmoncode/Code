@@ -1,8 +1,8 @@
 // Onglets « Boosters » (ouverture) et « Collection ».
 import { S, openBoosters, refreshStatus, refreshCollection, takeReveals, onChange } from './store.js';
-import { RARITIES, RARITY_ORDER, TYPES, esc, cardHTML, showCardBig, stampSeal } from './cards.js';
+import { RARITIES, RARITY_ORDER, TYPES, esc, cardHTML, showCardBig, stampSeal, STAR_SVG } from './cards.js';
 import { logoSVG } from './logo.js';
-import { hasVideo, preloadVideo, playCardVideo, stopCardVideo, startCeremony } from './video.js';
+import { hasVideo, preloadVideo, playCardVideo, stopCardVideo, startCeremony, stopMusic } from './video.js';
 import { refreshAchievements } from './achievements.js';
 
 const RATES = [
@@ -183,7 +183,7 @@ export function initBoosters() {
       if (lock) return;
       lock = true;
       const old = stage.querySelector('.bx-card');
-      if (old) { old.classList.add('out'); ov.querySelector('.bx-info').innerHTML = ''; await wait(260); old.remove(); }
+      if (old) { stopMusic(); old.classList.add('out'); ov.querySelector('.bx-info').innerHTML = ''; await wait(260); old.remove(); }
       if (done) return; // « Tout révéler » pendant l'animation
       pos++;
       ov.className = 'bx';
@@ -193,7 +193,17 @@ export function initBoosters() {
       const c = S.byId[p.id];
       const r = c?.rarity;
       ov.querySelector('.bx-hint').textContent = `${seq[pos] + 1} / ${pulls.length}`;
-      if (SPECIAL[r]) {
+      if (c?.alt) {
+        // Alt : l'étoile s'allume et grossit sur l'annonce de la chanson, la carte apparaît sur le drop.
+        ov.classList.add('fx-ALT', 'intro');
+        preloadVideo(c);
+        startCeremony('alt');
+        ov.querySelector('.bx-fx').innerHTML = altFxHTML();
+        await wait(ALT_INTRO);
+        if (done) return;
+        ov.classList.remove('intro');
+        ov.querySelector('.bx-fx').innerHTML = '<div class="afx-flash"></div>';
+      } else if (SPECIAL[r]) {
         // Animation d'arrivée propre à la rareté, puis la carte apparaît avec son effet.
         ov.classList.add(`fx-${r}`, 'intro');
         preloadVideo(c);
@@ -204,7 +214,7 @@ export function initBoosters() {
         ov.classList.remove('intro');
       }
       stage.insertAdjacentHTML('beforeend', `<button class="bx-card in r-${r}" data-id="${esc(p.id)}" aria-label="Carte suivante (appui long : voir en grand)">${cardHTML(c)}</button>`);
-      ov.querySelector('.bx-info').innerHTML = `<span class="rar-chip r-${r}">${RARITIES[r]?.label || ''}</span>${p.n > 1 ? `<span class="bx-new">×${p.n}</span>` : ''}${p.new ? '<span class="bx-new">Nouvelle !</span>' : ''}
+      ov.querySelector('.bx-info').innerHTML = `<span class="rar-chip r-${r}">${RARITIES[r]?.label || ''}</span>${c?.alt ? '<span class="rar-chip r-ALT">Alt</span>' : ''}${p.n > 1 ? `<span class="bx-new">×${p.n}</span>` : ''}${p.new ? '<span class="bx-new">Nouvelle !</span>' : ''}
         ${r === 'S' ? '<div class="bx-unique">Exemplaire unique</div>' : ''}`;
       if (hasVideo(c)) {
         // 1on1 avec vidéo : elle se lance aussitôt, les effets reviennent quand elle se fige
@@ -212,13 +222,14 @@ export function initBoosters() {
         await playCardVideo(c, stage.querySelector('.bx-card:last-child'));
         return;
       }
-      if (r === 'S') stampSeal(stage.querySelector('.bx-card:last-child'));
-      await wait(SPECIAL[r] ? 500 : 250);
+      if (r === 'S' || c?.alt) stampSeal(stage.querySelector('.bx-card:last-child'));
+      await wait(SPECIAL[r] || c?.alt ? 500 : 250);
       lock = false;
     }
 
     // Récapitulatif : les doublons sont regroupés (×2, ×3…), dans l'ordre des raretés.
     function summary() {
+      stopMusic();
       if (!done) refreshAchievements(); // après les révélations, pour ne rien gâcher
       done = true;
       ov.className = `bx done${pulls.length > 5 ? ' many' : ''}`;
@@ -273,6 +284,7 @@ export function initBoosters() {
         return;
       }
       if (d === 'close' || d === 'again') {
+        stopMusic();
         ov.remove();
         for (const ev of ['pointerup', 'pointercancel']) document.removeEventListener(ev, release);
         busy = false;
@@ -310,6 +322,15 @@ export function initBoosters() {
 const wait = (ms) => new Promise((r) => { setTimeout(r, ms); });
 
 // Décor des animations : rayons, éclats, onde arc-en-ciel.
+// Annonce d'une Alt (2,574 s) : coups de l'étoile à 0 ; 0,407 ; 1,219 et 1,486 s, calés sur la chanson.
+const ALT_INTRO = 2574;
+function altFxHTML() {
+  const minis = Array.from({ length: 22 }, (_, k) => `<i class="afx-m" style="--x:${(8 + Math.random() * 84).toFixed(1)}%;--y:${(8 + Math.random() * 84).toFixed(1)}%;--s:${(1.6 + Math.random() * 2.4).toFixed(1)}vmin;--w:${(k * 0.06).toFixed(2)}s">${STAR_SVG}</i>`).join('');
+  return `<div class="afx-bg"></div><div class="afx-rays"></div>${minis}
+    ${['0s', '.407s', '1.219s', '1.486s'].map((d) => `<div class="afx-ring" style="--d:${d}"></div>`).join('')}
+    <div class="afx-star">${STAR_SVG}</div>`;
+}
+
 function fxHTML(r) {
   const sparks = (n) => Array.from({ length: n }, () => `<i style="--x:${(Math.random() * 100).toFixed(1)}%;--d:${(Math.random() * 1.6).toFixed(2)}s;--s:${(0.5 + Math.random()).toFixed(2)}"></i>`).join('');
   if (r === 'UR') return '<div class="fx-rays"></div><div class="fx-glow"></div>';
@@ -374,7 +395,11 @@ export function initCollection() {
     const list = owned.filter((c) => (!filter.rarity || c.rarity === filter.rarity)
       && (!filter.type || c.type === filter.type)
       && (!filter.q || `${c.name} ${c.code} ${c.traits} ${c.effect}`.toLowerCase().includes(filter.q)))
-      .sort((a, b) => RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity));
+      // une Alt est rangée juste après sa carte de base
+      .sort((a, b) => {
+        const ka = (a.alt && S.byId[a.base]) || a; const kb = (b.alt && S.byId[b.base]) || b;
+        return RARITY_ORDER.indexOf(kb.rarity) - RARITY_ORDER.indexOf(ka.rarity) || (ka.name || '').localeCompare(kb.name || '') || (ka.id < kb.id ? -1 : ka.id > kb.id ? 1 : 0) || (a.alt ? 1 : 0) - (b.alt ? 1 : 0);
+      });
     q('.cl-grid').innerHTML = list.map((c) => {
       const n = S.collection[c.id] || 0;
       const owner = c.rarity === 'S' ? S.oneOfOne[c.id] : null;

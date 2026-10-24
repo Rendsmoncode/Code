@@ -1,9 +1,10 @@
-// Vidéo des cartes 1on1 : elle se lance par-dessus la carte (et peut en dépasser), les effets de la carte
+// Vidéo des cartes 1on1 et Alt : elle se lance par-dessus la carte (et peut en dépasser), les effets de la carte
 // s'effacent pendant la lecture, puis la vidéo se fige sur sa dernière image et se fond dans l'illustration.
 //
 // card.video : adresse de la vidéo ; card.vx : position du bord gauche de la carte dans la vidéo (0 à 1,
 // la carte occupe toute la hauteur de la vidéo).
 import { resolveMedia, setVideoModule, stampSeal } from './cards.js';
+import { S } from './store.js';
 
 // Un seul lecteur vidéo pour tout le site (muet : il se lance sans toucher).
 const SILENCE = 'data:audio/wav;base64,UklGRpYDAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YXIDAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='; // 10 ms de silence
@@ -18,38 +19,78 @@ function getPlayer() {
   player.preload = 'auto';
   return player;
 }
-// Musique de cérémonie des 1on1 (sons/1on1.mp3, composée pour le jeu) : elle accompagne toute la séquence
-// et son « bing » tombe quand le sceau s'écrase. Lecteur débloqué au premier toucher (exigé par iOS).
-const MUSIC = 'sons/1on1.mp3';
-const INTRO = 2.6; // l'animation qui annonce la 1on1 (la musique commence avec elle)
-export const VIDEO_LEN = 6.8; // durée commune de toutes les vidéos 1on1 (image figée comprise)
+// Musiques des révélations, lues par un seul lecteur débloqué au premier toucher (exigé par iOS) :
+// - 1on1 : sons/1on1.mp3 (composée pour le jeu), son « bing » tombe quand le sceau s'écrase ;
+// - Alt : la chanson envoyée dans Admin → Musiques ; quand l'étoile se colle, le cling retentit
+//   et la chanson baisse puis continue tant qu'on reste sur la carte.
+const TRACKS = {
+  '1on1': { src: () => 'sons/1on1.mp3', intro: 2.6 },
+  alt: { src: () => S.music?.alt?.url || '', intro: 2.574 },
+};
+export const VIDEO_LEN = 6.8; // durée commune de toutes les vidéos (image figée comprise)
 const SHRINK = 0.75; // la vidéo rétrécit jusqu'à la carte
-const STAMP_HIT = 0.64; // le sceau touche la carte 0,64 s après le début de son animation
-const HIT = INTRO + VIDEO_LEN + SHRINK + STAMP_HIT; // 10,79 s : le « bing » de la musique
+const STAMP_HIT = 0.64; // le sceau / l'étoile touche la carte 0,64 s après le début de son animation
+const HIT = TRACKS['1on1'].intro + VIDEO_LEN + SHRINK + STAMP_HIT; // 10,79 s : le « bing » de la musique 1on1
+const DUCK = 0.3; // volume de la chanson Alt une fois l'étoile collée
 const sfx = new Audio();
 sfx.preload = 'auto';
+const cling = new Audio('sons/cling.mp3');
+cling.preload = 'auto';
 let ceremony = false; // une séquence vidéo + musique est en cours
+let current = ''; // musique en cours : '1on1' ou 'alt'
+let fadeTimer = null;
 function unlock() {
   if (unlocked || !sfx.paused) return;
   unlocked = true;
   sfx.src = SILENCE;
-  sfx.play().then(() => { sfx.pause(); sfx.src = MUSIC; sfx.load(); }).catch(() => { unlocked = false; });
+  cling.muted = true;
+  cling.play().then(() => { cling.pause(); cling.muted = false; cling.currentTime = 0; }).catch(() => { cling.muted = false; });
+  sfx.play().then(() => { sfx.pause(); sfx.src = TRACKS['1on1'].src(); sfx.load(); }).catch(() => { unlocked = false; });
 }
-function music(at = 0) {
-  if (!sfx.src.endsWith(MUSIC)) sfx.src = MUSIC;
+const sameSrc = (a, b) => a && b && (a === b || a.endsWith(b) || decodeURI(a).endsWith(b));
+function ramp(to, ms, then) {
+  clearInterval(fadeTimer);
+  const from = sfx.volume; const t0 = performance.now();
+  fadeTimer = setInterval(() => {
+    const p = Math.min(1, (performance.now() - t0) / ms);
+    sfx.volume = Math.max(0, Math.min(1, from + (to - from) * p));
+    if (p >= 1) { clearInterval(fadeTimer); then?.(); }
+  }, 30);
+}
+function music(kind, at = 0) {
+  const src = TRACKS[kind].src();
+  if (!src) return false;
+  clearInterval(fadeTimer);
+  if (!sameSrc(sfx.src, src)) sfx.src = src;
+  current = kind;
   sfx.currentTime = at;
   sfx.volume = 0.9;
   sfx.play().catch(() => {});
+  return true;
 }
-// Début de l'animation qui annonce une 1on1 : la musique commence.
-export function startCeremony() { music(0); }
-// Le sceau commence à s'écraser : sans séquence vidéo en cours, on lance la fin de la musique pour que le « bing » tombe pile.
-export function sealSound() {
-  if (!ceremony) music(HIT - STAMP_HIT);
+// Début de l'animation qui annonce une 1on1 ou une Alt : la musique commence.
+export function startCeremony(kind = '1on1') { music(kind, 0); }
+// La musique s'arrête en fondu (carte suivante, fermeture).
+export function stopMusic() {
+  if (sfx.paused) return;
+  ramp(0, 600, () => sfx.pause());
+  current = '';
+}
+// Le sceau ou l'étoile commence à s'écraser. 1on1 : sans séquence en cours, on lance la fin de la musique pour
+// que le « bing » tombe pile. Alt : le cling à l'impact, et la chanson (si elle joue) baisse puis continue.
+export function sealSound(alt = false) {
+  if (alt) {
+    setTimeout(() => {
+      cling.currentTime = 0; cling.volume = 1; cling.play().catch(() => {});
+      if (current === 'alt' && !sfx.paused) ramp(DUCK, 300);
+    }, STAMP_HIT * 1000);
+    return;
+  }
+  if (!ceremony) music('1on1', HIT - STAMP_HIT);
 }
 for (const ev of ['pointerup', 'touchend', 'keydown']) document.addEventListener(ev, unlock, { capture: true, passive: true });
 
-export const hasVideo = (card) => Boolean(card?.rarity === 'S' && card.video);
+export const hasVideo = (card) => Boolean((card?.rarity === 'S' || card?.alt) && card.video);
 
 // Précharge la vidéo (au début de l'animation 1on1, pour qu'elle démarre sans attendre).
 export function preloadVideo(card) {
@@ -119,23 +160,24 @@ export function playCardVideo(card, host) {
     layout();
     addEventListener('resize', layout);
     v.currentTime = 0;
-    v.muted = true; // la vidéo est muette : c'est la musique des 1on1 qui l'accompagne
+    v.muted = true; // la vidéo est muette : c'est la musique de la rareté qui l'accompagne
     ceremony = true;
     await v.play().catch(() => {});
-    // la vidéo démarre à la fin de l'annonce (2,6 s de musique) : on recale la musique si besoin
-    const playing = !sfx.paused && sfx.src.endsWith(MUSIC) && sfx.currentTime < INTRO + 1.5;
-    if (!playing) music(INTRO);
+    // la vidéo démarre à la fin de l'annonce : on recale la musique si besoin
+    const kind = card.alt ? 'alt' : '1on1'; const INTRO = TRACKS[kind].intro;
+    const playing = !sfx.paused && current === kind && sfx.currentTime < INTRO + 1.5;
+    if (!playing) music(kind, INTRO);
     else if (Math.abs(sfx.currentTime - INTRO) > 0.12) sfx.currentTime = INTRO;
     const t0 = performance.now();
     // toutes les vidéos durent VIDEO_LEN : au-delà on coupe, en deçà l'image reste figée
     await Promise.race([ended, wait(VIDEO_LEN * 1000)]);
     // toucher pour passer : la musique saute au même moment, pour que le « bing » reste calé sur le sceau
-    if ((performance.now() - t0) / 1000 < VIDEO_LEN - 0.1 && !sfx.paused) sfx.currentTime = INTRO + VIDEO_LEN;
+    if ((performance.now() - t0) / 1000 < VIDEO_LEN - 0.1 && !sfx.paused && current === kind) sfx.currentTime = INTRO + VIDEO_LEN;
     if (done) return true;
     done = true;
     removeEventListener('resize', layout);
     v.pause();
-    if (aborted) { ceremony = false; sfx.pause(); wrap.remove(); host.classList.remove('vid-on'); return false; }
+    if (aborted) { ceremony = false; stopMusic(); wrap.remove(); host.classList.remove('vid-on'); return false; }
     if (full) {
       // la vidéo figée rétrécit jusqu'à la carte ; ce qui dépasse s'efface
       const z = layout();
@@ -149,7 +191,7 @@ export function playCardVideo(card, host) {
     // fondu : la carte (et ses effets) revient, la vidéo figée s'efface
     host.classList.add('vid-end');
     wrap.classList.add('out');
-    stampSeal(host); // le sceau 1ON1 vient se plaquer sur la carte, sur le « bing »
+    stampSeal(host); // le sceau 1ON1 ou l'étoile Alt vient se plaquer sur la carte, sur le « bing » / cling
     await wait(650);
     wrap.remove();
     host.classList.remove('vid-on', 'vid-end');
@@ -160,7 +202,7 @@ export function playCardVideo(card, host) {
 // abort : la vue est fermée, on arrête tout (vidéo et musique) ; sinon on passe directement à la fin.
 export function stopCardVideo(abort = false) {
   if (stopCurrent) stopCurrent(abort);
-  else if (abort) sfx.pause();
+  else if (abort) stopMusic();
 }
 
-setVideoModule({ hasVideo, playCardVideo, stopCardVideo, sealSound });
+setVideoModule({ hasVideo, playCardVideo, stopCardVideo, sealSound, startCeremony, stopMusic });

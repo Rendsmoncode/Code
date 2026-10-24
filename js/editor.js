@@ -1,5 +1,5 @@
 // Onglet « Cartes » : création et édition des cartes de la collection.
-import { S, saveCard, saveCards, deleteCard, onChange, uploadVideo } from './store.js';
+import { S, saveCard, saveCards, deleteCard, onChange, uploadVideo, altsOf } from './store.js';
 import { playCardVideo } from './video.js';
 import {
   COLORS, TYPES, RARITIES, ATTRIBUTES, attributesOf, KEYWORDS, esc, uid, newCard, cardHTML, resizeImage, download, readJSONFile,
@@ -20,6 +20,7 @@ export function initEditor() {
     <div class="ed-top">
     <form class="panel ed-form" autocomplete="off">
       <h2 id="ed-title">Nouvelle carte</h2>
+      <div class="ed-alt"></div>
       <div class="field"><label>Type</label>
         <div class="seg" id="ed-type">${Object.entries(TYPES).map(([k, v]) =>
           `<button type="button" data-type="${k}">${v}</button>`).join('')}</div></div>
@@ -196,7 +197,7 @@ export function initEditor() {
       if (pendingVideo) { msg('Envoi de la vidéo…'); cur.video = await uploadVideo(cur.id, pendingVideo); pendingVideo = null; }
       const { videoLocal, ...plain } = cur;
       const c = { ...structuredClone(plain), colors: cur.colors.slice(0, maxColors()) };
-      if (c.rarity !== 'S') { delete c.video; delete c.vx; }
+      if (c.rarity !== 'S' && !c.alt) { delete c.video; delete c.vx; }
       msg('Enregistrement…');
       await saveCard(c);
       cur.image = c.image;
@@ -254,6 +255,20 @@ export function initEditor() {
       trait: val('ed-ftrait').value, img: val('ed-fimg').value,
     };
     renderList();
+  });
+  // Version Alt : même carte (nom, coût, effets… repris de la base), autre illustration, autre rareté.
+  r.querySelector('.ed-alt').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-alt]');
+    if (!b) return;
+    const act = b.dataset.alt;
+    if (act === 'new') {
+      const base = S.byId[cur.id];
+      if (!base || base.alt) return;
+      cur = { ...structuredClone(base), id: uid(), alt: true, base: base.id, rarity: base.rarity === 'S' ? 'S' : 'L' };
+      delete cur.video; delete cur.vx; delete cur.credit;
+      fill();
+      msg('Version Alt prête : choisis son illustration, sa vidéo et sa rareté, puis enregistre.');
+    } else if (S.byId[act]) { cur = structuredClone(S.byId[act]); fill(); msg(''); }
   });
   val('ed-grid').addEventListener('click', (e) => {
     const id = e.target.closest('[data-id]')?.dataset.id;
@@ -504,7 +519,14 @@ function fill() {
   show('.f-trigger', t !== 'leader');
   fxEd?.render();
   fillLayout();
-  r.querySelector('#ed-title').textContent = S.byId[cur.id] ? `Modifier « ${cur.name} »` : 'Nouvelle carte';
+  r.querySelector('#ed-title').textContent = S.byId[cur.id] ? `Modifier « ${cur.name} »${cur.alt ? ' (Alt)' : ''}` : cur.alt ? `Nouvelle version Alt de « ${cur.name} »` : 'Nouvelle carte';
+  const base = cur.alt && S.byId[cur.base];
+  const alts = !cur.alt && S.byId[cur.id] ? altsOf(cur.id) : [];
+  r.querySelector('.ed-alt').innerHTML = cur.alt
+    ? `<p class="ed-alt-note"><b>★ Version Alt</b> de « ${esc(base?.name || '?')} ». Le nom, le coût, la puissance et les effets viennent de la carte de base (les modifier ici n'a pas d'effet) : seules l'illustration, la vidéo et la rareté sont propres à l'Alt.
+        ${base ? `<button type="button" class="btn small ghost" data-alt="${esc(base.id)}">Ouvrir la carte de base</button>` : ''}</p>`
+    : S.byId[cur.id] ? `<div class="row-btns ed-alt-row"><button type="button" class="btn small" data-alt="new">★ Créer une version Alt</button>
+        ${alts.map((a) => `<button type="button" class="btn small ghost" data-alt="${esc(a.id)}">★ Alt ${RARITIES[a.rarity]?.short || ''}</button>`).join('')}</div>` : '';
   preview();
 }
 
@@ -632,7 +654,7 @@ function fillVideo() {
   const r = root();
   const box = r.querySelector('.f-video');
   if (!box) return;
-  box.hidden = cur.rarity !== 'S';
+  box.hidden = cur.rarity !== 'S' && !cur.alt;
   const has = Boolean(cur.videoLocal || cur.video);
   r.querySelector('.ed-vname').textContent = pendingVideo ? `${pendingVideo.name} (envoyée à l'enregistrement)` : has ? 'Vidéo enregistrée' : 'Aucune vidéo';
   r.querySelector('#ed-vtest').disabled = !has;

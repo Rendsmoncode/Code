@@ -1,7 +1,7 @@
 // Onglet « Admin » : invitations, distribution de boosters, rôles et decks préconstruits.
 import {
   S, isOwner, listPlayers, giveBoosters, setRole, validateDeck, onChange,
-  listInvites, createInvite, deleteInvite, inviteLink,
+  listInvites, createInvite, deleteInvite, inviteLink, uploadMusic, deleteMusic,
 } from './store.js';
 import { esc } from './cards.js';
 import { createDeckBuilder } from './decks.js';
@@ -36,10 +36,48 @@ export function initAdmin() {
       <h3>Joueurs</h3>
       <div class="ad-players"></div>
     </section>
+    <section class="panel ad-music">
+      <h2>Musiques</h2>
+      <p class="muted small">Chanson jouée quand on tire une carte <b>Alt</b> : elle démarre avec l'animation de l'étoile, la carte apparaît 2,57 s plus tard (sur le drop), puis la chanson baisse quand l'étoile se colle et continue tant qu'on reste sur la carte. Fichier MP3, stocké en privé (seuls les joueurs connectés l'entendent).</p>
+      <div class="row-btns">
+        <label class="btn"><input type="file" class="mu-file" accept="audio/mpeg,audio/*" hidden>Envoyer la chanson des Alt…</label>
+        <button type="button" class="btn ghost mu-play">Écouter</button>
+        <button type="button" class="btn danger mu-del">Retirer</button>
+        <span class="muted small mu-name"></span>
+      </div>
+      <p class="msg mu-msg" role="status"></p>
+    </section>
     <div class="ad-starters"></div>
   </div>`;
   const q = (s) => el.querySelector(s);
   const msg = (t, err = false) => { q('.ad-msg').textContent = t; q('.ad-msg').classList.toggle('err', err); };
+  // ---------- musiques ----------
+  const mmsg = (t, err = false) => { q('.mu-msg').textContent = t; q('.mu-msg').classList.toggle('err', err); };
+  let preview = null;
+  const renderMusic = () => {
+    const m = S.music?.alt;
+    q('.mu-name').textContent = m ? 'Une chanson est en place.' : 'Aucune chanson pour l\'instant.';
+    q('.mu-play').disabled = !m; q('.mu-del').disabled = !m;
+  };
+  renderMusic();
+  q('.mu-file').addEventListener('change', async (e) => {
+    const f = e.target.files[0]; e.target.value = '';
+    if (!f) return;
+    if (f.size > 25e6) { mmsg('Fichier trop lourd : 25 Mo maximum.', true); return; }
+    mmsg('Envoi…');
+    try { await uploadMusic('alt', f); mmsg('Chanson des Alt enregistrée.'); } catch (err) { mmsg(err.message, true); }
+    renderMusic();
+  });
+  q('.mu-play').addEventListener('click', () => {
+    if (preview && !preview.paused) { preview.pause(); q('.mu-play').textContent = 'Écouter'; return; }
+    preview = new Audio(S.music?.alt?.url); preview.play().catch(() => {}); q('.mu-play').textContent = 'Stop';
+    preview.onended = () => { q('.mu-play').textContent = 'Écouter'; };
+  });
+  q('.mu-del').addEventListener('click', async () => {
+    if (!confirm('Retirer la chanson des Alt ?')) return;
+    try { await deleteMusic('alt'); mmsg('Chanson retirée.'); } catch (err) { mmsg(err.message, true); }
+    renderMusic();
+  });
   let players = [];
 
   async function refresh() {

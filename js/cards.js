@@ -131,7 +131,8 @@ export function cardHTML(card, o = {}) {
   const boxVars = bx ? `;--info-l:${bx.l}cqw;--info-r:${100 - bx.l - bx.w}cqw;--info-b:${bx.b * 1.397}cqw;--info-fs:${bx.fs || 1}` : '';
   const vars = `--c1:${hex[0]};--c2:${c2};--c1l:${shade(hex[0], 0.45)};--c1d:${shade(hex[0], -0.55)};--c1k:${shade(hex[0], -0.85)};--c2d:${shade(c2, -0.55)}${boxVars}`;
   const ink = card.ink === 'dark' ? ' ink-dark' : '';
-  return `<div class="card t-${t} r-${r}${ink} ${o.cls || ''}" style="${vars}" ${o.attrs || ''}>
+  const alt = card.alt ? ' alt' : '';
+  return `<div class="card t-${t} r-${r}${ink}${alt} ${o.cls || ''}" style="${vars}" ${o.attrs || ''}>
     <div class="frame">
       <div class="art${card.image ? '' : ' empty'}">${artImg}</div>
       ${cost}${pow}${ctr}${attr}
@@ -146,7 +147,25 @@ export function cardHTML(card, o = {}) {
       <div class="foil"></div>
     </div>
     ${r === 'S' ? '<div class="seal" aria-hidden="true">1<small>ON</small>1</div>' : ''}
+    ${card.alt ? altHTML() : ''}
   </div>`;
+}
+
+// ---------- cartes Alt : la grande étoile en haut à droite et les mini étoiles qui scintillent ----------
+export const STAR_SVG = '<svg viewBox="0 0 100 100" aria-hidden="true"><path d="M50 8 C53 38 62 47 92 50 C62 53 53 62 50 92 C47 62 38 53 8 50 C38 47 47 38 50 8 Z" fill="currentColor"/></svg>';
+const MINI = [[12, 18, 3.4], [30, 8, 2.8], [84, 34, 3.2], [70, 60, 2.8], [18, 52, 3.2], [48, 26, 2.6], [90, 70, 3.2], [8, 66, 2.8], [60, 12, 3], [38, 44, 2.6], [76, 22, 2.8], [24, 30, 3]];
+function altHTML() {
+  const minis = MINI.map(([x, y, sz], k) => `<i style="--x:${x}%;--y:${y}%;--s:${sz}cqw;--d:${(2.2 + ((k * 37) % 14) / 10).toFixed(2)}s;--w:${(-k * 0.27).toFixed(2)}s${k % 3 === 1 ? ';--c:#cfe0ff' : ''}">${STAR_SVG}</i>`).join('');
+  return `<div class="mstars" aria-hidden="true">${minis}</div><div class="astar" title="Alt">${STAR_SVG}</div><div class="aboom"></div>`;
+}
+// Chaque mini étoile réapparaît ailleurs à chaque cycle (en évitant le bas de la carte).
+if (typeof document !== 'undefined') {
+  document.addEventListener('animationiteration', (e) => {
+    const i = e.target;
+    if (!i.parentElement?.classList?.contains('mstars')) return;
+    i.style.setProperty('--x', `${8 + Math.random() * 84}%`);
+    i.style.setProperty('--y', `${6 + Math.random() * 70}%`);
+  }, true);
 }
 
 // Redimensionne une image importée pour qu'elle reste légère (stockage + envoi en ligne).
@@ -199,17 +218,18 @@ export function showCardBig(card, { hold = false, video = false } = {}) {
   document.body.append(ov);
   const host = ov.querySelector('.cv-card');
   if (video && videoMod?.hasVideo(card)) videoMod.playCardVideo(card, host); // le sceau s'écrase à la fin de la vidéo
-  else if (!hold && card.rarity === 'S') stampSeal(host); // toute 1on1 ouverte en grand : le sceau s'écrase
+  else if (!hold && (card.rarity === 'S' || card.alt)) stampSeal(host); // toute 1on1 / Alt ouverte en grand : le sceau / l'étoile s'écrase
   return close;
 }
 
 // Le sceau 1ON1 arrive depuis la caméra et s'écrase sur la carte (avec une secousse et une onde dorée).
 export function stampSeal(host) {
-  if (!host?.querySelector('.seal')) return;
+  if (!host?.querySelector('.seal, .astar')) return;
   host.classList.remove('stamp');
   void host.offsetWidth; // relance l'animation
   host.classList.add('stamp');
-  videoMod?.sealSound(); // le « bing » de la musique 1on1 tombe au moment de l'impact
+  // le son tombe au moment de l'impact : « bing » de la musique 1on1, ou cling d'une Alt
+  videoMod?.sealSound(Boolean(host.querySelector('.card.alt')));
   setTimeout(() => host.classList.remove('stamp'), 1800);
 }
 
