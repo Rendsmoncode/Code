@@ -134,9 +134,12 @@ export function playCardVideo(card, host) {
     // position de la carte dans la vidéo : réglée dans l'onglet Cartes, sinon centrée
     const vx = card.vx == null || card.vx === '' ? Math.max(0, (1 - (vh * CARD_RATIO) / vw) / 2) : Number(card.vx);
     const full = vh > vw; // vidéo verticale : plein écran
+    // plein écran : un fond noir à part, et la vidéo dans un cadre à sa vraie taille (qui peut dépasser de l'écran)
+    const backdrop = document.createElement('div');
+    backdrop.className = 'cv-vbd';
     if (full) {
       wrap.classList.add('full');
-      document.body.append(wrap);
+      document.body.append(backdrop, wrap);
     } else {
       wrap.style.setProperty('--va', vw / vh);
       wrap.style.setProperty('--vx', vx);
@@ -152,10 +155,10 @@ export function playCardVideo(card, host) {
       const dh = vh * sc;
       const ox = (W - dw) / 2;
       const oy = (H - dh) / 2;
-      Object.assign(v.style, { left: `${ox}px`, top: `${oy}px`, width: `${dw}px`, height: `${dh}px` });
-      // zone de la carte dans la vidéo, à l'écran
+      Object.assign(wrap.style, { left: `${ox}px`, top: `${oy}px`, width: `${dw}px`, height: `${dh}px` });
+      // zone de la carte dans la vidéo (repère du cadre)
       const cw = vh * CARD_RATIO;
-      return { x: ox + vx * vw * sc, y: oy, w: cw * sc, h: dh, W, H };
+      return { ox, oy, x: vx * vw * sc, w: cw * sc, dw, dh };
     };
     layout();
     addEventListener('resize', layout);
@@ -177,15 +180,16 @@ export function playCardVideo(card, host) {
     done = true;
     removeEventListener('resize', layout);
     v.pause();
-    if (aborted) { ceremony = false; stopMusic(); wrap.remove(); host.classList.remove('vid-on'); return false; }
+    if (aborted) { ceremony = false; stopMusic(); wrap.remove(); backdrop.remove(); host.classList.remove('vid-on'); return false; }
     if (full) {
       // la vidéo figée rétrécit jusqu'à la carte ; ce qui dépasse s'efface
       const z = layout();
       const r = host.querySelector('.card')?.getBoundingClientRect() || host.getBoundingClientRect();
       const k = r.width / z.w;
-      wrap.style.setProperty('--clip', `inset(${z.y}px ${z.W - z.x - z.w}px ${z.H - z.y - z.h}px ${z.x}px round ${z.w * 0.025}px)`);
-      wrap.style.transform = `translate(${r.left - z.x * k}px, ${r.top - z.y * k}px) scale(${k})`;
+      wrap.style.setProperty('--clip', `inset(0px ${z.dw - z.x - z.w}px 0px ${z.x}px round ${z.w * 0.025}px)`);
+      wrap.style.transform = `translate(${r.left - z.ox - z.x * k}px, ${r.top - z.oy}px) scale(${k})`;
       wrap.classList.add('shrink');
+      backdrop.classList.add('out');
       await wait(750);
     }
     // fondu : la carte (et ses effets) revient, la vidéo figée s'efface
@@ -193,7 +197,7 @@ export function playCardVideo(card, host) {
     wrap.classList.add('out');
     stampSeal(host); // le sceau 1ON1 ou l'étoile Alt vient se plaquer sur la carte, sur le « bing » / cling
     await wait(650);
-    wrap.remove();
+    wrap.remove(); backdrop.remove();
     host.classList.remove('vid-on', 'vid-end');
     setTimeout(() => { ceremony = false; }, 1200);
     return true;
