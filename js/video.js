@@ -132,7 +132,9 @@ export function playCardVideo(card, host) {
     const vw = v.videoWidth || 1080;
     const vh = v.videoHeight || 1440;
     // position de la carte dans la vidéo : réglée dans l'onglet Cartes, sinon centrée
-    const vx = card.vx == null || card.vx === '' ? Math.max(0, (1 - (vh * CARD_RATIO) / vw) / 2) : Number(card.vx);
+    // (bornée pour que la carte reste entièrement dans la vidéo)
+    const maxVx = Math.max(0, 1 - (vh * CARD_RATIO) / vw);
+    const vx = card.vx == null || card.vx === '' ? maxVx / 2 : Math.min(maxVx, Math.max(0, Number(card.vx)));
     const full = vh > vw; // vidéo verticale : plein écran
     // plein écran : un fond noir à part, et la vidéo dans un cadre à sa vraie taille (qui peut dépasser de l'écran)
     const backdrop = document.createElement('div');
