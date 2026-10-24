@@ -974,5 +974,10 @@ details { margin-top: 12px; }
 .cv-vwrap video { display: block; width: 100%; height: 100%; object-fit: fill; border-radius: 1.5%; box-shadow: 0 20px 60px #000c; }
 .vid-on > .card { opacity: 0; transition: opacity .25s ease; }
 .vid-on.vid-end > .card { opacity: 1; transition: opacity .6s ease; }
-.vid-on.vid-end > .cv-vwrap { opacity: 0; }
+.cv-vwrap.out { opacity: 0; }
+/* vidéo verticale : plein écran par-dessus tout, puis elle rétrécit jusqu'à la carte */
+.cv-vwrap.full { position: fixed; inset: 0; z-index: 400; height: auto; aspect-ratio: auto; left: 0; background: #000;
+  transform-origin: 0 0; clip-path: inset(0 0 0 0 round 0); transition: opacity .6s ease, background .3s ease; }
+.cv-vwrap.full video { position: absolute; border-radius: 0; box-shadow: none; object-fit: fill; width: auto; height: auto; }
+.cv-vwrap.full.shrink { background: transparent; clip-path: var(--clip); transition: transform .75s cubic-bezier(.6, 0, .2, 1), clip-path .5s ease, background .3s ease, opacity .6s ease; }
 .cardview .cv-card { overflow: visible; }

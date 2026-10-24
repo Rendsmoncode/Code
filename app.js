@@ -4459,7 +4459,7 @@ Suggested solution: ${env.workaround}`;
       const joinRef = encoder.encode((_b = message.join_ref) !== null && _b !== void 0 ? _b : "");
       const userEvent = encoder.encode(message.payload.event);
       const rest = this.allowedMetadataKeys ? this._pick(message.payload, this.allowedMetadataKeys) : {};
-      const metadata = encoder.encode(Object.keys(rest).length === 0 ? "" : JSON.stringify(rest));
+      const metadata2 = encoder.encode(Object.keys(rest).length === 0 ? "" : JSON.stringify(rest));
       if (joinRef.length > 255) {
         throw new Error(`joinRef length ${joinRef.length} exceeds maximum of 255`);
       }
@@ -4472,10 +4472,10 @@ Suggested solution: ${env.workaround}`;
       if (userEvent.length > 255) {
         throw new Error(`userEvent length ${userEvent.length} exceeds maximum of 255`);
       }
-      if (metadata.length > 255) {
-        throw new Error(`metadata length ${metadata.length} exceeds maximum of 255`);
+      if (metadata2.length > 255) {
+        throw new Error(`metadata length ${metadata2.length} exceeds maximum of 255`);
       }
-      const metaLength = this.USER_BROADCAST_PUSH_META_LENGTH + joinRef.length + ref.length + topic.length + userEvent.length + metadata.length;
+      const metaLength = this.USER_BROADCAST_PUSH_META_LENGTH + joinRef.length + ref.length + topic.length + userEvent.length + metadata2.length;
       const header = new ArrayBuffer(this.HEADER_LENGTH + metaLength);
       const view = new DataView(header);
       const bytes = new Uint8Array(header);
@@ -4485,7 +4485,7 @@ Suggested solution: ${env.workaround}`;
       view.setUint8(offset++, ref.length);
       view.setUint8(offset++, topic.length);
       view.setUint8(offset++, userEvent.length);
-      view.setUint8(offset++, metadata.length);
+      view.setUint8(offset++, metadata2.length);
       view.setUint8(offset++, encodingType);
       bytes.set(joinRef, offset);
       offset += joinRef.length;
@@ -4495,8 +4495,8 @@ Suggested solution: ${env.workaround}`;
       offset += topic.length;
       bytes.set(userEvent, offset);
       offset += userEvent.length;
-      bytes.set(metadata, offset);
-      offset += metadata.length;
+      bytes.set(metadata2, offset);
+      offset += metadata2.length;
       var combined = new Uint8Array(header.byteLength + encodedPayload.byteLength);
       combined.set(new Uint8Array(header), 0);
       combined.set(new Uint8Array(encodedPayload), header.byteLength);
@@ -4533,7 +4533,7 @@ Suggested solution: ${env.workaround}`;
       offset = offset + topicSize;
       const userEvent = decoder.decode(buffer.slice(offset, offset + userEventSize));
       offset = offset + userEventSize;
-      const metadata = decoder.decode(buffer.slice(offset, offset + metadataSize));
+      const metadata2 = decoder.decode(buffer.slice(offset, offset + metadataSize));
       offset = offset + metadataSize;
       const payload = buffer.slice(offset, buffer.byteLength);
       const parsedPayload = payloadEncoding === this.JSON_ENCODING ? JSON.parse(decoder.decode(payload)) : payload;
@@ -4543,7 +4543,7 @@ Suggested solution: ${env.workaround}`;
         payload: parsedPayload
       };
       if (metadataSize > 0) {
-        data["meta"] = JSON.parse(metadata);
+        data["meta"] = JSON.parse(metadata2);
       }
       return { join_ref: null, ref: null, topic, event: this.BROADCAST_EVENT, payload: data };
     }
@@ -8522,10 +8522,10 @@ Suggested solution: ${env.workaround}`;
       });
       return response.data.namespaces.map((ns) => ({ namespace: ns }));
     }
-    async createNamespace(id, metadata) {
+    async createNamespace(id, metadata2) {
       const request = {
         namespace: id.namespace,
-        properties: metadata?.properties
+        properties: metadata2?.properties
       };
       const response = await this.client.request({
         method: "POST",
@@ -8563,9 +8563,9 @@ Suggested solution: ${env.workaround}`;
         throw error;
       }
     }
-    async createNamespaceIfNotExists(id, metadata) {
+    async createNamespaceIfNotExists(id, metadata2) {
       try {
-        return await this.createNamespace(id, metadata);
+        return await this.createNamespace(id, metadata2);
       } catch (error) {
         if (error instanceof IcebergError && error.status === 409) {
           return;
@@ -8719,8 +8719,8 @@ Suggested solution: ${env.workaround}`;
      * console.log(response.properties); // { owner: 'data-team', ... }
      * ```
      */
-    async createNamespace(id, metadata) {
-      return this.namespaceOps.createNamespace(id, metadata);
+    async createNamespace(id, metadata2) {
+      return this.namespaceOps.createNamespace(id, metadata2);
     }
     /**
      * Drops a namespace from the catalog.
@@ -8906,8 +8906,8 @@ Suggested solution: ${env.workaround}`;
      * }
      * ```
      */
-    async createNamespaceIfNotExists(id, metadata) {
-      return this.namespaceOps.createNamespaceIfNotExists(id, metadata);
+    async createNamespaceIfNotExists(id, metadata2) {
+      return this.namespaceOps.createNamespaceIfNotExists(id, metadata2);
     }
     /**
      * Creates a table if it does not exist.
@@ -9344,21 +9344,21 @@ Suggested solution: ${env.workaround}`;
         let body;
         const options = _objectSpread22(_objectSpread22({}, DEFAULT_FILE_OPTIONS), fileOptions);
         let headers = _objectSpread22(_objectSpread22({}, _this.headers), method === "POST" && { "x-upsert": String(options.upsert) });
-        const metadata = options.metadata;
+        const metadata2 = options.metadata;
         if (typeof Blob !== "undefined" && fileBody instanceof Blob) {
           body = new FormData();
           body.append("cacheControl", options.cacheControl);
-          if (metadata) body.append("metadata", _this.encodeMetadata(metadata));
+          if (metadata2) body.append("metadata", _this.encodeMetadata(metadata2));
           body.append("", fileBody);
         } else if (typeof FormData !== "undefined" && fileBody instanceof FormData) {
           body = fileBody;
           if (!body.has("cacheControl")) body.append("cacheControl", options.cacheControl);
-          if (metadata && !body.has("metadata")) body.append("metadata", _this.encodeMetadata(metadata));
+          if (metadata2 && !body.has("metadata")) body.append("metadata", _this.encodeMetadata(metadata2));
         } else {
           body = fileBody;
           headers["cache-control"] = `max-age=${options.cacheControl}`;
           headers["content-type"] = options.contentType;
-          if (metadata) headers["x-metadata"] = _this.toBase64(_this.encodeMetadata(metadata));
+          if (metadata2) headers["x-metadata"] = _this.toBase64(_this.encodeMetadata(metadata2));
           if ((typeof ReadableStream !== "undefined" && body instanceof ReadableStream || body && typeof body === "object" && "pipe" in body && typeof body.pipe === "function") && !options.duplex) options.duplex = "half";
         }
         if (fileOptions === null || fileOptions === void 0 ? void 0 : fileOptions.headers) for (const [key2, value] of Object.entries(fileOptions.headers)) headers = setHeader(headers, key2, value);
@@ -9490,21 +9490,21 @@ Suggested solution: ${env.workaround}`;
         let body;
         const options = _objectSpread22(_objectSpread22({}, DEFAULT_FILE_OPTIONS), fileOptions);
         let headers = _objectSpread22(_objectSpread22({}, _this3.headers), { "x-upsert": String(options.upsert) });
-        const metadata = options.metadata;
+        const metadata2 = options.metadata;
         if (typeof Blob !== "undefined" && fileBody instanceof Blob) {
           body = new FormData();
           body.append("cacheControl", options.cacheControl);
-          if (metadata) body.append("metadata", _this3.encodeMetadata(metadata));
+          if (metadata2) body.append("metadata", _this3.encodeMetadata(metadata2));
           body.append("", fileBody);
         } else if (typeof FormData !== "undefined" && fileBody instanceof FormData) {
           body = fileBody;
           if (!body.has("cacheControl")) body.append("cacheControl", options.cacheControl);
-          if (metadata && !body.has("metadata")) body.append("metadata", _this3.encodeMetadata(metadata));
+          if (metadata2 && !body.has("metadata")) body.append("metadata", _this3.encodeMetadata(metadata2));
         } else {
           body = fileBody;
           headers["cache-control"] = `max-age=${options.cacheControl}`;
           headers["content-type"] = options.contentType;
-          if (metadata) headers["x-metadata"] = _this3.toBase64(_this3.encodeMetadata(metadata));
+          if (metadata2) headers["x-metadata"] = _this3.toBase64(_this3.encodeMetadata(metadata2));
           if ((typeof ReadableStream !== "undefined" && body instanceof ReadableStream || body && typeof body === "object" && "pipe" in body && typeof body.pipe === "function") && !options.duplex) options.duplex = "half";
         }
         if (fileOptions === null || fileOptions === void 0 ? void 0 : fileOptions.headers) for (const [key2, value] of Object.entries(fileOptions.headers)) headers = setHeader(headers, key2, value);
@@ -10332,8 +10332,8 @@ Suggested solution: ${env.workaround}`;
         return await post(_this15.fetch, `${_this15.url}/object/list-v2/${_this15.bucketId}`, body, { headers: _this15.headers }, parameters);
       });
     }
-    encodeMetadata(metadata) {
-      return JSON.stringify(metadata);
+    encodeMetadata(metadata2) {
+      return JSON.stringify(metadata2);
     }
     toBase64(data) {
       if (typeof Buffer !== "undefined") return Buffer.from(data).toString("base64");
@@ -21692,6 +21692,15 @@ ${suffix}`;
     }
   }
   var stopCurrent = null;
+  var CARD_RATIO = 63 / 88;
+  var wait = (ms) => new Promise((r) => {
+    setTimeout(r, ms);
+  });
+  var metadata = (v) => v.readyState >= 1 ? Promise.resolve() : new Promise((r) => {
+    v.addEventListener("loadedmetadata", r, { once: true });
+    v.addEventListener("error", r, { once: true });
+    setTimeout(r, 4e3);
+  });
   function playCardVideo(card, host2) {
     if (!hasVideo(card) || !host2) return Promise.resolve(false);
     stopCurrent?.();
@@ -21699,42 +21708,74 @@ ${suffix}`;
     preloadVideo(card);
     const wrap = document.createElement("div");
     wrap.className = "cv-vwrap";
-    wrap.style.setProperty("--vx", Number(card.vx) || 0);
     wrap.append(v);
     host2.classList.add("vid-on");
-    host2.append(wrap);
-    return new Promise((resolve) => {
-      let done = false;
-      const finish = () => {
-        if (done) return;
-        done = true;
-        v.removeEventListener("ended", onEnd);
-        host2.classList.add("vid-end");
-        setTimeout(() => {
-          wrap.remove();
-          v.pause();
-          host2.classList.remove("vid-on", "vid-end");
-          resolve(true);
-        }, 700);
+    let done = false;
+    let resolveEnd;
+    const ended = new Promise((r) => {
+      resolveEnd = r;
+    });
+    stopCurrent = () => {
+      stopCurrent = null;
+      resolveEnd();
+    };
+    v.addEventListener("ended", () => resolveEnd(), { once: true });
+    return (async () => {
+      await metadata(v);
+      const vw = v.videoWidth || 1080;
+      const vh = v.videoHeight || 1440;
+      const vx = Number(card.vx) || 0;
+      const full = vh > vw;
+      if (full) {
+        wrap.classList.add("full");
+        document.body.append(wrap);
+      } else {
+        wrap.style.setProperty("--va", vw / vh);
+        wrap.style.setProperty("--vx", vx);
+        host2.append(wrap);
+      }
+      const layout = () => {
+        if (!full) return null;
+        const W = innerWidth;
+        const H = innerHeight;
+        const sc = W < H ? Math.max(W / vw, H / vh) : H / vh;
+        const dw = vw * sc;
+        const dh = vh * sc;
+        const ox = (W - dw) / 2;
+        const oy = (H - dh) / 2;
+        Object.assign(v.style, { left: `${ox}px`, top: `${oy}px`, width: `${dw}px`, height: `${dh}px` });
+        const cw = vh * CARD_RATIO;
+        return { x: ox + vx * vw * sc, y: oy, w: cw * sc, h: dh, W, H };
       };
-      const onEnd = () => finish();
-      stopCurrent = () => {
-        stopCurrent = null;
-        finish();
-      };
-      const ratio = () => {
-        if (v.videoWidth) wrap.style.setProperty("--va", v.videoWidth / v.videoHeight);
-      };
-      v.addEventListener("loadedmetadata", ratio, { once: true });
-      ratio();
-      v.addEventListener("ended", onEnd);
+      layout();
+      addEventListener("resize", layout);
       v.currentTime = 0;
       v.muted = false;
       v.play().catch(() => {
         v.muted = true;
-        v.play().catch(finish);
+        v.play().catch(() => resolveEnd());
       });
-    });
+      await ended;
+      if (done) return true;
+      done = true;
+      removeEventListener("resize", layout);
+      v.pause();
+      if (full) {
+        const z = layout();
+        const r = host2.querySelector(".card")?.getBoundingClientRect() || host2.getBoundingClientRect();
+        const k = r.width / z.w;
+        wrap.style.setProperty("--clip", `inset(${z.y}px ${z.W - z.x - z.w}px ${z.H - z.y - z.h}px ${z.x}px round ${z.w * 0.025}px)`);
+        wrap.style.transform = `translate(${r.left - z.x * k}px, ${r.top - z.y * k}px) scale(${k})`;
+        wrap.classList.add("shrink");
+        await wait(750);
+      }
+      host2.classList.add("vid-end");
+      wrap.classList.add("out");
+      await wait(650);
+      wrap.remove();
+      host2.classList.remove("vid-on", "vid-end");
+      return true;
+    })();
   }
   function stopCardVideo() {
     stopCurrent?.();
@@ -21951,7 +21992,7 @@ ${suffix}`;
       opened = true;
       const pack = ov.querySelector(".bpack");
       pack.classList.add("tear");
-      await wait(650);
+      await wait2(650);
       ov.remove();
       revealFn(pulls, false, true);
     });
@@ -21995,7 +22036,7 @@ ${suffix}`;
         }
         const pack = q(".bs-pack .bpack:not(.g1):not(.g2)");
         pack.classList.add("tear");
-        await wait(650);
+        await wait2(650);
         pack.classList.remove("tear");
         reveal2([...pulls].sort((x, y) => rank(x.id) - rank(y.id)), pulls.some((p) => p.god));
       } catch (e) {
@@ -22064,7 +22105,7 @@ ${suffix}`;
         if (old) {
           old.classList.add("out");
           ov.querySelector(".bx-info").innerHTML = "";
-          await wait(260);
+          await wait2(260);
           old.remove();
         }
         if (done) return;
@@ -22083,7 +22124,7 @@ ${suffix}`;
           ov.classList.add(`fx-${r}`, "intro");
           preloadVideo(c);
           ov.querySelector(".bx-fx").innerHTML = fxHTML(r);
-          await wait(SPECIAL[r]);
+          await wait2(SPECIAL[r]);
           if (done) return;
           ov.classList.remove("intro");
         }
@@ -22095,7 +22136,7 @@ ${suffix}`;
           await playCardVideo(c, stage.querySelector(".bx-card:last-child"));
           return;
         }
-        await wait(SPECIAL[r] ? 500 : 250);
+        await wait2(SPECIAL[r] ? 500 : 250);
         lock = false;
       }
       function summary() {
@@ -22129,7 +22170,7 @@ ${suffix}`;
           lock = true;
           ov.classList.add("fx-S", "fx-god", "intro");
           ov.querySelector(".bx-fx").innerHTML = `${fxHTML("S")}<div class="fx-godtxt">GOD PACK</div>`;
-          await wait(2800);
+          await wait2(2800);
           lock = false;
         }
         next();
@@ -22209,7 +22250,7 @@ ${suffix}`;
       start2();
     }
   }
-  var wait = (ms) => new Promise((r) => {
+  var wait2 = (ms) => new Promise((r) => {
     setTimeout(r, ms);
   });
   function fxHTML(r) {
@@ -22729,7 +22770,7 @@ ${suffix}`;
           <label class="btn"><input type="file" id="ed-img" accept="image/*" hidden>Choisir une image\u2026</label>
           <button type="button" class="btn ghost" id="ed-noimg">Retirer l'image</button>
         </div></div>
-      <div class="field f-video"><label>Vid\xE9o <small>(1on1 seulement : elle se lance au tirage et sur un appui long ; MP4, 10 s et 15 Mo maximum)</small></label>
+      <div class="field f-video"><label>Vid\xE9o <small>(1on1 seulement : elle se lance au tirage et sur un appui long ; MP4 vertical de pr\xE9f\xE9rence, 25 Mo maximum)</small></label>
         <div class="row-btns">
           <label class="btn"><input type="file" id="ed-video" accept="video/mp4,video/*" hidden>Choisir une vid\xE9o\u2026</label>
           <button type="button" class="btn ghost" id="ed-vtest">Tester sur l'aper\xE7u</button>
@@ -22844,8 +22885,8 @@ ${suffix}`;
       const f = e.target.files[0];
       e.target.value = "";
       if (!f) return;
-      if (f.size > 15e6) {
-        msg("Vid\xE9o trop lourde : 15 Mo maximum.", true);
+      if (f.size > 25e6) {
+        msg("Vid\xE9o trop lourde : 25 Mo maximum.", true);
         return;
       }
       pendingVideo = f;

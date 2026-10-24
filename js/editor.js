@@ -68,7 +68,7 @@ export function initEditor() {
           <label class="btn"><input type="file" id="ed-img" accept="image/*" hidden>Choisir une image…</label>
           <button type="button" class="btn ghost" id="ed-noimg">Retirer l'image</button>
         </div></div>
-      <div class="field f-video"><label>Vidéo <small>(1on1 seulement : elle se lance au tirage et sur un appui long ; MP4, 10 s et 15 Mo maximum)</small></label>
+      <div class="field f-video"><label>Vidéo <small>(1on1 seulement : elle se lance au tirage et sur un appui long ; MP4 vertical de préférence, 25 Mo maximum)</small></label>
         <div class="row-btns">
           <label class="btn"><input type="file" id="ed-video" accept="video/mp4,video/*" hidden>Choisir une vidéo…</label>
           <button type="button" class="btn ghost" id="ed-vtest">Tester sur l'aperçu</button>
@@ -172,7 +172,7 @@ export function initEditor() {
     const f = e.target.files[0];
     e.target.value = '';
     if (!f) return;
-    if (f.size > 15e6) { msg('Vidéo trop lourde : 15 Mo maximum.', true); return; }
+    if (f.size > 25e6) { msg("Vidéo trop lourde : 25 Mo maximum.", true); return; }
     pendingVideo = f;
     if (cur.videoLocal) URL.revokeObjectURL(cur.videoLocal);
     cur.videoLocal = URL.createObjectURL(f);

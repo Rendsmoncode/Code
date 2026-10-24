@@ -40,7 +40,17 @@ export function preloadVideo(card) {
 }
 
 let stopCurrent = null;
+const CARD_RATIO = 63 / 88;
+const wait = (ms) => new Promise((r) => { setTimeout(r, ms); });
+const metadata = (v) => (v.readyState >= 1 ? Promise.resolve() : new Promise((r) => {
+  v.addEventListener('loadedmetadata', r, { once: true });
+  v.addEventListener('error', r, { once: true });
+  setTimeout(r, 4000);
+}));
+
 // host : l'élément qui contient la carte (.card). Renvoie une promesse résolue à la fin (ou à l'arrêt).
+// Vidéo verticale : plein écran, puis à la fin elle rétrécit pour se poser exactement dans la carte.
+// Vidéo en paysage : posée sur la carte et plus large qu'elle.
 export function playCardVideo(card, host) {
   if (!hasVideo(card) || !host) return Promise.resolve(false);
   stopCurrent?.();
@@ -48,30 +58,70 @@ export function playCardVideo(card, host) {
   preloadVideo(card);
   const wrap = document.createElement('div');
   wrap.className = 'cv-vwrap';
-  wrap.style.setProperty('--vx', Number(card.vx) || 0);
   wrap.append(v);
   host.classList.add('vid-on');
-  host.append(wrap);
-  return new Promise((resolve) => {
-    let done = false;
-    const finish = () => {
-      if (done) return;
-      done = true;
-      v.removeEventListener('ended', onEnd);
-      // fondu : la carte (et ses effets) revient, la vidéo figée s'efface
-      host.classList.add('vid-end');
-      setTimeout(() => { wrap.remove(); v.pause(); host.classList.remove('vid-on', 'vid-end'); resolve(true); }, 700);
+  let done = false;
+  let resolveEnd;
+  const ended = new Promise((r) => { resolveEnd = r; });
+  stopCurrent = () => { stopCurrent = null; resolveEnd(); };
+  v.addEventListener('ended', () => resolveEnd(), { once: true });
+  return (async () => {
+    await metadata(v);
+    const vw = v.videoWidth || 1080;
+    const vh = v.videoHeight || 1440;
+    const vx = Number(card.vx) || 0;
+    const full = vh > vw; // vidéo verticale : plein écran
+    if (full) {
+      wrap.classList.add('full');
+      document.body.append(wrap);
+    } else {
+      wrap.style.setProperty('--va', vw / vh);
+      wrap.style.setProperty('--vx', vx);
+      host.append(wrap);
+    }
+    const layout = () => {
+      if (!full) return null;
+      // plein écran : on couvre un téléphone (portrait), on prend toute la hauteur sur un écran large
+      const W = innerWidth;
+      const H = innerHeight;
+      const sc = W < H ? Math.max(W / vw, H / vh) : H / vh;
+      const dw = vw * sc;
+      const dh = vh * sc;
+      const ox = (W - dw) / 2;
+      const oy = (H - dh) / 2;
+      Object.assign(v.style, { left: `${ox}px`, top: `${oy}px`, width: `${dw}px`, height: `${dh}px` });
+      // zone de la carte dans la vidéo, à l'écran
+      const cw = vh * CARD_RATIO;
+      return { x: ox + vx * vw * sc, y: oy, w: cw * sc, h: dh, W, H };
     };
-    const onEnd = () => finish();
-    stopCurrent = () => { stopCurrent = null; finish(); };
-    const ratio = () => { if (v.videoWidth) wrap.style.setProperty('--va', v.videoWidth / v.videoHeight); };
-    v.addEventListener('loadedmetadata', ratio, { once: true });
-    ratio();
-    v.addEventListener('ended', onEnd);
+    layout();
+    addEventListener('resize', layout);
     v.currentTime = 0;
     v.muted = false;
-    v.play().catch(() => { v.muted = true; v.play().catch(finish); }); // son refusé : on joue sans
-  });
+    v.play().catch(() => { v.muted = true; v.play().catch(() => resolveEnd()); }); // son refusé : on joue sans
+    await ended;
+    if (done) return true;
+    done = true;
+    removeEventListener('resize', layout);
+    v.pause();
+    if (full) {
+      // la vidéo figée rétrécit jusqu'à la carte ; ce qui dépasse s'efface
+      const z = layout();
+      const r = host.querySelector('.card')?.getBoundingClientRect() || host.getBoundingClientRect();
+      const k = r.width / z.w;
+      wrap.style.setProperty('--clip', `inset(${z.y}px ${z.W - z.x - z.w}px ${z.H - z.y - z.h}px ${z.x}px round ${z.w * 0.025}px)`);
+      wrap.style.transform = `translate(${r.left - z.x * k}px, ${r.top - z.y * k}px) scale(${k})`;
+      wrap.classList.add('shrink');
+      await wait(750);
+    }
+    // fondu : la carte (et ses effets) revient, la vidéo figée s'efface
+    host.classList.add('vid-end');
+    wrap.classList.add('out');
+    await wait(650);
+    wrap.remove();
+    host.classList.remove('vid-on', 'vid-end');
+    return true;
+  })();
 }
 export function stopCardVideo() { stopCurrent?.(); }
 
