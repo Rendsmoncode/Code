@@ -1,8 +1,8 @@
 // Onglet « Cartes » : création et édition des cartes de la collection.
 import { S, saveCard, saveCards, deleteCard, onChange, uploadVideo, altsOf } from './store.js';
-import { playCardVideo } from './video.js';
+import { playCardVideo, playMomentVideo } from './video.js';
 import {
-  COLORS, TYPES, RARITIES, ATTRIBUTES, attributesOf, KEYWORDS, esc, uid, newCard, cardHTML, resizeImage, download, readJSONFile,
+  COLORS, TYPES, RARITIES, ATTRIBUTES, attributesOf, KEYWORDS, esc, uid, newCard, cardHTML, resizeImage, download, readJSONFile, ANIM_MOMENTS,
 } from './cards.js';
 import { mountEffectsEditor } from './effects-editor.js';
 import { WIKI_HINTS } from './wiki-hints.js';
@@ -12,6 +12,7 @@ const root = () => document.getElementById('tab-cards');
 let cur = newCard();
 let fxEd = null;
 let pendingVideo = null; // vidéo choisie, envoyée à l'enregistrement
+let pendingAnims = {}; // animations en partie choisies : { moment: { file, url } }, envoyées à l'enregistrement
 let filter = { q: '', type: '', color: '', rarity: '' };
 
 export function initEditor() {
@@ -77,6 +78,8 @@ export function initEditor() {
           <span class="muted small ed-vname"></span>
         </div>
         <label class="small">Position de la carte dans la vidéo <input type="range" id="ed-vx" min="0" max="1" step="0.001"> <span class="ed-vxv"></span></label></div>
+      <div class="field f-anims"><label>Animations en partie <small>(une vidéo par moment, jouée en plein écran chez les deux joueurs, avec son son s'il y en a ; un toucher la passe. MP4, 25 Mo maximum)</small></label>
+        <div class="ed-anims"></div></div>
       <div class="field lay"><label>Cadrage de l'image <small>(ou glissez l'image sur l'aperçu, molette pour zoomer)</small></label>
         <div class="lay-grid">
           <label>Zoom <input type="range" data-lay="art.z" min="0.2" max="4" step="0.01"><output></output></label>
@@ -195,6 +198,12 @@ export function initEditor() {
     msg('Enregistrement…');
     try {
       if (pendingVideo) { msg('Envoi de la vidéo…'); cur.video = await uploadVideo(cur.id, pendingVideo); pendingVideo = null; }
+      for (const [m, p] of Object.entries(pendingAnims)) {
+        msg(`Envoi de l'animation « ${ANIM_MOMENTS[m]} »…`);
+        cur.anims = { ...(cur.anims || {}), [m]: await uploadVideo(`${cur.id}-${m}`, p.file) };
+        URL.revokeObjectURL(p.url);
+      }
+      pendingAnims = {};
       const { videoLocal, ...plain } = cur;
       const c = { ...structuredClone(plain), colors: cur.colors.slice(0, maxColors()) };
       if (c.rarity !== 'S' && !c.alt) { delete c.video; delete c.vx; }
@@ -255,6 +264,26 @@ export function initEditor() {
       trait: val('ed-ftrait').value, img: val('ed-fimg').value,
     };
     renderList();
+  });
+  // Animations en partie
+  r.querySelector('.ed-anims').addEventListener('change', (e) => {
+    const m = e.target.dataset.afile;
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!m || !f) return;
+    if (f.size > 25e6) { msg('Vidéo trop lourde : 25 Mo maximum.', true); return; }
+    if (pendingAnims[m]) URL.revokeObjectURL(pendingAnims[m].url);
+    pendingAnims[m] = { file: f, url: URL.createObjectURL(f) };
+    fillAnims();
+  });
+  r.querySelector('.ed-anims').addEventListener('click', (e) => {
+    const t = e.target.closest('[data-atest], [data-arm]');
+    if (!t) return;
+    if (t.dataset.atest) { const m = t.dataset.atest; playMomentVideo(pendingAnims[m]?.url || cur.anims?.[m]); return; }
+    const m = t.dataset.arm;
+    if (pendingAnims[m]) { URL.revokeObjectURL(pendingAnims[m].url); delete pendingAnims[m]; }
+    if (cur.anims) { delete cur.anims[m]; if (!Object.keys(cur.anims).length) delete cur.anims; }
+    fillAnims();
   });
   // Version Alt : même carte (nom, coût, effets… repris de la base), autre illustration, autre rareté.
   r.querySelector('.ed-alt').addEventListener('click', (e) => {
@@ -495,9 +524,11 @@ function readForm() {
 
 function fill() {
   pendingVideo = null;
+  for (const p of Object.values(pendingAnims)) URL.revokeObjectURL(p.url);
+  pendingAnims = {};
   const r = root();
   const set = (id, x) => { r.querySelector('#' + id).value = x ?? ''; };
-  set('ed-name', cur.name); set('ed-code', cur.code); set('ed-cost', cur.cost); set('ed-life', cur.life);
+  set('ed-name', cur.name); set('ed-code', cur.code); set('ed-cost', cur.cost); set('ed-life', cur.life || ''); // 0 (hors Leader) bloquerait l'enregistrement
   const [a1, a2] = attributesOf(cur);
   set('ed-power', cur.power); set('ed-counter', cur.counter || 0); set('ed-attr', a1); set('ed-attr2', a2);
   set('ed-effect', cur.effect); set('ed-trigger', cur.trigger);
@@ -649,6 +680,26 @@ function bindLayout(r) {
   }, { passive: false });
 }
 
+// Animations en partie : une ligne par moment. Une Alt reprend celles de sa carte de base.
+function fillAnims() {
+  const r = root();
+  const box = r.querySelector('.f-anims');
+  if (!box) return;
+  if (cur.alt) { const l = r.querySelector('.ed-anims'); l.dataset.sig = ''; l.innerHTML = '<p class="muted small">Une Alt reprend les animations de sa carte de base.</p>'; return; }
+  // on ne redessine que si quelque chose a changé (sinon le fichier en cours de sélection serait perdu)
+  const sig = JSON.stringify([cur.id, cur.anims || {}, Object.keys(pendingAnims)]);
+  const list = r.querySelector('.ed-anims');
+  if (list.dataset.sig === sig) return;
+  list.dataset.sig = sig;
+  list.innerHTML = Object.entries(ANIM_MOMENTS).map(([m, label]) => {
+    const has = Boolean(pendingAnims[m] || cur.anims?.[m]);
+    const state = pendingAnims[m] ? `${esc(pendingAnims[m].file.name)} (envoyée à l'enregistrement)` : cur.anims?.[m] ? 'Vidéo en place' : '';
+    return `<div class="ed-anim${has ? ' on' : ''}"><b>${esc(label)}</b><span class="muted small">${state}</span>
+      <span class="row-btns"><label class="btn small"><input type="file" accept="video/mp4,video/*" data-afile="${m}" hidden>${has ? 'Remplacer' : 'Ajouter une vidéo'}</label>
+      ${has ? `<button type="button" class="btn small ghost" data-atest="${m}">Tester</button><button type="button" class="btn small ghost" data-arm="${m}">Retirer</button>` : ''}</span></div>`;
+  }).join('');
+}
+
 // Champ vidéo : seulement pour les 1on1.
 function fillVideo() {
   const r = root();
@@ -665,6 +716,7 @@ function fillVideo() {
 
 function preview() {
   fillVideo();
+  fillAnims();
   root().querySelector('#ed-card').innerHTML = cardHTML(cur);
 }
 

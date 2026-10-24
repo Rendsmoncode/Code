@@ -92,6 +92,17 @@ function shade(hex, amt) {
 let imageResolver = (url) => url;
 export function setImageResolver(fn) { imageResolver = fn; }
 export const resolveMedia = (url) => imageResolver(url);
+// Animations en partie : une vidéo par moment (card.anims[moment]), jouée en plein écran chez les deux joueurs.
+export const ANIM_MOMENTS = {
+  onPlay: 'Quand elle est jouée',
+  onAttack: 'Quand elle attaque',
+  onBlock: 'Au moment où elle bloque',
+  blockWin: 'Blocage réussi (elle tient l\'attaque)',
+  blockLose: 'Blocage raté (elle est mise KO)',
+  onKO: 'Quand elle est mise KO',
+  counter: 'Quand elle est utilisée en Contre',
+  trigger: 'Quand son Déclenchement s\'active',
+};
 
 // o.power : puissance affichée (si modifiée), o.cls : classes en plus, o.attrs : attributs HTML en plus.
 export function cardHTML(card, o = {}) {

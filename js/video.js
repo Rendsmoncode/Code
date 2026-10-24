@@ -205,4 +205,27 @@ export function stopCardVideo(abort = false) {
   else if (abort) stopMusic();
 }
 
+// Animation d'une carte en partie : vidéo plein écran avec son propre son (s'il y en a), un toucher la passe.
+export function playMomentVideo(url) {
+  if (!url) return Promise.resolve();
+  document.querySelector('.anim-ov')?.remove();
+  const ov = document.createElement('div');
+  ov.className = 'anim-ov';
+  const v = document.createElement('video');
+  v.playsInline = true; v.setAttribute('playsinline', ''); v.preload = 'auto';
+  v.src = resolveMedia(url);
+  ov.append(v);
+  document.body.append(ov);
+  return new Promise((resolve) => {
+    let done = false;
+    const end = () => { if (done) return; done = true; ov.classList.add('out'); setTimeout(() => ov.remove(), 300); resolve(); };
+    v.addEventListener('ended', end);
+    v.addEventListener('error', end);
+    ov.addEventListener('click', end);
+    setTimeout(end, 15000); // sécurité
+    v.muted = false; v.volume = 1;
+    v.play().catch(() => { v.muted = true; v.play().catch(end); }); // son refusé par le navigateur : on joue sans
+  });
+}
+
 setVideoModule({ hasVideo, playCardVideo, stopCardVideo, sealSound, startCeremony, stopMusic });

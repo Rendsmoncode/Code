@@ -129,7 +129,7 @@ export async function load() {
   S.starters = check(starters);
   // Tolérant : la fonction n'existe pas tant que le script SQL n'a pas été relancé.
   S.oneOfOne = Object.fromEntries((owners.error ? [] : owners.data || []).map((r) => [r.card_id, r.username]));
-  await signImages(S.cards.flatMap((c) => [oldImagePath(c.image), oldImagePath(c.video)]));
+  await signImages(S.cards.flatMap((c) => [oldImagePath(c.image), oldImagePath(c.video), ...Object.values(c.anims || {}).map(oldImagePath)]));
   await loadMusic().catch(() => {});
   reindex();
   emit();
@@ -204,17 +204,22 @@ export async function saveCards(cards) {
   for (const c of cards) {
     const prev = S.byId[c.id]?.image;
     const prevVideo = S.byId[c.id]?.video;
+    const prevAnims = Object.values(S.byId[c.id]?.anims || {});
     const image = await uploadImage(c);
     const { id, rarity, inBoosters, ...data } = { ...c, image };
     check(await sb.from('cards').upsert({
       id, data, rarity: rarity || 'C', in_boosters: inBoosters !== false, updated_at: new Date().toISOString(),
     }));
     c.image = image;
-    await signImages([oldImagePath(image), oldImagePath(c.video)]);
+    await signImages([oldImagePath(image), oldImagePath(c.video), ...Object.values(c.anims || {}).map(oldImagePath)]);
     const old = prev !== image && oldImagePath(prev);
     if (old) await sb.storage.from('cards').remove([old]);
     const oldVideo = prevVideo !== c.video && oldImagePath(prevVideo);
     if (oldVideo) await sb.storage.from('cards').remove([oldVideo]);
+    // animations remplacées ou retirées : on supprime les anciens fichiers
+    const keep = new Set(Object.values(c.anims || {}));
+    const gone = prevAnims.filter((u) => !keep.has(u)).map(oldImagePath).filter(Boolean);
+    if (gone.length) await sb.storage.from('cards').remove(gone);
     const i = S.cards.findIndex((x) => x.id === c.id);
     const saved = { ...c, image, rarity: rarity || 'C', inBoosters: inBoosters !== false };
     if (i >= 0) S.cards[i] = saved; else S.cards.push(saved);
@@ -299,7 +304,7 @@ export async function openBoosters(n = 1) {
   // Une carte 1on1 tirée devient visible : on recharge les cartes pour l'afficher.
   if (pulls.some((p) => !S.byId[p.id])) {
     S.cards = check(await sb.from('cards').select('*')).map(fromRow);
-    await signImages(S.cards.flatMap((c) => [oldImagePath(c.image), oldImagePath(c.video)]));
+    await signImages(S.cards.flatMap((c) => [oldImagePath(c.image), oldImagePath(c.video), ...Object.values(c.anims || {}).map(oldImagePath)]));
   await loadMusic().catch(() => {});
     reindex();
   }

@@ -7,6 +7,7 @@ import {
 } from './cards.js';
 import { WHEN, CONTINUOUS_ACTIONS, effectText, effectsText } from './effects.js';
 import * as net from './net.js';
+import { playMomentVideo } from './video.js';
 import { getTheme, openSettings } from './settings.js';
 import { recordGame } from './achievements.js';
 
@@ -273,6 +274,7 @@ function onMsg(m) {
     case 'contest': contested(); return;
     case 'chat': G.log.push({ who: 'opp', text: m.text, chat: true }); break;
     case 'reveal': G.reveals.push({ id: uid(), c: m.c, why: m.why }); break;
+    case 'anim': playMomentVideo(G.oppCards[m.c]?.anims?.[m.m]); return;
     case 'attack': G.battle = { ...m.b, role: 'def' }; render(); fireAll('onOppAttack'); return;
     case 'battleUpd': if (G.battle) Object.assign(G.battle, m.b); break;
     case 'battleEnd': G.battle = null; G.select = null; endBattleMods(); break;
@@ -497,6 +499,15 @@ function reveal(inst, why) {
   send({ t: 'reveal', c: inst.c, why });
 }
 
+// Animation d'une de mes cartes pour un moment de la partie (Admin : onglet Cartes → Animations en partie).
+// Elle se joue chez moi et chez l'adversaire ; la partie attend la fin chez moi.
+async function anim(inst, m) {
+  const url = myCard(inst)?.anims?.[m];
+  if (!url) return;
+  send({ t: 'anim', c: inst.c, m });
+  await playMomentVideo(url);
+}
+
 async function playCard(u, free = false, rested = false) {
   const loc = locate(u);
   if (!loc) return;
@@ -525,6 +536,7 @@ async function playCard(u, free = false, rested = false) {
     log(`active l'Événement ${name(c)}${cost ? ` (coût ${cost})` : ''}.`);
   }
   commit();
+  await anim(inst, 'onPlay');
   if (c.type === 'event') await fireCard(inst, 'main');
   else {
     await fireCard(inst, 'onPlay');
@@ -569,6 +581,7 @@ async function declareAttack(targetInst, isLeader) {
   };
   log(`attaque ${name(oppCard(targetInst))} avec ${name(c)}.`);
   commit();
+  await anim(atk, 'onAttack');
   await fireCard(atk, 'onAttack');
 }
 
@@ -610,6 +623,7 @@ async function block(inst) {
   Object.assign(G.battle, { blocker: inst.u, target: inst.u, targetCard: inst.c, targetIsLeader: false });
   log(`bloque avec ${name(c)}.`);
   battleUpd();
+  await anim(inst, 'onBlock');
   await fireCard(inst, 'onBlock');
 }
 
@@ -623,13 +637,14 @@ function counterBtns() {
   }).join('')}</div>`;
 }
 
-function counterChar(inst) {
+async function counterChar(inst) {
   const c = myCard(inst);
   move(inst.u, 'trash');
   G.battle.counter += Number(c.counter) || 0;
   reveal(inst, `Contre +${c.counter}`);
   log(`utilise ${name(c)} en Contre (+${c.counter}).`);
   battleUpd();
+  await anim(inst, 'counter');
 }
 
 async function counterEvent(inst) {
@@ -643,6 +658,7 @@ async function counterEvent(inst) {
     reveal(inst, 'Événement [Contre]');
     log(`active ${name(c)} en Contre.`);
     commit();
+    await anim(inst, 'counter');
     await fireCard(inst, 'counter');
     if (G.battle) battleUpd();
     return;
@@ -657,6 +673,7 @@ async function counterEvent(inst) {
   reveal(inst, 'Événement [Contre]');
   log(`active ${name(c)} en Contre${bonus ? ` (+${bonus})` : ''}.`);
   battleUpd();
+  await anim(inst, 'counter');
 }
 
 async function resolveBattle() {
@@ -668,6 +685,12 @@ async function resolveBattle() {
   if (tgt && fieldZone) {
     const def = myPower(tgt) + b.counter;
     const tc = myCard(tgt);
+    if (b.blocker && tgt.u === b.blocker) {
+      // blocage réussi (il tient l'attaque) ou raté (il va être mis KO)
+      const win = b.atkPower < def || isProtected(tgt, 'battle');
+      await anim(tgt, win ? 'blockWin' : 'blockLose');
+      if (!win && tc?.anims?.blockLose) tgt.noKoAnim = true;
+    }
     if (b.atkPower >= def) {
       if (b.targetIsLeader) {
         log(`subit l'attaque sur son Leader (${b.atkPower} contre ${def}).`);
@@ -712,6 +735,7 @@ async function takeDamage(n, banish) {
         reveal(inst, 'Déclenchement');
         log(`révèle ${name(c)} et active son Déclenchement.`);
         me.hand.push(inst); // la carte attend en main pendant son effet
+        await anim(inst, 'trigger');
         const ctx = await fireCard(inst, 'trigger');
         if (ctx?.played && locate(inst.u)?.zone === 'hand') await playCard(inst.u, true);
         else if (locate(inst.u)?.zone === 'hand') move(inst.u, 'trash');
@@ -1015,6 +1039,8 @@ async function koMine(inst, why = '') {
   const c = myCard(inst);
   move(inst.u, 'trash');
   log(`voit ${name(c)} mis KO${why}.`);
+  if (inst.noKoAnim) delete inst.noKoAnim; // l'animation « blocage raté » vient d'être jouée
+  else await anim(inst, 'onKO');
   await fireCard(inst, 'onKO');
   if (c.type === 'character') await fireAll('onOwnKO', null, c);
 }

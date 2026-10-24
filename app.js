@@ -21243,6 +21243,16 @@ ${suffix}`;
     imageResolver = fn;
   }
   var resolveMedia = (url) => imageResolver(url);
+  var ANIM_MOMENTS = {
+    onPlay: "Quand elle est jou\xE9e",
+    onAttack: "Quand elle attaque",
+    onBlock: "Au moment o\xF9 elle bloque",
+    blockWin: "Blocage r\xE9ussi (elle tient l'attaque)",
+    blockLose: "Blocage rat\xE9 (elle est mise KO)",
+    onKO: "Quand elle est mise KO",
+    counter: "Quand elle est utilis\xE9e en Contre",
+    trigger: "Quand son D\xE9clenchement s'active"
+  };
   function cardHTML(card, o = {}) {
     if (!card) return `<div class="card back ${o.cls || ""}" ${o.attrs || ""}><div class="frame"><div class="back-logo">${logoSVG()}</div></div></div>`;
     const t = card.type;
@@ -21501,7 +21511,7 @@ ${suffix}`;
     S.decks = check(decks);
     S.starters = check(starters);
     S.oneOfOne = Object.fromEntries((owners.error ? [] : owners.data || []).map((r) => [r.card_id, r.username]));
-    await signImages(S.cards.flatMap((c) => [oldImagePath(c.image), oldImagePath(c.video)]));
+    await signImages(S.cards.flatMap((c) => [oldImagePath(c.image), oldImagePath(c.video), ...Object.values(c.anims || {}).map(oldImagePath)]));
     await loadMusic().catch(() => {
     });
     reindex();
@@ -21567,6 +21577,7 @@ ${suffix}`;
     for (const c of cards) {
       const prev = S.byId[c.id]?.image;
       const prevVideo = S.byId[c.id]?.video;
+      const prevAnims = Object.values(S.byId[c.id]?.anims || {});
       const image = await uploadImage(c);
       const { id, rarity, inBoosters, ...data } = { ...c, image };
       check(await sb.from("cards").upsert({
@@ -21577,11 +21588,14 @@ ${suffix}`;
         updated_at: (/* @__PURE__ */ new Date()).toISOString()
       }));
       c.image = image;
-      await signImages([oldImagePath(image), oldImagePath(c.video)]);
+      await signImages([oldImagePath(image), oldImagePath(c.video), ...Object.values(c.anims || {}).map(oldImagePath)]);
       const old = prev !== image && oldImagePath(prev);
       if (old) await sb.storage.from("cards").remove([old]);
       const oldVideo = prevVideo !== c.video && oldImagePath(prevVideo);
       if (oldVideo) await sb.storage.from("cards").remove([oldVideo]);
+      const keep = new Set(Object.values(c.anims || {}));
+      const gone = prevAnims.filter((u) => !keep.has(u)).map(oldImagePath).filter(Boolean);
+      if (gone.length) await sb.storage.from("cards").remove(gone);
       const i = S.cards.findIndex((x) => x.id === c.id);
       const saved = { ...c, image, rarity: rarity || "C", inBoosters: inBoosters !== false };
       if (i >= 0) S.cards[i] = saved;
@@ -21663,7 +21677,7 @@ ${suffix}`;
     if (pulls.length < n3 * 5 && !error) error = new Error("Plus assez de boosters.");
     if (pulls.some((p) => !S.byId[p.id])) {
       S.cards = check(await sb.from("cards").select("*")).map(fromRow);
-      await signImages(S.cards.flatMap((c) => [oldImagePath(c.image), oldImagePath(c.video)]));
+      await signImages(S.cards.flatMap((c) => [oldImagePath(c.image), oldImagePath(c.video), ...Object.values(c.anims || {}).map(oldImagePath)]));
       await loadMusic().catch(() => {
       });
       reindex();
@@ -21941,6 +21955,39 @@ ${suffix}`;
   function stopCardVideo(abort = false) {
     if (stopCurrent) stopCurrent(abort);
     else if (abort) stopMusic();
+  }
+  function playMomentVideo(url) {
+    if (!url) return Promise.resolve();
+    document.querySelector(".anim-ov")?.remove();
+    const ov = document.createElement("div");
+    ov.className = "anim-ov";
+    const v = document.createElement("video");
+    v.playsInline = true;
+    v.setAttribute("playsinline", "");
+    v.preload = "auto";
+    v.src = resolveMedia(url);
+    ov.append(v);
+    document.body.append(ov);
+    return new Promise((resolve) => {
+      let done = false;
+      const end = () => {
+        if (done) return;
+        done = true;
+        ov.classList.add("out");
+        setTimeout(() => ov.remove(), 300);
+        resolve();
+      };
+      v.addEventListener("ended", end);
+      v.addEventListener("error", end);
+      ov.addEventListener("click", end);
+      setTimeout(end, 15e3);
+      v.muted = false;
+      v.volume = 1;
+      v.play().catch(() => {
+        v.muted = true;
+        v.play().catch(end);
+      });
+    });
   }
   setVideoModule({ hasVideo, playCardVideo, stopCardVideo, sealSound, startCeremony, stopMusic });
 
@@ -22905,6 +22952,7 @@ ${suffix}`;
   var cur = newCard();
   var fxEd = null;
   var pendingVideo = null;
+  var pendingAnims = {};
   var filter = { q: "", type: "", color: "", rarity: "" };
   function initEditor() {
     root().innerHTML = `
@@ -22966,6 +23014,8 @@ ${suffix}`;
           <span class="muted small ed-vname"></span>
         </div>
         <label class="small">Position de la carte dans la vid\xE9o <input type="range" id="ed-vx" min="0" max="1" step="0.001"> <span class="ed-vxv"></span></label></div>
+      <div class="field f-anims"><label>Animations en partie <small>(une vid\xE9o par moment, jou\xE9e en plein \xE9cran chez les deux joueurs, avec son son s'il y en a ; un toucher la passe. MP4, 25 Mo maximum)</small></label>
+        <div class="ed-anims"></div></div>
       <div class="field lay"><label>Cadrage de l'image <small>(ou glissez l'image sur l'aper\xE7u, molette pour zoomer)</small></label>
         <div class="lay-grid">
           <label>Zoom <input type="range" data-lay="art.z" min="0.2" max="4" step="0.01"><output></output></label>
@@ -23111,6 +23161,12 @@ ${suffix}`;
           cur.video = await uploadVideo(cur.id, pendingVideo);
           pendingVideo = null;
         }
+        for (const [m, p] of Object.entries(pendingAnims)) {
+          msg(`Envoi de l'animation \xAB ${ANIM_MOMENTS[m]} \xBB\u2026`);
+          cur.anims = { ...cur.anims || {}, [m]: await uploadVideo(`${cur.id}-${m}`, p.file) };
+          URL.revokeObjectURL(p.url);
+        }
+        pendingAnims = {};
         const { videoLocal, ...plain } = cur;
         const c = { ...structuredClone(plain), colors: cur.colors.slice(0, maxColors()) };
         if (c.rarity !== "S" && !c.alt) {
@@ -23201,6 +23257,38 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         img: val("ed-fimg").value
       };
       renderList();
+    });
+    r.querySelector(".ed-anims").addEventListener("change", (e) => {
+      const m = e.target.dataset.afile;
+      const f = e.target.files?.[0];
+      e.target.value = "";
+      if (!m || !f) return;
+      if (f.size > 25e6) {
+        msg("Vid\xE9o trop lourde : 25 Mo maximum.", true);
+        return;
+      }
+      if (pendingAnims[m]) URL.revokeObjectURL(pendingAnims[m].url);
+      pendingAnims[m] = { file: f, url: URL.createObjectURL(f) };
+      fillAnims();
+    });
+    r.querySelector(".ed-anims").addEventListener("click", (e) => {
+      const t = e.target.closest("[data-atest], [data-arm]");
+      if (!t) return;
+      if (t.dataset.atest) {
+        const m2 = t.dataset.atest;
+        playMomentVideo(pendingAnims[m2]?.url || cur.anims?.[m2]);
+        return;
+      }
+      const m = t.dataset.arm;
+      if (pendingAnims[m]) {
+        URL.revokeObjectURL(pendingAnims[m].url);
+        delete pendingAnims[m];
+      }
+      if (cur.anims) {
+        delete cur.anims[m];
+        if (!Object.keys(cur.anims).length) delete cur.anims;
+      }
+      fillAnims();
     });
     r.querySelector(".ed-alt").addEventListener("click", (e) => {
       const b = e.target.closest("[data-alt]");
@@ -23478,6 +23566,8 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   }
   function fill() {
     pendingVideo = null;
+    for (const p of Object.values(pendingAnims)) URL.revokeObjectURL(p.url);
+    pendingAnims = {};
     const r = root();
     const set = (id, x) => {
       r.querySelector("#" + id).value = x ?? "";
@@ -23485,7 +23575,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     set("ed-name", cur.name);
     set("ed-code", cur.code);
     set("ed-cost", cur.cost);
-    set("ed-life", cur.life);
+    set("ed-life", cur.life || "");
     const [a1, a2] = attributesOf(cur);
     set("ed-power", cur.power);
     set("ed-counter", cur.counter || 0);
@@ -23648,6 +23738,28 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       preview();
     }, { passive: false });
   }
+  function fillAnims() {
+    const r = root();
+    const box = r.querySelector(".f-anims");
+    if (!box) return;
+    if (cur.alt) {
+      const l = r.querySelector(".ed-anims");
+      l.dataset.sig = "";
+      l.innerHTML = '<p class="muted small">Une Alt reprend les animations de sa carte de base.</p>';
+      return;
+    }
+    const sig = JSON.stringify([cur.id, cur.anims || {}, Object.keys(pendingAnims)]);
+    const list = r.querySelector(".ed-anims");
+    if (list.dataset.sig === sig) return;
+    list.dataset.sig = sig;
+    list.innerHTML = Object.entries(ANIM_MOMENTS).map(([m, label]) => {
+      const has = Boolean(pendingAnims[m] || cur.anims?.[m]);
+      const state = pendingAnims[m] ? `${esc(pendingAnims[m].file.name)} (envoy\xE9e \xE0 l'enregistrement)` : cur.anims?.[m] ? "Vid\xE9o en place" : "";
+      return `<div class="ed-anim${has ? " on" : ""}"><b>${esc(label)}</b><span class="muted small">${state}</span>
+      <span class="row-btns"><label class="btn small"><input type="file" accept="video/mp4,video/*" data-afile="${m}" hidden>${has ? "Remplacer" : "Ajouter une vid\xE9o"}</label>
+      ${has ? `<button type="button" class="btn small ghost" data-atest="${m}">Tester</button><button type="button" class="btn small ghost" data-arm="${m}">Retirer</button>` : ""}</span></div>`;
+    }).join("");
+  }
   function fillVideo() {
     const r = root();
     const box = r.querySelector(".f-video");
@@ -23662,6 +23774,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   }
   function preview() {
     fillVideo();
+    fillAnims();
     root().querySelector("#ed-card").innerHTML = cardHTML(cur);
   }
   function renderList() {
@@ -24394,6 +24507,9 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       case "reveal":
         G.reveals.push({ id: uid(), c: m.c, why: m.why });
         break;
+      case "anim":
+        playMomentVideo(G.oppCards[m.c]?.anims?.[m.m]);
+        return;
       case "attack":
         G.battle = { ...m.b, role: "def" };
         render2();
@@ -24648,6 +24764,12 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   function reveal(inst, why) {
     send({ t: "reveal", c: inst.c, why });
   }
+  async function anim(inst, m) {
+    const url = myCard(inst)?.anims?.[m];
+    if (!url) return;
+    send({ t: "anim", c: inst.c, m });
+    await playMomentVideo(url);
+  }
   async function playCard(u, free = false, rested = false) {
     const loc = locate(u);
     if (!loc) return;
@@ -24677,6 +24799,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       log(`active l'\xC9v\xE9nement ${name(c)}${cost ? ` (co\xFBt ${cost})` : ""}.`);
     }
     commit();
+    await anim(inst, "onPlay");
     if (c.type === "event") await fireCard(inst, "main");
     else {
       await fireCard(inst, "onPlay");
@@ -24733,6 +24856,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     };
     log(`attaque ${name(oppCard(targetInst))} avec ${name(c)}.`);
     commit();
+    await anim(atk, "onAttack");
     await fireCard(atk, "onAttack");
   }
   function sendAttack() {
@@ -24772,6 +24896,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     Object.assign(G.battle, { blocker: inst.u, target: inst.u, targetCard: inst.c, targetIsLeader: false });
     log(`bloque avec ${name(c)}.`);
     battleUpd();
+    await anim(inst, "onBlock");
     await fireCard(inst, "onBlock");
   }
   function counterBtns() {
@@ -24785,13 +24910,14 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       return `<button class="btn small" data-do="ctr" data-u="${i.u}" title="D\xE9fausser cette carte">${esc(c.name)} ${c.type === "event" ? "(\xC9v\xE9nement)" : `+${c.counter}`}</button>`;
     }).join("")}</div>`;
   }
-  function counterChar(inst) {
+  async function counterChar(inst) {
     const c = myCard(inst);
     move(inst.u, "trash");
     G.battle.counter += Number(c.counter) || 0;
     reveal(inst, `Contre +${c.counter}`);
     log(`utilise ${name(c)} en Contre (+${c.counter}).`);
     battleUpd();
+    await anim(inst, "counter");
   }
   async function counterEvent(inst) {
     const c = myCard(inst);
@@ -24804,6 +24930,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       reveal(inst, "\xC9v\xE9nement [Contre]");
       log(`active ${name(c)} en Contre.`);
       commit();
+      await anim(inst, "counter");
       await fireCard(inst, "counter");
       if (G.battle) battleUpd();
       return;
@@ -24821,6 +24948,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     reveal(inst, "\xC9v\xE9nement [Contre]");
     log(`active ${name(c)} en Contre${bonus ? ` (+${bonus})` : ""}.`);
     battleUpd();
+    await anim(inst, "counter");
   }
   async function resolveBattle() {
     const b = G.battle;
@@ -24831,6 +24959,11 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     if (tgt && fieldZone) {
       const def = myPower(tgt) + b.counter;
       const tc = myCard(tgt);
+      if (b.blocker && tgt.u === b.blocker) {
+        const win = b.atkPower < def || isProtected(tgt, "battle");
+        await anim(tgt, win ? "blockWin" : "blockLose");
+        if (!win && tc?.anims?.blockLose) tgt.noKoAnim = true;
+      }
       if (b.atkPower >= def) {
         if (b.targetIsLeader) {
           log(`subit l'attaque sur son Leader (${b.atkPower} contre ${def}).`);
@@ -24876,6 +25009,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
           reveal(inst, "D\xE9clenchement");
           log(`r\xE9v\xE8le ${name(c)} et active son D\xE9clenchement.`);
           me.hand.push(inst);
+          await anim(inst, "trigger");
           const ctx = await fireCard(inst, "trigger");
           if (ctx?.played && locate(inst.u)?.zone === "hand") await playCard(inst.u, true);
           else if (locate(inst.u)?.zone === "hand") move(inst.u, "trash");
@@ -25191,6 +25325,8 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     const c = myCard(inst);
     move(inst.u, "trash");
     log(`voit ${name(c)} mis KO${why}.`);
+    if (inst.noKoAnim) delete inst.noKoAnim;
+    else await anim(inst, "onKO");
     await fireCard(inst, "onKO");
     if (c.type === "character") await fireAll("onOwnKO", null, c);
   }
