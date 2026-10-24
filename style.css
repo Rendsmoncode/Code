@@ -966,3 +966,13 @@ details { margin-top: 12px; }
 .bx-gift-s { margin: 0 0 18px; color: #fffc; font-size: 1.05rem; }
 .bx-gift .bs-pack { margin-bottom: 22px; cursor: pointer; }
 .bx-gift .btn { position: relative; z-index: 3; }
+
+/* ---------- vidéo des 1on1 : par-dessus la carte, peut en dépasser ; la carte (et ses effets) s'efface pendant la lecture ---------- */
+.cv-card, .bx-card { position: relative; }
+.cv-vwrap { position: absolute; z-index: 20; top: 0; height: 100%; aspect-ratio: var(--va, 4 / 3); pointer-events: none;
+  left: calc(var(--vx, 0) * var(--va, 1.3333) * -139.683%); transition: opacity .6s ease; }
+.cv-vwrap video { display: block; width: 100%; height: 100%; object-fit: fill; border-radius: 1.5%; box-shadow: 0 20px 60px #000c; }
+.vid-on > .card { opacity: 0; transition: opacity .25s ease; }
+.vid-on.vid-end > .card { opacity: 1; transition: opacity .6s ease; }
+.vid-on.vid-end > .cv-vwrap { opacity: 0; }
+.cardview .cv-card { overflow: visible; }

@@ -1,5 +1,6 @@
 // Onglet « Cartes » : création et édition des cartes de la collection.
-import { S, saveCard, saveCards, deleteCard, onChange } from './store.js';
+import { S, saveCard, saveCards, deleteCard, onChange, uploadVideo } from './store.js';
+import { playCardVideo } from './video.js';
 import {
   COLORS, TYPES, RARITIES, ATTRIBUTES, attributesOf, KEYWORDS, esc, uid, newCard, cardHTML, resizeImage, download, readJSONFile,
 } from './cards.js';
@@ -10,6 +11,7 @@ import { allTraits } from './store.js';
 const root = () => document.getElementById('tab-cards');
 let cur = newCard();
 let fxEd = null;
+let pendingVideo = null; // vidéo choisie, envoyée à l'enregistrement
 let filter = { q: '', type: '', color: '', rarity: '' };
 
 export function initEditor() {
@@ -66,6 +68,14 @@ export function initEditor() {
           <label class="btn"><input type="file" id="ed-img" accept="image/*" hidden>Choisir une image…</label>
           <button type="button" class="btn ghost" id="ed-noimg">Retirer l'image</button>
         </div></div>
+      <div class="field f-video"><label>Vidéo <small>(1on1 seulement : elle se lance au tirage et sur un appui long ; MP4, 10 s et 15 Mo maximum)</small></label>
+        <div class="row-btns">
+          <label class="btn"><input type="file" id="ed-video" accept="video/mp4,video/*" hidden>Choisir une vidéo…</label>
+          <button type="button" class="btn ghost" id="ed-vtest">Tester sur l'aperçu</button>
+          <button type="button" class="btn ghost" id="ed-novideo">Retirer la vidéo</button>
+          <span class="muted small ed-vname"></span>
+        </div>
+        <label class="small">Position de la carte dans la vidéo <input type="range" id="ed-vx" min="0" max="1" step="0.001"> <span class="ed-vxv"></span></label></div>
       <div class="field lay"><label>Cadrage de l'image <small>(ou glissez l'image sur l'aperçu, molette pour zoomer)</small></label>
         <div class="lay-grid">
           <label>Zoom <input type="range" data-lay="art.z" min="0.2" max="4" step="0.01"><output></output></label>
@@ -152,11 +162,29 @@ export function initEditor() {
   val('ed-img').addEventListener('change', async (e) => {
     const f = e.target.files[0];
     if (!f) return;
-    cur.image = await resizeImage(f);
+    cur.image = await resizeImage(f, cur.rarity === 'S' ? 1200 : 500); // 1on1 : plus nette en grand
     e.target.value = '';
     preview();
   });
   val('ed-noimg').addEventListener('click', () => { cur.image = ''; preview(); });
+  // Vidéo (1on1) : envoyée au moment d'enregistrer la carte.
+  val('ed-video').addEventListener('change', (e) => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    if (f.size > 15e6) { msg('Vidéo trop lourde : 15 Mo maximum.', true); return; }
+    pendingVideo = f;
+    if (cur.videoLocal) URL.revokeObjectURL(cur.videoLocal);
+    cur.videoLocal = URL.createObjectURL(f);
+    fillVideo();
+  });
+  val('ed-novideo').addEventListener('click', () => { pendingVideo = null; cur.video = ''; cur.videoLocal = ''; fillVideo(); });
+  val('ed-vx').addEventListener('input', (e) => { cur.vx = Number(e.target.value); fillVideo(); });
+  val('ed-vtest').addEventListener('click', () => {
+    const host = r.querySelector('.ed-preview');
+    const src = cur.videoLocal || cur.video;
+    if (src && host) playCardVideo({ ...cur, rarity: 'S', video: src }, r.querySelector('#ed-card'));
+  });
   bindLayout(r);
   bindTraits(r);
   form.addEventListener('submit', async (e) => {
@@ -165,7 +193,11 @@ export function initEditor() {
     if (!cur.name.trim()) return msg('Donnez un nom à la carte.', true);
     msg('Enregistrement…');
     try {
-      const c = { ...structuredClone(cur), colors: cur.colors.slice(0, maxColors()) };
+      if (pendingVideo) { msg('Envoi de la vidéo…'); cur.video = await uploadVideo(cur.id, pendingVideo); pendingVideo = null; }
+      const { videoLocal, ...plain } = cur;
+      const c = { ...structuredClone(plain), colors: cur.colors.slice(0, maxColors()) };
+      if (c.rarity !== 'S') { delete c.video; delete c.vx; }
+      msg('Enregistrement…');
       await saveCard(c);
       cur.image = c.image;
       fill();
@@ -447,6 +479,7 @@ function readForm() {
 }
 
 function fill() {
+  pendingVideo = null;
   const r = root();
   const set = (id, x) => { r.querySelector('#' + id).value = x ?? ''; };
   set('ed-name', cur.name); set('ed-code', cur.code); set('ed-cost', cur.cost); set('ed-life', cur.life);
@@ -594,7 +627,22 @@ function bindLayout(r) {
   }, { passive: false });
 }
 
+// Champ vidéo : seulement pour les 1on1.
+function fillVideo() {
+  const r = root();
+  const box = r.querySelector('.f-video');
+  if (!box) return;
+  box.hidden = cur.rarity !== 'S';
+  const has = Boolean(cur.videoLocal || cur.video);
+  r.querySelector('.ed-vname').textContent = pendingVideo ? `${pendingVideo.name} (envoyée à l'enregistrement)` : has ? 'Vidéo enregistrée' : 'Aucune vidéo';
+  r.querySelector('#ed-vtest').disabled = !has;
+  r.querySelector('#ed-novideo').disabled = !has;
+  r.querySelector('#ed-vx').value = cur.vx ?? 0.25;
+  r.querySelector('.ed-vxv').textContent = `${Math.round((cur.vx ?? 0.25) * 100)} %`;
+}
+
 function preview() {
+  fillVideo();
   root().querySelector('#ed-card').innerHTML = cardHTML(cur);
 }
 

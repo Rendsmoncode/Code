@@ -91,6 +91,7 @@ function shade(hex, amt) {
 // Les images du jeu sont privées : le magasin fournit une adresse temporaire pour chaque image.
 let imageResolver = (url) => url;
 export function setImageResolver(fn) { imageResolver = fn; }
+export const resolveMedia = (url) => imageResolver(url);
 
 // o.power : puissance affichée (si modifiée), o.cls : classes en plus, o.attrs : attributs HTML en plus.
 export function cardHTML(card, o = {}) {
@@ -181,7 +182,10 @@ export function readJSONFile(file) {
 
 // Carte affichée en très grand par-dessus la page (collection, boosters). Un toucher / clic / Échap la ferme.
 // hold : la vue se ferme quand on relâche (appui long pendant l'ouverture d'un booster).
-export function showCardBig(card, { hold = false } = {}) {
+// video : lance la vidéo de la 1on1 (si elle en a une).
+let videoMod = null;
+export function setVideoModule(m) { videoMod = m; }
+export function showCardBig(card, { hold = false, video = false } = {}) {
   if (!card) return null;
   document.querySelector('.cardview')?.remove();
   const ov = document.createElement('div');
@@ -189,9 +193,10 @@ export function showCardBig(card, { hold = false } = {}) {
   ov.setAttribute('role', 'dialog');
   ov.setAttribute('aria-label', card.name || 'Carte');
   ov.innerHTML = `<div class="cv-card">${cardHTML(card)}</div>${hold ? '' : '<p class="cv-hint">Touchez pour fermer</p>'}`;
-  const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
+  const close = () => { videoMod?.stopCardVideo(); ov.remove(); document.removeEventListener('keydown', onKey); };
   const onKey = (e) => { if (e.key === 'Escape') close(); };
   if (!hold) { ov.addEventListener('click', close); document.addEventListener('keydown', onKey); }
   document.body.append(ov);
+  if (video && videoMod?.hasVideo(card)) videoMod.playCardVideo(card, ov.querySelector('.cv-card'));
   return close;
 }

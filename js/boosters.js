@@ -2,6 +2,7 @@
 import { S, openBoosters, refreshStatus, refreshCollection, takeReveals, onChange } from './store.js';
 import { RARITIES, RARITY_ORDER, TYPES, esc, cardHTML, showCardBig } from './cards.js';
 import { logoSVG } from './logo.js';
+import { hasVideo, preloadVideo, playCardVideo, stopCardVideo } from './video.js';
 import { refreshAchievements } from './achievements.js';
 
 const RATES = [
@@ -195,6 +196,7 @@ export function initBoosters() {
       if (SPECIAL[r]) {
         // Animation d'arrivée propre à la rareté, puis la carte apparaît avec son effet.
         ov.classList.add(`fx-${r}`, 'intro');
+        preloadVideo(c);
         ov.querySelector('.bx-fx').innerHTML = fxHTML(r);
         await wait(SPECIAL[r]);
         if (done) return;
@@ -203,6 +205,12 @@ export function initBoosters() {
       stage.insertAdjacentHTML('beforeend', `<button class="bx-card in r-${r}" data-id="${esc(p.id)}" aria-label="Carte suivante (appui long : voir en grand)">${cardHTML(c)}</button>`);
       ov.querySelector('.bx-info').innerHTML = `<span class="rar-chip r-${r}">${RARITIES[r]?.label || ''}</span>${p.n > 1 ? `<span class="bx-new">×${p.n}</span>` : ''}${p.new ? '<span class="bx-new">Nouvelle !</span>' : ''}
         ${r === 'S' ? '<div class="bx-unique">Exemplaire unique</div>' : ''}`;
+      if (hasVideo(c)) {
+        // 1on1 avec vidéo : elle se lance aussitôt, les effets reviennent quand elle se fige
+        lock = false;
+        await playCardVideo(c, stage.querySelector('.bx-card:last-child'));
+        return;
+      }
       await wait(SPECIAL[r] ? 500 : 250);
       lock = false;
     }
@@ -273,8 +281,10 @@ export function initBoosters() {
       }
       // Récapitulatif : toucher une carte l'affiche en grand.
       const mini = e.target.closest('.bx-mini');
-      if (mini) { showCardBig(S.byId[mini.dataset.id]); return; }
+      if (mini) { showCardBig(S.byId[mini.dataset.id], { video: true }); return; }
       if (held) { held = false; return; }
+      // un toucher pendant la vidéo l'arrête (fondu vers la carte) au lieu de passer à la suivante
+      if (stage.querySelector('.vid-on')) { stopCardVideo(); return; }
       if (!ov.classList.contains('done')) next();
     });
     // Appui long sur la carte révélée : elle s'affiche en grand tant qu'on reste appuyé.
@@ -326,8 +336,20 @@ export function initCollection() {
   });
   q('.cl-grid').addEventListener('click', (e) => {
     const g = e.target.closest('.grid-card');
+    if (lpDone) { lpDone = false; return; } // l'appui long a déjà ouvert la carte
     if (g) showCardBig(S.byId[g.dataset.id]);
   });
+  // Appui long : la carte en grand, avec la vidéo pour une 1on1 qui en a une.
+  let lpTimer = null;
+  let lpDone = false;
+  q('.cl-grid').addEventListener('pointerdown', (e) => {
+    const g = e.target.closest('.grid-card');
+    lpDone = false;
+    clearTimeout(lpTimer);
+    if (g) lpTimer = setTimeout(() => { lpDone = true; showCardBig(S.byId[g.dataset.id], { video: true }); }, 450);
+  });
+  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) q('.cl-grid').addEventListener(ev, () => clearTimeout(lpTimer));
+  q('.cl-grid').addEventListener('contextmenu', (e) => { if (e.target.closest('.grid-card')) e.preventDefault(); });
   q('.cl-grid').addEventListener('keydown', (e) => {
     const g = e.target.closest('.grid-card');
     if (g && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); showCardBig(S.byId[g.dataset.id]); }

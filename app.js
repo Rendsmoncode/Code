@@ -21242,6 +21242,7 @@ ${suffix}`;
   function setImageResolver(fn) {
     imageResolver = fn;
   }
+  var resolveMedia = (url) => imageResolver(url);
   function cardHTML(card, o = {}) {
     if (!card) return `<div class="card back ${o.cls || ""}" ${o.attrs || ""}><div class="frame"><div class="back-logo">${logoSVG()}</div></div></div>`;
     const t = card.type;
@@ -21315,7 +21316,11 @@ ${suffix}`;
   function readJSONFile(file) {
     return file.text().then((t) => JSON.parse(t));
   }
-  function showCardBig(card, { hold = false } = {}) {
+  var videoMod = null;
+  function setVideoModule(m) {
+    videoMod = m;
+  }
+  function showCardBig(card, { hold = false, video = false } = {}) {
     if (!card) return null;
     document.querySelector(".cardview")?.remove();
     const ov = document.createElement("div");
@@ -21324,6 +21329,7 @@ ${suffix}`;
     ov.setAttribute("aria-label", card.name || "Carte");
     ov.innerHTML = `<div class="cv-card">${cardHTML(card)}</div>${hold ? "" : '<p class="cv-hint">Touchez pour fermer</p>'}`;
     const close = () => {
+      videoMod?.stopCardVideo();
       ov.remove();
       document.removeEventListener("keydown", onKey);
     };
@@ -21335,6 +21341,7 @@ ${suffix}`;
       document.addEventListener("keydown", onKey);
     }
     document.body.append(ov);
+    if (video && videoMod?.hasVideo(card)) videoMod.playCardVideo(card, ov.querySelector(".cv-card"));
     return close;
   }
 
@@ -21455,7 +21462,7 @@ ${suffix}`;
     S.decks = check(decks);
     S.starters = check(starters);
     S.oneOfOne = Object.fromEntries((owners.error ? [] : owners.data || []).map((r) => [r.card_id, r.username]));
-    await signImages(S.cards.map((c) => oldImagePath(c.image)));
+    await signImages(S.cards.flatMap((c) => [oldImagePath(c.image), oldImagePath(c.video)]));
     reindex();
     emit();
   }
@@ -21472,6 +21479,11 @@ ${suffix}`;
   async function refreshCollection() {
     S.collection = Object.fromEntries(check(await sb.from("collection").select("card_id, qty")).map((r) => [r.card_id, r.qty]));
   }
+  async function uploadVideo(cardId, file) {
+    const path = `${cardId}-video-${Date.now()}.mp4`;
+    check(await sb.storage.from("cards").upload(path, file, { contentType: file.type || "video/mp4", cacheControl: "31536000" }));
+    return sb.storage.from("cards").getPublicUrl(path).data.publicUrl;
+  }
   async function uploadImage(card) {
     if (!card.image?.startsWith("data:")) return card.image;
     const blob = await (await fetch(card.image)).blob();
@@ -21486,6 +21498,7 @@ ${suffix}`;
   async function saveCards(cards) {
     for (const c of cards) {
       const prev = S.byId[c.id]?.image;
+      const prevVideo = S.byId[c.id]?.video;
       const image = await uploadImage(c);
       const { id, rarity, inBoosters, ...data } = { ...c, image };
       check(await sb.from("cards").upsert({
@@ -21496,9 +21509,11 @@ ${suffix}`;
         updated_at: (/* @__PURE__ */ new Date()).toISOString()
       }));
       c.image = image;
-      await signImages([oldImagePath(image)]);
+      await signImages([oldImagePath(image), oldImagePath(c.video)]);
       const old = prev !== image && oldImagePath(prev);
       if (old) await sb.storage.from("cards").remove([old]);
+      const oldVideo = prevVideo !== c.video && oldImagePath(prevVideo);
+      if (oldVideo) await sb.storage.from("cards").remove([oldVideo]);
       const i = S.cards.findIndex((x) => x.id === c.id);
       const saved = { ...c, image, rarity: rarity || "C", inBoosters: inBoosters !== false };
       if (i >= 0) S.cards[i] = saved;
@@ -21580,7 +21595,7 @@ ${suffix}`;
     if (pulls.length < n3 * 5 && !error) error = new Error("Plus assez de boosters.");
     if (pulls.some((p) => !S.byId[p.id])) {
       S.cards = check(await sb.from("cards").select("*")).map(fromRow);
-      await signImages(S.cards.map((c) => oldImagePath(c.image)));
+      await signImages(S.cards.flatMap((c) => [oldImagePath(c.image), oldImagePath(c.video)]));
       reindex();
     }
     await refreshCollection();
@@ -21640,6 +21655,91 @@ ${suffix}`;
   async function setRole(target, role) {
     check(await sb.rpc("admin_set_role", { target, new_role: role }));
   }
+
+  // js/video.js
+  var SILENCE = "data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAWfbW9vdgAAAGxtdmhkAAAAAAAAAAAAAAAAAAAD6AAAAGQAAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAwAAAlh0cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAABAAAAAAAAAFAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAABAAAAAQAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAAABQAAAAAAABAAAAAAHQbWRpYQAAACBtZGhkAAAAAAAAAAAAAAAAAAAyAAAABABVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABe21pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAATtzdGJsAAAAt3N0c2QAAAAAAAAAAQAAAKdhdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAABAAEABIAAAASAAAAAAAAAABFUxhdmM2MC4zMS4xMDIgbGlieDI2NAAAAAAAAAAAAAAAGP//AAAALWF2Y0MBQsAK/+EAFWdCwAraewEQAAADABAAAAMDIPEiagEABWjOAZcgAAAAEHBhc3AAAAABAAAAAQAAABRidHJ0AAAAAAAA8vgAAPL4AAAAGHN0dHMAAAAAAAAAAQAAAAIAAAIAAAAAFHN0c3MAAAAAAAAAAQAAAAEAAAAcc3RzYwAAAAAAAAABAAAAAQAAAAEAAAABAAAAHHN0c3oAAAAAAAAAAAAAAAIAAAJlAAAACQAAABhzdGNvAAAAAAAAAAIAAAXkAAAIUQAAAnF0cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAACAAAAAAAAAGQAAAAAAAAAAAAAAAEBAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAAABkAAAEAAABAAAAAAHpbWRpYQAAACBtZGhkAAAAAAAAAAAAAAAAAACsRAAAFTpVxAAAAAAALWhkbHIAAAAAAAAAAHNvdW4AAAAAAAAAAAAAAABTb3VuZEhhbmRsZXIAAAABlG1pbmYAAAAQc21oZAAAAAAAAAAAAAAAJGRpbmYAAAAcZHJlZgAAAAAAAAABAAAADHVybCAAAAABAAABWHN0YmwAAAB+c3RzZAAAAAAAAAABAAAAbm1wNGEAAAAAAAAAAQAAAAAAAAAAAAEAEAAAAACsRAAAAAAANmVzZHMAAAAAA4CAgCUAAgAEgICAF0AVAAAAAAA+gAAACmUFgICABRIIVuUABoCAgAECAAAAFGJ0cnQAAAAAAAA+gAAACmUAAAAgc3R0cwAAAAAAAAACAAAABQAABAAAAAABAAABOgAAADRzdHNjAAAAAAAAAAMAAAABAAAAAQAAAAEAAAACAAAAAgAAAAEAAAADAAAAAwAAAAEAAAAsc3RzegAAAAAAAAAAAAAABgAAABUAAAAEAAAABAAAAAQAAAAEAAAABAAAABxzdGNvAAAAAAAAAAMAAAXPAAAISQAACFoAAAAac2dwZAEAAAByb2xsAAAAAgAAAAH//wAAABxzYmdwAAAAAHJvbGwAAAABAAAABgAAAAEAAABidWR0YQAAAFptZXRhAAAAAAAAACFoZGxyAAAAAAAAAABtZGlyYXBwbAAAAAAAAAAAAAAAAC1pbHN0AAAAJal0b28AAAAdZGF0YQAAAAEAAAAATGF2ZjYwLjE2LjEwMAAAAAhmcmVlAAACn21kYXTeAgBMYXZjNjAuMzEuMTAyAAIwQA4AAAJUBgX//1DcRem95tlIt5Ys2CDZI+7veDI2NCAtIGNvcmUgMTY0IHIzMTA4IDMxZTE5ZjkgLSBILjI2NC9NUEVHLTQgQVZDIGNvZGVjIC0gQ29weWxlZnQgMjAwMy0yMDIzIC0gaHR0cDovL3d3dy52aWRlb2xhbi5vcmcveDI2NC5odG1sIC0gb3B0aW9uczogY2FiYWM9MCByZWY9MSBkZWJsb2NrPTA6MDowIGFuYWx5c2U9MDowIG1lPWRpYSBzdWJtZT0wIHBzeT0xIHBzeV9yZD0xLjAwOjAuMDAgbWl4ZWRfcmVmPTAgbWVfcmFuZ2U9MTYgY2hyb21hX21lPTEgdHJlbGxpcz0wIDh4OGRjdD0wIGNxbT0wIGRlYWR6b25lPTIxLDExIGZhc3RfcHNraXA9MSBjaHJvbWFfcXBfb2Zmc2V0PTAgdGhyZWFkcz0xIGxvb2thaGVhZF90aHJlYWRzPTEgc2xpY2VkX3RocmVhZHM9MCBucj0wIGRlY2ltYXRlPTEgaW50ZXJsYWNlZD0wIGJsdXJheV9jb21wYXQ9MCBjb25zdHJhaW5lZF9pbnRyYT0wIGJmcmFtZXM9MCB3ZWlnaHRwPTAga2V5aW50PTI1MCBrZXlpbnRfbWluPTI1IHNjZW5lY3V0PTAgaW50cmFfcmVmcmVzaD0wIHJjPWNyZiBtYnRyZWU9MCBjcmY9NTEuMCBxY29tcD0wLjYwIHFwbWluPTAgcXBtYXg9NjkgcXBzdGVwPTQgaXBfcmF0aW89MS40MCBhcT0wAIAAAAAJZYiEOiYoABXAARggBwEYIAcAAAAFQZogJpQBGCAHARggBwEYIAc=";
+  var player = null;
+  var unlocked = false;
+  function getPlayer() {
+    if (player) return player;
+    player = document.createElement("video");
+    player.className = "cv-video";
+    player.playsInline = true;
+    player.setAttribute("playsinline", "");
+    player.preload = "auto";
+    return player;
+  }
+  function unlock() {
+    if (unlocked) return;
+    unlocked = true;
+    const v = getPlayer();
+    if (v.src) return;
+    v.src = SILENCE;
+    v.play().then(() => v.pause()).catch(() => {
+      unlocked = false;
+    });
+  }
+  for (const ev of ["pointerup", "touchend", "keydown"]) document.addEventListener(ev, unlock, { capture: true, passive: true });
+  var hasVideo = (card) => Boolean(card?.rarity === "S" && card.video);
+  function preloadVideo(card) {
+    if (!hasVideo(card)) return;
+    const v = getPlayer();
+    const src = resolveMedia(card.video);
+    if (v.dataset.src !== src) {
+      v.dataset.src = src;
+      v.src = src;
+      v.load();
+    }
+  }
+  var stopCurrent = null;
+  function playCardVideo(card, host2) {
+    if (!hasVideo(card) || !host2) return Promise.resolve(false);
+    stopCurrent?.();
+    const v = getPlayer();
+    preloadVideo(card);
+    const wrap = document.createElement("div");
+    wrap.className = "cv-vwrap";
+    wrap.style.setProperty("--vx", Number(card.vx) || 0);
+    wrap.append(v);
+    host2.classList.add("vid-on");
+    host2.append(wrap);
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        v.removeEventListener("ended", onEnd);
+        host2.classList.add("vid-end");
+        setTimeout(() => {
+          wrap.remove();
+          v.pause();
+          host2.classList.remove("vid-on", "vid-end");
+          resolve(true);
+        }, 700);
+      };
+      const onEnd = () => finish();
+      stopCurrent = () => {
+        stopCurrent = null;
+        finish();
+      };
+      const ratio = () => {
+        if (v.videoWidth) wrap.style.setProperty("--va", v.videoWidth / v.videoHeight);
+      };
+      v.addEventListener("loadedmetadata", ratio, { once: true });
+      ratio();
+      v.addEventListener("ended", onEnd);
+      v.currentTime = 0;
+      v.muted = false;
+      v.play().catch(() => {
+        v.muted = true;
+        v.play().catch(finish);
+      });
+    });
+  }
+  function stopCardVideo() {
+    stopCurrent?.();
+  }
+  setVideoModule({ hasVideo, playCardVideo, stopCardVideo });
 
   // js/icons.js
   var I = {
@@ -21981,6 +22081,7 @@ ${suffix}`;
         ov.querySelector(".bx-hint").textContent = `${seq[pos] + 1} / ${pulls.length}`;
         if (SPECIAL[r]) {
           ov.classList.add(`fx-${r}`, "intro");
+          preloadVideo(c);
           ov.querySelector(".bx-fx").innerHTML = fxHTML(r);
           await wait(SPECIAL[r]);
           if (done) return;
@@ -21989,6 +22090,11 @@ ${suffix}`;
         stage.insertAdjacentHTML("beforeend", `<button class="bx-card in r-${r}" data-id="${esc(p.id)}" aria-label="Carte suivante (appui long : voir en grand)">${cardHTML(c)}</button>`);
         ov.querySelector(".bx-info").innerHTML = `<span class="rar-chip r-${r}">${RARITIES[r]?.label || ""}</span>${p.n > 1 ? `<span class="bx-new">\xD7${p.n}</span>` : ""}${p.new ? '<span class="bx-new">Nouvelle !</span>' : ""}
         ${r === "S" ? '<div class="bx-unique">Exemplaire unique</div>' : ""}`;
+        if (hasVideo(c)) {
+          lock = false;
+          await playCardVideo(c, stage.querySelector(".bx-card:last-child"));
+          return;
+        }
         await wait(SPECIAL[r] ? 500 : 250);
         lock = false;
       }
@@ -22064,11 +22170,15 @@ ${suffix}`;
         }
         const mini = e.target.closest(".bx-mini");
         if (mini) {
-          showCardBig(S.byId[mini.dataset.id]);
+          showCardBig(S.byId[mini.dataset.id], { video: true });
           return;
         }
         if (held) {
           held = false;
+          return;
+        }
+        if (stage.querySelector(".vid-on")) {
+          stopCardVideo();
           return;
         }
         if (!ov.classList.contains("done")) next();
@@ -22129,7 +22239,26 @@ ${suffix}`;
     });
     q(".cl-grid").addEventListener("click", (e) => {
       const g = e.target.closest(".grid-card");
+      if (lpDone) {
+        lpDone = false;
+        return;
+      }
       if (g) showCardBig(S.byId[g.dataset.id]);
+    });
+    let lpTimer = null;
+    let lpDone = false;
+    q(".cl-grid").addEventListener("pointerdown", (e) => {
+      const g = e.target.closest(".grid-card");
+      lpDone = false;
+      clearTimeout(lpTimer);
+      if (g) lpTimer = setTimeout(() => {
+        lpDone = true;
+        showCardBig(S.byId[g.dataset.id], { video: true });
+      }, 450);
+    });
+    for (const ev of ["pointerup", "pointercancel", "pointerleave"]) q(".cl-grid").addEventListener(ev, () => clearTimeout(lpTimer));
+    q(".cl-grid").addEventListener("contextmenu", (e) => {
+      if (e.target.closest(".grid-card")) e.preventDefault();
     });
     q(".cl-grid").addEventListener("keydown", (e) => {
       const g = e.target.closest(".grid-card");
@@ -22547,6 +22676,7 @@ ${suffix}`;
   var root = () => document.getElementById("tab-cards");
   var cur = newCard();
   var fxEd = null;
+  var pendingVideo = null;
   var filter = { q: "", type: "", color: "", rarity: "" };
   function initEditor() {
     root().innerHTML = `
@@ -22599,6 +22729,14 @@ ${suffix}`;
           <label class="btn"><input type="file" id="ed-img" accept="image/*" hidden>Choisir une image\u2026</label>
           <button type="button" class="btn ghost" id="ed-noimg">Retirer l'image</button>
         </div></div>
+      <div class="field f-video"><label>Vid\xE9o <small>(1on1 seulement : elle se lance au tirage et sur un appui long ; MP4, 10 s et 15 Mo maximum)</small></label>
+        <div class="row-btns">
+          <label class="btn"><input type="file" id="ed-video" accept="video/mp4,video/*" hidden>Choisir une vid\xE9o\u2026</label>
+          <button type="button" class="btn ghost" id="ed-vtest">Tester sur l'aper\xE7u</button>
+          <button type="button" class="btn ghost" id="ed-novideo">Retirer la vid\xE9o</button>
+          <span class="muted small ed-vname"></span>
+        </div>
+        <label class="small">Position de la carte dans la vid\xE9o <input type="range" id="ed-vx" min="0" max="1" step="0.001"> <span class="ed-vxv"></span></label></div>
       <div class="field lay"><label>Cadrage de l'image <small>(ou glissez l'image sur l'aper\xE7u, molette pour zoomer)</small></label>
         <div class="lay-grid">
           <label>Zoom <input type="range" data-lay="art.z" min="0.2" max="4" step="0.01"><output></output></label>
@@ -22694,13 +22832,41 @@ ${suffix}`;
     val("ed-img").addEventListener("change", async (e) => {
       const f = e.target.files[0];
       if (!f) return;
-      cur.image = await resizeImage(f);
+      cur.image = await resizeImage(f, cur.rarity === "S" ? 1200 : 500);
       e.target.value = "";
       preview();
     });
     val("ed-noimg").addEventListener("click", () => {
       cur.image = "";
       preview();
+    });
+    val("ed-video").addEventListener("change", (e) => {
+      const f = e.target.files[0];
+      e.target.value = "";
+      if (!f) return;
+      if (f.size > 15e6) {
+        msg("Vid\xE9o trop lourde : 15 Mo maximum.", true);
+        return;
+      }
+      pendingVideo = f;
+      if (cur.videoLocal) URL.revokeObjectURL(cur.videoLocal);
+      cur.videoLocal = URL.createObjectURL(f);
+      fillVideo();
+    });
+    val("ed-novideo").addEventListener("click", () => {
+      pendingVideo = null;
+      cur.video = "";
+      cur.videoLocal = "";
+      fillVideo();
+    });
+    val("ed-vx").addEventListener("input", (e) => {
+      cur.vx = Number(e.target.value);
+      fillVideo();
+    });
+    val("ed-vtest").addEventListener("click", () => {
+      const host2 = r.querySelector(".ed-preview");
+      const src = cur.videoLocal || cur.video;
+      if (src && host2) playCardVideo({ ...cur, rarity: "S", video: src }, r.querySelector("#ed-card"));
     });
     bindLayout(r);
     bindTraits(r);
@@ -22710,7 +22876,18 @@ ${suffix}`;
       if (!cur.name.trim()) return msg("Donnez un nom \xE0 la carte.", true);
       msg("Enregistrement\u2026");
       try {
-        const c = { ...structuredClone(cur), colors: cur.colors.slice(0, maxColors()) };
+        if (pendingVideo) {
+          msg("Envoi de la vid\xE9o\u2026");
+          cur.video = await uploadVideo(cur.id, pendingVideo);
+          pendingVideo = null;
+        }
+        const { videoLocal, ...plain } = cur;
+        const c = { ...structuredClone(plain), colors: cur.colors.slice(0, maxColors()) };
+        if (c.rarity !== "S") {
+          delete c.video;
+          delete c.vx;
+        }
+        msg("Enregistrement\u2026");
         await saveCard(c);
         cur.image = c.image;
         fill();
@@ -23051,6 +23228,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     preview();
   }
   function fill() {
+    pendingVideo = null;
     const r = root();
     const set = (id, x) => {
       r.querySelector("#" + id).value = x ?? "";
@@ -23216,7 +23394,20 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       preview();
     }, { passive: false });
   }
+  function fillVideo() {
+    const r = root();
+    const box = r.querySelector(".f-video");
+    if (!box) return;
+    box.hidden = cur.rarity !== "S";
+    const has = Boolean(cur.videoLocal || cur.video);
+    r.querySelector(".ed-vname").textContent = pendingVideo ? `${pendingVideo.name} (envoy\xE9e \xE0 l'enregistrement)` : has ? "Vid\xE9o enregistr\xE9e" : "Aucune vid\xE9o";
+    r.querySelector("#ed-vtest").disabled = !has;
+    r.querySelector("#ed-novideo").disabled = !has;
+    r.querySelector("#ed-vx").value = cur.vx ?? 0.25;
+    r.querySelector(".ed-vxv").textContent = `${Math.round((cur.vx ?? 0.25) * 100)} %`;
+  }
   function preview() {
+    fillVideo();
     root().querySelector("#ed-card").innerHTML = cardHTML(cur);
   }
   function renderList() {
@@ -26460,7 +26651,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     </section>
   </div>`;
     const q = (s) => el.querySelector(s);
-    let player = "";
+    let player2 = "";
     let coll = {};
     let loaded = false;
     const msg2 = (t, err = false) => {
@@ -26470,14 +26661,14 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     async function loadPlayers() {
       const players = await listPlayers();
       q(".gm-player").innerHTML = players.map((p) => `<option value="${esc(p.username)}">${esc(p.username)}${p.username === S.status.username ? " (moi)" : ""} \xB7 ${p.boosters} boosters offerts</option>`).join("");
-      if (player) q(".gm-player").value = player;
-      player = q(".gm-player").value;
+      if (player2) q(".gm-player").value = player2;
+      player2 = q(".gm-player").value;
     }
     function loadDecks() {
       q(".gm-decksel").innerHTML = S.decks.length ? S.decks.map((d) => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join("") : `<option value="">Aucun deck (cr\xE9ez ou importez-en un dans l'onglet Decks)</option>`;
     }
     async function loadColl() {
-      coll = player ? await gmCollection(player) : {};
+      coll = player2 ? await gmCollection(player2) : {};
       renderList2();
     }
     function renderList2() {
@@ -26491,7 +26682,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         const owner = c.rarity === "S" ? S.oneOfOne[c.id] : null;
         return `<div class="gm-row ${n3 ? "" : "none"}" data-id="${esc(c.id)}">
         <div class="gm-mini">${cardHTML(c, { cls: "mini" })}</div>
-        <div class="gm-name"><b>${esc(c.name)}</b><small><span class="rar-chip r-${c.rarity}">${RARITIES[c.rarity]?.short}</span>${esc(c.traits || "")}${owner && owner !== player ? ` \xB7 1on1 poss\xE9d\xE9e par ${esc(owner)}` : ""}</small></div>
+        <div class="gm-name"><b>${esc(c.name)}</b><small><span class="rar-chip r-${c.rarity}">${RARITIES[c.rarity]?.short}</span>${esc(c.traits || "")}${owner && owner !== player2 ? ` \xB7 1on1 poss\xE9d\xE9e par ${esc(owner)}` : ""}</small></div>
         <div class="gm-qty"><button class="btn small" data-d="-1" ${n3 ? "" : "disabled"} aria-label="Retirer 1">\u2212</button><b>${n3}</b><button class="btn small" data-d="1" aria-label="Donner 1">+</button>
           ${n3 ? `<button class="btn small ghost" data-d="${-n3}" title="Retirer tous les exemplaires">Tout retirer</button>` : ""}</div></div>`;
       }).join("") || '<p class="muted">Aucune carte.</p>';
@@ -26504,7 +26695,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         <td><button class="btn small" data-restore="${b.id}">${b.restored_at ? "Rendre \xE0 nouveau" : "Rendre"}</button></td></tr>`).join("")}</tbody></table>` : `<p class="muted">Aucune sauvegarde pour l'instant.</p>`;
     }
     const sync = async () => {
-      if (player === S.status.username) await refreshCollection();
+      if (player2 === S.status.username) await refreshCollection();
     };
     async function run(fn) {
       try {
@@ -26514,7 +26705,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       }
     }
     q(".gm-player").addEventListener("change", () => run(async () => {
-      player = q(".gm-player").value;
+      player2 = q(".gm-player").value;
       msg2("");
       await loadColl();
     }));
@@ -26524,11 +26715,11 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       if (d) {
         const id = d.closest("[data-id]").dataset.id;
         const c = S.byId[id];
-        if (+d.dataset.d > 0 && c?.rarity === "S" && S.oneOfOne[id] && S.oneOfOne[id] !== player && !confirm(`\xAB ${c.name} \xBB est une 1on1 d\xE9j\xE0 poss\xE9d\xE9e par ${S.oneOfOne[id]}. La donner quand m\xEAme ?`)) return;
-        const n3 = await gmAddCard(player, id, +d.dataset.d);
+        if (+d.dataset.d > 0 && c?.rarity === "S" && S.oneOfOne[id] && S.oneOfOne[id] !== player2 && !confirm(`\xAB ${c.name} \xBB est une 1on1 d\xE9j\xE0 poss\xE9d\xE9e par ${S.oneOfOne[id]}. La donner quand m\xEAme ?`)) return;
+        const n3 = await gmAddCard(player2, id, +d.dataset.d);
         if (n3) coll[id] = n3;
         else delete coll[id];
-        msg2(`${c?.name} : ${player} en a maintenant ${n3}.`);
+        msg2(`${c?.name} : ${player2} en a maintenant ${n3}.`);
         renderList2();
         await sync();
         return;
@@ -26536,8 +26727,8 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       const act = e.target.closest("[data-do]")?.dataset.do;
       if (act === "boost") {
         const n3 = Math.max(1, Number(q(".gm-n").value) || 0);
-        await giveBoosters(player, n3);
-        msg2(`${n3} booster${n3 > 1 ? "s" : ""} donn\xE9${n3 > 1 ? "s" : ""} \xE0 ${player}.`);
+        await giveBoosters(player2, n3);
+        msg2(`${n3} booster${n3 > 1 ? "s" : ""} donn\xE9${n3 > 1 ? "s" : ""} \xE0 ${player2}.`);
         await loadPlayers();
       }
       if (act === "deck") {
@@ -26552,18 +26743,18 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         for (const [id, n3] of Object.entries(need)) {
           const miss = n3 - (coll[id] || 0);
           if (miss > 0 && S.byId[id]) {
-            coll[id] = await gmAddCard(player, id, miss);
+            coll[id] = await gmAddCard(player2, id, miss);
             given += miss;
           }
         }
-        msg2(given ? `${given} carte(s) donn\xE9e(s) \xE0 ${player} : le deck \xAB ${d2.name} \xBB est complet.` : `${player} a d\xE9j\xE0 toutes les cartes de \xAB ${d2.name} \xBB.`);
+        msg2(given ? `${given} carte(s) donn\xE9e(s) \xE0 ${player2} : le deck \xAB ${d2.name} \xBB est complet.` : `${player2} a d\xE9j\xE0 toutes les cartes de \xAB ${d2.name} \xBB.`);
         renderList2();
         await sync();
       }
       if (act === "reset") {
-        if (!confirm(`Vider toute la collection de ${player} ? Elle sera sauvegard\xE9e et tu pourras la rendre \xE0 tout moment.`)) return;
-        await gmResetCollection(player);
-        msg2(`Collection de ${player} remise \xE0 z\xE9ro (sauvegard\xE9e).`);
+        if (!confirm(`Vider toute la collection de ${player2} ? Elle sera sauvegard\xE9e et tu pourras la rendre \xE0 tout moment.`)) return;
+        await gmResetCollection(player2);
+        msg2(`Collection de ${player2} remise \xE0 z\xE9ro (sauvegard\xE9e).`);
         await loadColl();
         await renderBackups();
         await sync();

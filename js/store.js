@@ -119,7 +119,7 @@ export async function load() {
   S.starters = check(starters);
   // Tolérant : la fonction n'existe pas tant que le script SQL n'a pas été relancé.
   S.oneOfOne = Object.fromEntries((owners.error ? [] : owners.data || []).map((r) => [r.card_id, r.username]));
-  await signImages(S.cards.map((c) => oldImagePath(c.image)));
+  await signImages(S.cards.flatMap((c) => [oldImagePath(c.image), oldImagePath(c.video)]));
   reindex();
   emit();
 }
@@ -142,6 +142,13 @@ export async function refreshCollection() {
 }
 
 // ---------- cartes (admins) ----------
+// Vidéo d'une 1on1 (fichier MP4 choisi dans l'onglet Cartes). Renvoie son adresse.
+export async function uploadVideo(cardId, file) {
+  const path = `${cardId}-video-${Date.now()}.mp4`;
+  check(await sb.storage.from('cards').upload(path, file, { contentType: file.type || 'video/mp4', cacheControl: '31536000' }));
+  return sb.storage.from('cards').getPublicUrl(path).data.publicUrl;
+}
+
 async function uploadImage(card) {
   if (!card.image?.startsWith('data:')) return card.image;
   const blob = await (await fetch(card.image)).blob();
@@ -158,15 +165,18 @@ function oldImagePath(url) {
 export async function saveCards(cards) {
   for (const c of cards) {
     const prev = S.byId[c.id]?.image;
+    const prevVideo = S.byId[c.id]?.video;
     const image = await uploadImage(c);
     const { id, rarity, inBoosters, ...data } = { ...c, image };
     check(await sb.from('cards').upsert({
       id, data, rarity: rarity || 'C', in_boosters: inBoosters !== false, updated_at: new Date().toISOString(),
     }));
     c.image = image;
-    await signImages([oldImagePath(image)]);
+    await signImages([oldImagePath(image), oldImagePath(c.video)]);
     const old = prev !== image && oldImagePath(prev);
     if (old) await sb.storage.from('cards').remove([old]);
+    const oldVideo = prevVideo !== c.video && oldImagePath(prevVideo);
+    if (oldVideo) await sb.storage.from('cards').remove([oldVideo]);
     const i = S.cards.findIndex((x) => x.id === c.id);
     const saved = { ...c, image, rarity: rarity || 'C', inBoosters: inBoosters !== false };
     if (i >= 0) S.cards[i] = saved; else S.cards.push(saved);
@@ -251,7 +261,7 @@ export async function openBoosters(n = 1) {
   // Une carte 1on1 tirée devient visible : on recharge les cartes pour l'afficher.
   if (pulls.some((p) => !S.byId[p.id])) {
     S.cards = check(await sb.from('cards').select('*')).map(fromRow);
-    await signImages(S.cards.map((c) => oldImagePath(c.image)));
+    await signImages(S.cards.flatMap((c) => [oldImagePath(c.image), oldImagePath(c.video)]));
     reindex();
   }
   await refreshCollection();
