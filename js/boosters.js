@@ -2,7 +2,7 @@
 import { S, openBoosters, refreshStatus, refreshCollection, takeReveals, onChange } from './store.js';
 import { RARITIES, RARITY_ORDER, TYPES, esc, cardHTML, showCardBig, stampSeal } from './cards.js';
 import { logoSVG } from './logo.js';
-import { hasVideo, preloadVideo, playCardVideo, stopCardVideo, playRevealSound } from './video.js';
+import { hasVideo, preloadVideo, playCardVideo, stopCardVideo } from './video.js';
 import { refreshAchievements } from './achievements.js';
 
 const RATES = [
@@ -197,7 +197,6 @@ export function initBoosters() {
         // Animation d'arrivée propre à la rareté, puis la carte apparaît avec son effet.
         ov.classList.add(`fx-${r}`, 'intro');
         preloadVideo(c);
-        if (r === 'S') playRevealSound();
         ov.querySelector('.bx-fx').innerHTML = fxHTML(r);
         await wait(SPECIAL[r]);
         if (done) return;

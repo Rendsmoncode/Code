@@ -63,7 +63,7 @@ export function makeMock() {
         return json(route, fresh); }
       if (fn === 'claim_starter') { const s = st.starters[body.starter_id]; if (st.starterReveal) (st.reveals ||= {})[uid] = [{ id: s.leader, n: 1, new: true }, ...Object.entries(s.cards).map(([id, n]) => ({ id, n, new: true }))]; add(uid, s.leader, 1); for (const [k, v] of Object.entries(s.cards)) add(uid, k, v); const id = 'deck-' + Date.now(); st.decks[id] = { id, user_id: uid, name: s.name, leader: s.leader, cards: s.cards }; p.starter_claimed = true; return json(route, id); }
       if (fn === 'admin_give_boosters') { if (!['admin', 'owner'].includes(p.role)) return json(route, { message: 'Réservé aux admins.' }, 400); const t = Object.values(st.profiles).filter((x) => body.target == null || x.username === body.target); t.forEach((x) => { x.boosters += body.amount; }); return json(route, t.length); }
-      if (fn === 'one_of_one_owners') return json(route, []);
+      if (fn === 'one_of_one_owners') return json(route, Object.entries(st.coll).flatMap(([u, c]) => Object.keys(c).filter((id) => st.cards[id]?.rarity === 'S').map((id) => ({ card_id: id, username: st.profiles[u]?.username }))));
       if (fn === 'invite_info') { const v = st.invites[body.t]; return json(route, v && !v.used_by ? { username: v.username, boosters: v.boosters, starter: st.starters[v.starter_id]?.name || null } : null); }
       if (fn === 'admin_create_invite') {
         if (!['admin', 'owner'].includes(p?.role)) return json(route, { message: 'Réservé aux admins.' }, 400);

@@ -27,8 +27,8 @@ function unlock() {
   sfx.src = SILENCE;
   sfx.play().then(() => { sfx.pause(); sfx.src = 'sons/1on1.mp3'; sfx.load(); }).catch(() => { unlocked = false; });
 }
-// Son de révélation d'une 1on1 : 2,6 s de montée (pendant l'animation), puis l'impact quand la carte apparaît.
-export function playRevealSound() {
+// Son de la rareté 1on1 : l'impact, joué quand le sceau 1ON1 s'écrase sur la carte.
+export function playImpactSound() {
   if (!sfx.src.endsWith('sons/1on1.mp3')) sfx.src = 'sons/1on1.mp3';
   sfx.currentTime = 0;
   sfx.volume = 0.9;
@@ -134,4 +134,4 @@ export function playCardVideo(card, host) {
 }
 export function stopCardVideo() { stopCurrent?.(); }
 
-setVideoModule({ hasVideo, playCardVideo, stopCardVideo });
+setVideoModule({ hasVideo, playCardVideo, stopCardVideo, playImpactSound });

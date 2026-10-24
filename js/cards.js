@@ -197,7 +197,9 @@ export function showCardBig(card, { hold = false, video = false } = {}) {
   const onKey = (e) => { if (e.key === 'Escape') close(); };
   if (!hold) { ov.addEventListener('click', close); document.addEventListener('keydown', onKey); }
   document.body.append(ov);
-  if (video && videoMod?.hasVideo(card)) videoMod.playCardVideo(card, ov.querySelector('.cv-card'));
+  const host = ov.querySelector('.cv-card');
+  if (video && videoMod?.hasVideo(card)) videoMod.playCardVideo(card, host); // le sceau s'écrase à la fin de la vidéo
+  else if (!hold && card.rarity === 'S') stampSeal(host); // toute 1on1 ouverte en grand : le sceau s'écrase
   return close;
 }
 
@@ -207,5 +209,7 @@ export function stampSeal(host) {
   host.classList.remove('stamp');
   void host.offsetWidth; // relance l'animation
   host.classList.add('stamp');
+  clearTimeout(host.stampSound);
+  host.stampSound = setTimeout(() => { if (host.isConnected) videoMod?.playImpactSound(); }, 640); // au moment de l'impact
   setTimeout(() => host.classList.remove('stamp'), 1800);
 }

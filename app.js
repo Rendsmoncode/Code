@@ -21341,7 +21341,9 @@ ${suffix}`;
       document.addEventListener("keydown", onKey);
     }
     document.body.append(ov);
-    if (video && videoMod?.hasVideo(card)) videoMod.playCardVideo(card, ov.querySelector(".cv-card"));
+    const host2 = ov.querySelector(".cv-card");
+    if (video && videoMod?.hasVideo(card)) videoMod.playCardVideo(card, host2);
+    else if (!hold && card.rarity === "S") stampSeal(host2);
     return close;
   }
   function stampSeal(host2) {
@@ -21349,6 +21351,10 @@ ${suffix}`;
     host2.classList.remove("stamp");
     void host2.offsetWidth;
     host2.classList.add("stamp");
+    clearTimeout(host2.stampSound);
+    host2.stampSound = setTimeout(() => {
+      if (host2.isConnected) videoMod?.playImpactSound();
+    }, 640);
     setTimeout(() => host2.classList.remove("stamp"), 1800);
   }
 
@@ -21690,7 +21696,7 @@ ${suffix}`;
       unlocked = false;
     });
   }
-  function playRevealSound() {
+  function playImpactSound() {
     if (!sfx.src.endsWith("sons/1on1.mp3")) sfx.src = "sons/1on1.mp3";
     sfx.currentTime = 0;
     sfx.volume = 0.9;
@@ -21796,7 +21802,7 @@ ${suffix}`;
   function stopCardVideo() {
     stopCurrent?.();
   }
-  setVideoModule({ hasVideo, playCardVideo, stopCardVideo });
+  setVideoModule({ hasVideo, playCardVideo, stopCardVideo, playImpactSound });
 
   // js/icons.js
   var I = {
@@ -22139,7 +22145,6 @@ ${suffix}`;
         if (SPECIAL[r]) {
           ov.classList.add(`fx-${r}`, "intro");
           preloadVideo(c);
-          if (r === "S") playRevealSound();
           ov.querySelector(".bx-fx").innerHTML = fxHTML(r);
           await wait2(SPECIAL[r]);
           if (done) return;
