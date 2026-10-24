@@ -21344,6 +21344,13 @@ ${suffix}`;
     if (video && videoMod?.hasVideo(card)) videoMod.playCardVideo(card, ov.querySelector(".cv-card"));
     return close;
   }
+  function stampSeal(host2) {
+    if (!host2?.querySelector(".seal")) return;
+    host2.classList.remove("stamp");
+    void host2.offsetWidth;
+    host2.classList.add("stamp");
+    setTimeout(() => host2.classList.remove("stamp"), 1800);
+  }
 
   // js/store.js
   var SUPABASE_URL = "https://bhhakcbodwtmopstgetu.supabase.co";
@@ -21771,6 +21778,7 @@ ${suffix}`;
       }
       host2.classList.add("vid-end");
       wrap.classList.add("out");
+      stampSeal(host2);
       await wait(650);
       wrap.remove();
       host2.classList.remove("vid-on", "vid-end");
@@ -22136,6 +22144,7 @@ ${suffix}`;
           await playCardVideo(c, stage.querySelector(".bx-card:last-child"));
           return;
         }
+        if (r === "S") stampSeal(stage.querySelector(".bx-card:last-child"));
         await wait2(SPECIAL[r] ? 500 : 250);
         lock = false;
       }

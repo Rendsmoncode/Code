@@ -1,6 +1,6 @@
 // Onglets « Boosters » (ouverture) et « Collection ».
 import { S, openBoosters, refreshStatus, refreshCollection, takeReveals, onChange } from './store.js';
-import { RARITIES, RARITY_ORDER, TYPES, esc, cardHTML, showCardBig } from './cards.js';
+import { RARITIES, RARITY_ORDER, TYPES, esc, cardHTML, showCardBig, stampSeal } from './cards.js';
 import { logoSVG } from './logo.js';
 import { hasVideo, preloadVideo, playCardVideo, stopCardVideo } from './video.js';
 import { refreshAchievements } from './achievements.js';
@@ -211,6 +211,7 @@ export function initBoosters() {
         await playCardVideo(c, stage.querySelector('.bx-card:last-child'));
         return;
       }
+      if (r === 'S') stampSeal(stage.querySelector('.bx-card:last-child'));
       await wait(SPECIAL[r] ? 500 : 250);
       lock = false;
     }

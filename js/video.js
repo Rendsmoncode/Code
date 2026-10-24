@@ -3,7 +3,7 @@
 //
 // card.video : adresse de la vidéo ; card.vx : position du bord gauche de la carte dans la vidéo (0 à 1,
 // la carte occupe toute la hauteur de la vidéo).
-import { resolveMedia, setVideoModule } from './cards.js';
+import { resolveMedia, setVideoModule, stampSeal } from './cards.js';
 
 // Un seul lecteur pour tout le site : débloqué (avec le son) au premier toucher, iOS accepte ensuite
 // de le relancer avec le son sans nouveau toucher.
@@ -118,6 +118,7 @@ export function playCardVideo(card, host) {
     // fondu : la carte (et ses effets) revient, la vidéo figée s'efface
     host.classList.add('vid-end');
     wrap.classList.add('out');
+    stampSeal(host); // le sceau 1ON1 vient se plaquer sur la carte
     await wait(650);
     wrap.remove();
     host.classList.remove('vid-on', 'vid-end');

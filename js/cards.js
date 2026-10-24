@@ -200,3 +200,12 @@ export function showCardBig(card, { hold = false, video = false } = {}) {
   if (video && videoMod?.hasVideo(card)) videoMod.playCardVideo(card, ov.querySelector('.cv-card'));
   return close;
 }
+
+// Le sceau 1ON1 arrive depuis la caméra et s'écrase sur la carte (avec une secousse et une onde dorée).
+export function stampSeal(host) {
+  if (!host?.querySelector('.seal')) return;
+  host.classList.remove('stamp');
+  void host.offsetWidth; // relance l'animation
+  host.classList.add('stamp');
+  setTimeout(() => host.classList.remove('stamp'), 1800);
+}
