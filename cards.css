@@ -36,7 +36,7 @@
 .card.r-L { --rim: linear-gradient(160deg, #fff6cc, #f2c14a 30%, #a86f0c 58%, #ffe08a 80%, #b8820f); }
 
 /* ---------- 1on1 : rareté suprême ----------
-   Cadre prismatique qui tourne, halo arc-en-ciel qui respire, petits points brillants
+   Cadre prismatique qui tourne, halo arc-en-ciel qui respire, reflet arc-en-ciel fixe et points brillants
    et sceau « 1ON1 » noir et or. */
 @property --spin { syntax: "<angle>"; inherits: true; initial-value: 0deg; }
 .card.r-S {
@@ -67,8 +67,9 @@
     radial-gradient(circle at 18% 28%, #fff 0 .5cqw, transparent 1cqw),
     radial-gradient(circle at 72% 18%, #fff 0 .4cqw, transparent .9cqw),
     radial-gradient(circle at 62% 66%, #fff 0 .5cqw, transparent 1cqw),
-    radial-gradient(circle at 30% 80%, #fff 0 .35cqw, transparent .8cqw);
-  animation: twinkle 1.8s ease-in-out infinite;
+    radial-gradient(circle at 30% 80%, #fff 0 .35cqw, transparent .8cqw),
+    linear-gradient(115deg, #ff4d6d, #ffb84d, #f7f052, #4dff9a, #4dc3ff, #b44dff);
+  animation: twinkle 1.8s ease-in-out infinite; /* reflet arc-en-ciel immobile (plus de bande qui défile) */
 }
 @keyframes sheen { 0% { background-position: 100% 0; } 60%, 100% { background-position: -100% 0; } }
 @keyframes twinkle { 50% { opacity: .36; } }
