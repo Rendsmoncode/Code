@@ -21680,10 +21680,11 @@ ${suffix}`;
     return player;
   }
   var MUSIC = "sons/1on1.mp3";
+  var INTRO = 2.6;
   var VIDEO_LEN = 6.8;
   var SHRINK = 0.75;
   var STAMP_HIT = 0.64;
-  var HIT = VIDEO_LEN + SHRINK + STAMP_HIT;
+  var HIT = INTRO + VIDEO_LEN + SHRINK + STAMP_HIT;
   var sfx = new Audio();
   sfx.preload = "auto";
   var ceremony = false;
@@ -21705,6 +21706,9 @@ ${suffix}`;
     sfx.volume = 0.9;
     sfx.play().catch(() => {
     });
+  }
+  function startCeremony() {
+    music(0);
   }
   function sealSound() {
     if (!ceremony) music(HIT - STAMP_HIT);
@@ -21785,10 +21789,12 @@ ${suffix}`;
       ceremony = true;
       await v.play().catch(() => {
       });
-      music(0);
+      const playing = !sfx.paused && sfx.src.endsWith(MUSIC) && sfx.currentTime < INTRO + 1.5;
+      if (!playing) music(INTRO);
+      else if (Math.abs(sfx.currentTime - INTRO) > 0.12) sfx.currentTime = INTRO;
       const t0 = performance.now();
       await Promise.race([ended, wait(VIDEO_LEN * 1e3)]);
-      if ((performance.now() - t0) / 1e3 < VIDEO_LEN - 0.1 && !sfx.paused) sfx.currentTime = VIDEO_LEN;
+      if ((performance.now() - t0) / 1e3 < VIDEO_LEN - 0.1 && !sfx.paused) sfx.currentTime = INTRO + VIDEO_LEN;
       if (done) return true;
       done = true;
       removeEventListener("resize", layout);
@@ -22168,6 +22174,7 @@ ${suffix}`;
         if (SPECIAL[r]) {
           ov.classList.add(`fx-${r}`, "intro");
           preloadVideo(c);
+          if (r === "S") startCeremony();
           ov.querySelector(".bx-fx").innerHTML = fxHTML(r);
           await wait2(SPECIAL[r]);
           if (done) return;

@@ -21,10 +21,11 @@ function getPlayer() {
 // Musique de cérémonie des 1on1 (sons/1on1.mp3, composée pour le jeu) : elle accompagne toute la séquence
 // et son « bing » tombe quand le sceau s'écrase. Lecteur débloqué au premier toucher (exigé par iOS).
 const MUSIC = 'sons/1on1.mp3';
+const INTRO = 2.6; // l'animation qui annonce la 1on1 (la musique commence avec elle)
 export const VIDEO_LEN = 6.8; // durée commune de toutes les vidéos 1on1 (image figée comprise)
 const SHRINK = 0.75; // la vidéo rétrécit jusqu'à la carte
 const STAMP_HIT = 0.64; // le sceau touche la carte 0,64 s après le début de son animation
-const HIT = VIDEO_LEN + SHRINK + STAMP_HIT; // 8,19 s : le « bing » de la musique
+const HIT = INTRO + VIDEO_LEN + SHRINK + STAMP_HIT; // 10,79 s : le « bing » de la musique
 const sfx = new Audio();
 sfx.preload = 'auto';
 let ceremony = false; // une séquence vidéo + musique est en cours
@@ -40,6 +41,8 @@ function music(at = 0) {
   sfx.volume = 0.9;
   sfx.play().catch(() => {});
 }
+// Début de l'animation qui annonce une 1on1 : la musique commence.
+export function startCeremony() { music(0); }
 // Le sceau commence à s'écraser : sans séquence vidéo en cours, on lance la fin de la musique pour que le « bing » tombe pile.
 export function sealSound() {
   if (!ceremony) music(HIT - STAMP_HIT);
@@ -119,12 +122,15 @@ export function playCardVideo(card, host) {
     v.muted = true; // la vidéo est muette : c'est la musique des 1on1 qui l'accompagne
     ceremony = true;
     await v.play().catch(() => {});
-    music(0); // même départ pour la vidéo et la musique
+    // la vidéo démarre à la fin de l'annonce (2,6 s de musique) : on recale la musique si besoin
+    const playing = !sfx.paused && sfx.src.endsWith(MUSIC) && sfx.currentTime < INTRO + 1.5;
+    if (!playing) music(INTRO);
+    else if (Math.abs(sfx.currentTime - INTRO) > 0.12) sfx.currentTime = INTRO;
     const t0 = performance.now();
     // toutes les vidéos durent VIDEO_LEN : au-delà on coupe, en deçà l'image reste figée
     await Promise.race([ended, wait(VIDEO_LEN * 1000)]);
     // toucher pour passer : la musique saute au même moment, pour que le « bing » reste calé sur le sceau
-    if ((performance.now() - t0) / 1000 < VIDEO_LEN - 0.1 && !sfx.paused) sfx.currentTime = VIDEO_LEN;
+    if ((performance.now() - t0) / 1000 < VIDEO_LEN - 0.1 && !sfx.paused) sfx.currentTime = INTRO + VIDEO_LEN;
     if (done) return true;
     done = true;
     removeEventListener('resize', layout);
