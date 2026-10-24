@@ -21936,6 +21936,16 @@ ${suffix}`;
         return false;
       }
       if (full) {
+        try {
+          const cv = document.createElement("canvas");
+          cv.width = vw;
+          cv.height = vh;
+          cv.getContext("2d").drawImage(v, 0, 0, vw, vh);
+          cv.className = "cv-frame";
+          wrap.append(cv);
+          v.remove();
+        } catch {
+        }
         const z = layout();
         const r = host2.querySelector(".card")?.getBoundingClientRect() || host2.getBoundingClientRect();
         const k = r.width / z.w;

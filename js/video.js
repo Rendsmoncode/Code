@@ -184,7 +184,17 @@ export function playCardVideo(card, host) {
     v.pause();
     if (aborted) { ceremony = false; stopMusic(); wrap.remove(); backdrop.remove(); host.classList.remove('vid-on'); return false; }
     if (full) {
-      // la vidéo figée rétrécit jusqu'à la carte ; ce qui dépasse s'efface
+      // La vidéo figée est remplacée par une image de sa dernière frame : sur Android, Chrome affiche les vidéos
+      // sur une couche à part qui ignore le rétrécissement (la vidéo restait plein écran et se réduisait à une bande).
+      try {
+        const cv = document.createElement('canvas');
+        cv.width = vw; cv.height = vh;
+        cv.getContext('2d').drawImage(v, 0, 0, vw, vh);
+        cv.className = 'cv-frame';
+        wrap.append(cv);
+        v.remove();
+      } catch { /* image indisponible : on garde la vidéo */ }
+      // l'image rétrécit jusqu'à la carte ; ce qui dépasse s'efface
       const z = layout();
       const r = host.querySelector('.card')?.getBoundingClientRect() || host.getBoundingClientRect();
       const k = r.width / z.w;
