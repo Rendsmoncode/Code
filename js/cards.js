@@ -212,3 +212,12 @@ export function stampSeal(host) {
   videoMod?.sealSound(); // le « bing » de la musique 1on1 tombe au moment de l'impact
   setTimeout(() => host.classList.remove('stamp'), 1800);
 }
+
+// Zoom avec les doigts (téléphone) : les animations des cartes (cadre qui tourne, halo, reflets) se figent,
+// sinon le téléphone doit redessiner les cartes agrandies à chaque image et elles clignotent ou se coupent.
+const vv = typeof window !== 'undefined' && window.visualViewport;
+if (vv) {
+  const upd = () => document.documentElement.classList.toggle('zoomed', vv.scale > 1.02);
+  vv.addEventListener('resize', upd);
+  upd();
+}

@@ -372,3 +372,7 @@
   0% { transform: none; } 25% { transform: translateY(1.2%) scale(.965); } 55% { transform: translateY(-.4%) scale(1.012); } 100% { transform: none; }
 }
 @media (prefers-reduced-motion: reduce) { .stamp .card .seal, .stamp .card .seal::after, .stamp > .card { animation: none; } }
+
+/* Zoom avec les doigts : animations des cartes figées (voir cards.js) */
+html.zoomed .card, html.zoomed .card *, html.zoomed .card *::before, html.zoomed .card *::after,
+html.zoomed .bx-fx, html.zoomed .bx-fx * { animation-play-state: paused !important; transition: none !important; }

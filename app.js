@@ -21354,6 +21354,12 @@ ${suffix}`;
     videoMod?.sealSound();
     setTimeout(() => host2.classList.remove("stamp"), 1800);
   }
+  var vv = typeof window !== "undefined" && window.visualViewport;
+  if (vv) {
+    const upd = () => document.documentElement.classList.toggle("zoomed", vv.scale > 1.02);
+    vv.addEventListener("resize", upd);
+    upd();
+  }
 
   // js/store.js
   var SUPABASE_URL = "https://bhhakcbodwtmopstgetu.supabase.co";
