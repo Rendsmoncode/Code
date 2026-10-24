@@ -21724,7 +21724,7 @@ ${suffix}`;
       await metadata(v);
       const vw = v.videoWidth || 1080;
       const vh = v.videoHeight || 1440;
-      const vx = Number(card.vx) || 0;
+      const vx = card.vx == null || card.vx === "" ? Math.max(0, (1 - vh * CARD_RATIO / vw) / 2) : Number(card.vx);
       const full = vh > vw;
       if (full) {
         wrap.classList.add("full");
@@ -22898,6 +22898,7 @@ ${suffix}`;
       pendingVideo = null;
       cur.video = "";
       cur.videoLocal = "";
+      delete cur.vx;
       fillVideo();
     });
     val("ed-vx").addEventListener("input", (e) => {
@@ -23444,8 +23445,8 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     r.querySelector(".ed-vname").textContent = pendingVideo ? `${pendingVideo.name} (envoy\xE9e \xE0 l'enregistrement)` : has ? "Vid\xE9o enregistr\xE9e" : "Aucune vid\xE9o";
     r.querySelector("#ed-vtest").disabled = !has;
     r.querySelector("#ed-novideo").disabled = !has;
-    r.querySelector("#ed-vx").value = cur.vx ?? 0.25;
-    r.querySelector(".ed-vxv").textContent = `${Math.round((cur.vx ?? 0.25) * 100)} %`;
+    r.querySelector("#ed-vx").value = cur.vx ?? 0.5;
+    r.querySelector(".ed-vxv").textContent = cur.vx == null ? "centr\xE9e automatiquement" : `${Math.round(cur.vx * 100)} %`;
   }
   function preview() {
     fillVideo();

@@ -178,7 +178,7 @@ export function initEditor() {
     cur.videoLocal = URL.createObjectURL(f);
     fillVideo();
   });
-  val('ed-novideo').addEventListener('click', () => { pendingVideo = null; cur.video = ''; cur.videoLocal = ''; fillVideo(); });
+  val('ed-novideo').addEventListener('click', () => { pendingVideo = null; cur.video = ''; cur.videoLocal = ''; delete cur.vx; fillVideo(); });
   val('ed-vx').addEventListener('input', (e) => { cur.vx = Number(e.target.value); fillVideo(); });
   val('ed-vtest').addEventListener('click', () => {
     const host = r.querySelector('.ed-preview');
@@ -637,8 +637,8 @@ function fillVideo() {
   r.querySelector('.ed-vname').textContent = pendingVideo ? `${pendingVideo.name} (envoyée à l'enregistrement)` : has ? 'Vidéo enregistrée' : 'Aucune vidéo';
   r.querySelector('#ed-vtest').disabled = !has;
   r.querySelector('#ed-novideo').disabled = !has;
-  r.querySelector('#ed-vx').value = cur.vx ?? 0.25;
-  r.querySelector('.ed-vxv').textContent = `${Math.round((cur.vx ?? 0.25) * 100)} %`;
+  r.querySelector('#ed-vx').value = cur.vx ?? 0.5;
+  r.querySelector('.ed-vxv').textContent = cur.vx == null ? 'centrée automatiquement' : `${Math.round(cur.vx * 100)} %`;
 }
 
 function preview() {

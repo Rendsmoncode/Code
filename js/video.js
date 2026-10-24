@@ -69,7 +69,8 @@ export function playCardVideo(card, host) {
     await metadata(v);
     const vw = v.videoWidth || 1080;
     const vh = v.videoHeight || 1440;
-    const vx = Number(card.vx) || 0;
+    // position de la carte dans la vidéo : réglée dans l'onglet Cartes, sinon centrée
+    const vx = card.vx == null || card.vx === '' ? Math.max(0, (1 - (vh * CARD_RATIO) / vw) / 2) : Number(card.vx);
     const full = vh > vw; // vidéo verticale : plein écran
     if (full) {
       wrap.classList.add('full');
