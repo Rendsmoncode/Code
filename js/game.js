@@ -8,6 +8,7 @@ import {
 import { WHEN, CONTINUOUS_ACTIONS, effectText, effectsText } from './effects.js';
 import * as net from './net.js';
 import { playMomentVideo, preloadMoments } from './video.js';
+import { keywordFx } from './kwfx.js';
 import { getTheme, openSettings } from './settings.js';
 import { recordGame } from './achievements.js';
 
@@ -275,6 +276,7 @@ function onMsg(m) {
     case 'chat': G.log.push({ who: 'opp', text: m.text, chat: true }); break;
     case 'reveal': G.reveals.push({ id: uid(), c: m.c, why: m.why }); break;
     case 'anim': playMomentVideo(G.oppCards[m.c]?.anims?.[m.m]); return;
+    case 'kw': if (KW[m.k]) keywordFx(KW[m.k]); return;
     case 'attack': G.battle = { ...m.b, role: 'def' }; render(); fireAll('onOppAttack'); return;
     case 'battleUpd': if (G.battle) Object.assign(G.battle, m.b); break;
     case 'battleEnd': G.battle = null; G.select = null; endBattleMods(); break;
@@ -508,6 +510,13 @@ async function anim(inst, m) {
   await playMomentVideo(url);
 }
 
+// Annonce plein écran d'un mot-clé ([Bloqueur], [Double attaque], [Exil]), chez moi et chez l'adversaire.
+const KW = { blocker: 'BLOCKER', double: 'DOUBLE ATTACK', banish: 'BANISH' };
+function kwFx(k) {
+  send({ t: 'kw', k });
+  return keywordFx(KW[k]);
+}
+
 async function playCard(u, free = false, rested = false) {
   const loc = locate(u);
   if (!loc) return;
@@ -598,6 +607,7 @@ function sendAttack() {
   send({ t: 'attack', b: wire });
   log(`confirme l'attaque : ${b.atkPower} de puissance${b.double ? ' (Double attaque)' : ''}${b.banish ? ' (Exil)' : ''}.`);
   commit();
+  if (b.double) kwFx('double');
 }
 
 function cancelAttack() {
@@ -624,6 +634,7 @@ async function block(inst) {
   log(`bloque avec ${name(c)}.`);
   battleUpd();
   await anim(inst, 'onBlock');
+  await kwFx('blocker');
   await fireCard(inst, 'onBlock');
 }
 
@@ -711,6 +722,7 @@ async function resolveBattle() {
 
 // Retourne true si le joueur a perdu.
 async function takeDamage(n, banish) {
+  if (banish && G.me.life.length) await kwFx('banish');
   for (let k = 0; k < n; k++) {
     const me = G.me;
     if (!me.life.length) { lose('Son Leader a été touché sans carte Vie restante.'); return true; }

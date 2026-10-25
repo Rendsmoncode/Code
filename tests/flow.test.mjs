@@ -69,7 +69,7 @@ const wall = await B.$('.side.me .chars-row .slot:has-text("Mur")');
 await wall.click();
 const blockBtn = await B.$('#menu button:has-text("Bloquer")');
 check('Bloquer proposé pour un [Bloqueur]', Boolean(blockBtn));
-await blockBtn?.click(); await W(900);
+await blockBtn?.click(); await W(2600); // l’annonce BLOCKER dure 2 s
 const h2 = await hand(B);
 check('[Bloquée] (pioche 1)', h2 === h1 + 1, `${h1}->${h2}`);
 await B.click('[data-do=resolve]'); await W(900);
