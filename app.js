@@ -21536,7 +21536,8 @@ ${suffix}`;
   async function refreshCollection() {
     S.collection = Object.fromEntries(check(await sb.from("collection").select("card_id, qty")).map((r) => [r.card_id, r.qty]));
   }
-  var MEDIA = { alt: { ext: "mp3", type: "audio/mpeg" }, banish: { ext: "png", type: "image/png" } };
+  var PNG = { ext: "png", type: "image/png" };
+  var MEDIA = { alt: { ext: "mp3", type: "audio/mpeg" }, blocker: PNG, banish: PNG };
   S.music = {};
   async function loadMusic() {
     const { data, error } = await sb.storage.from("cards").list("sons", { limit: 100, sortBy: { column: "name", order: "desc" } });
@@ -24328,17 +24329,19 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     g.drawImage(img, pad, pad, iw, ih);
     return { c, iw, ih, pad };
   }
-  function figure(g, W, H, F, t) {
+  function figure(g, W, H, F, t, align) {
     const a = outCubic((t - 0.12) / 0.3);
     if (a <= 0) return;
     const z = 1 + 0.04 * t, iw = F.iw * z, ih = F.ih * z, pad = F.pad * z;
-    const x = W - iw * 0.98 + (1 - a) * iw * 0.8, y = H - ih;
+    const center = align === "center" && W < H;
+    const x = center ? (W - iw) / 2 : W - iw * 0.98 + (1 - a) * iw * 0.8;
+    const y = H - ih + (center ? (1 - a) * ih * 0.7 : 0);
     g.save();
     g.globalAlpha = clamp(a * 1.5) * (1 - clamp((t - 1.72) / 0.25));
     g.drawImage(F.c, x - pad, y - pad, iw + 2 * pad, ih + 2 * pad);
     g.restore();
   }
-  function frameAt(g, W, H, layout, t, fig) {
+  function frameAt(g, W, H, layout, t, fig, align) {
     const frame = Math.round(t * 30);
     const end = 1 - clamp((t - 1.78) / 0.22);
     g.clearRect(0, 0, W, H);
@@ -24359,7 +24362,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     g.restore();
     band(g, W, layout.k, H / 2 - layout.gap, 1, t, frame);
     band(g, W, layout.k, H / 2 + layout.gap, -1, t, frame);
-    if (fig) figure(g, W, H, fig, t);
+    if (fig) figure(g, W, H, fig, t, align);
     words(g, W, H, layout.text, layout.fs, t);
     const fl = 1 - clamp(t / 0.18);
     if (fl > 0) {
@@ -24396,7 +24399,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     }));
     return images[src];
   }
-  function play(text, imgSrc) {
+  function play(text, imgSrc, align) {
     return loadImage(imgSrc).then((img) => new Promise((resolve) => {
       const ov = document.createElement("div");
       ov.className = "kwfx-ov";
@@ -24436,7 +24439,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
           end();
           return;
         }
-        frameAt(g, W, H, layout, t, fig);
+        frameAt(g, W, H, layout, t, fig, align);
         requestAnimationFrame(tick);
       };
       tick();
@@ -24447,10 +24450,19 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     const check2 = () => document.querySelector(".anim-ov") ? setTimeout(check2, 100) : ok();
     check2();
   });
-  function keywordFx(text, imgSrc) {
+  function keywordFx(text, imgSrc, align) {
     chain = chain.then(videoGone).then(() => document.fonts.load(`80px ${FONT}`).catch(() => {
-    })).then(() => play(text, imgSrc));
+    })).then(() => play(text, imgSrc, align));
     return chain;
+  }
+  var KEYWORDS2 = {
+    blocker: { text: "BLOCKER", img: "center" },
+    double: { text: "DOUBLE ATTACK" },
+    banish: { text: "BANISH", img: "right" }
+  };
+  function playKeyword(k, imgSrc) {
+    const kw = KEYWORDS2[k];
+    return kw ? keywordFx(kw.text, kw.img && imgSrc, kw.img) : Promise.resolve();
   }
 
   // js/settings.js
@@ -24877,7 +24889,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         playMomentVideo(G.oppCards[m.c]?.anims?.[m.m]);
         return;
       case "kw":
-        if (KW[m.k]) keywordFx(KW[m.k], kwImage(m.k));
+        playKeyword(m.k, S.music?.[m.k]?.url);
         return;
       case "attack":
         G.battle = { ...m.b, role: "def" };
@@ -25139,11 +25151,9 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     send({ t: "anim", c: inst.c, m });
     await playMomentVideo(url);
   }
-  var KW = { blocker: "BLOCKER", double: "DOUBLE ATTACK", banish: "BANISH" };
-  var kwImage = (k) => k === "banish" ? S.music?.banish?.url : null;
   function kwFx(k) {
     send({ t: "kw", k });
-    return keywordFx(KW[k], kwImage(k));
+    return playKeyword(k, S.music?.[k]?.url);
   }
   async function playCard(u, free = false, rested = false) {
     const loc = locate(u);
@@ -27207,15 +27217,16 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         <span class="muted small mu-name"></span>
       </div>
       <p class="msg mu-msg" role="status"></p>
-      <h3>Image de l'annonce BANISH</h3>
-      <p class="muted small">Image affich\xE9e avec l'annonce <b>BANISH</b> quand une Vie est exil\xE9e en partie. PNG d\xE9tour\xE9 (fond transparent), stock\xE9 en priv\xE9.</p>
-      <div class="row-btns">
-        <label class="btn"><input type="file" class="bi-file" accept="image/png" hidden>Envoyer l'image\u2026</label>
-        <button type="button" class="btn ghost bi-play">Voir l'annonce</button>
-        <button type="button" class="btn danger bi-del">Retirer</button>
-        <span class="muted small bi-name"></span>
-      </div>
-      <p class="msg bi-msg" role="status"></p>
+      <h3>Images des annonces</h3>
+      <p class="muted small">Image affich\xE9e avec l'annonce en partie (<b>BLOCKER</b> : au blocage ; <b>BANISH</b> : quand une Vie est exil\xE9e). PNG d\xE9tour\xE9 (fond transparent), stock\xE9 en priv\xE9. Sans image, l'annonce s'affiche quand m\xEAme.</p>
+      ${["blocker", "banish"].map((k) => `<div class="row-btns ki" data-k="${k}">
+        <b>${KEYWORDS2[k].text}</b>
+        <label class="btn"><input type="file" class="ki-file" accept="image/png" hidden>Envoyer l'image\u2026</label>
+        <button type="button" class="btn ghost ki-play">Voir l'annonce</button>
+        <button type="button" class="btn danger ki-del">Retirer</button>
+        <span class="muted small ki-name"></span>
+      </div>`).join("")}
+      <p class="msg ki-msg" role="status"></p>
     </section>
     <div class="ad-starters"></div>
   </div>`;
@@ -27277,43 +27288,46 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       }
       renderMusic();
     });
-    const bmsg = (t, err = false) => {
-      q(".bi-msg").textContent = t;
-      q(".bi-msg").classList.toggle("err", err);
+    const kmsg = (t, err = false) => {
+      q(".ki-msg").textContent = t;
+      q(".ki-msg").classList.toggle("err", err);
     };
-    const renderBanish = () => {
-      const m = S.music?.banish;
-      q(".bi-name").textContent = m ? "Une image est en place." : "Aucune image pour l'instant.";
-      q(".bi-del").disabled = !m;
-    };
-    renderBanish();
-    q(".bi-file").addEventListener("change", async (e) => {
-      const f = e.target.files[0];
-      e.target.value = "";
-      if (!f) return;
-      if (f.size > 1e7) {
-        bmsg("Image trop lourde : 10 Mo maximum.", true);
-        return;
-      }
-      bmsg("Envoi\u2026");
-      try {
-        await uploadMusic("banish", f);
-        bmsg("Image de BANISH enregistr\xE9e.");
-      } catch (err) {
-        bmsg(err.message, true);
-      }
-      renderBanish();
+    const renderKw = () => el.querySelectorAll(".ki").forEach((row) => {
+      const m = S.music?.[row.dataset.k];
+      row.querySelector(".ki-name").textContent = m ? "Une image est en place." : "Aucune image.";
+      row.querySelector(".ki-del").disabled = !m;
     });
-    q(".bi-play").addEventListener("click", () => keywordFx("BANISH", S.music?.banish?.url));
-    q(".bi-del").addEventListener("click", async () => {
-      if (!confirm("Retirer l'image de BANISH ?")) return;
-      try {
-        await deleteMusic("banish");
-        bmsg("Image retir\xE9e.");
-      } catch (err) {
-        bmsg(err.message, true);
-      }
-      renderBanish();
+    renderKw();
+    el.querySelectorAll(".ki").forEach((row) => {
+      const k = row.dataset.k, word = KEYWORDS2[k].text;
+      row.querySelector(".ki-file").addEventListener("change", async (e) => {
+        const f = e.target.files[0];
+        e.target.value = "";
+        if (!f) return;
+        if (f.size > 1e7) {
+          kmsg("Image trop lourde : 10 Mo maximum.", true);
+          return;
+        }
+        kmsg("Envoi\u2026");
+        try {
+          await uploadMusic(k, f);
+          kmsg(`Image de ${word} enregistr\xE9e.`);
+        } catch (err) {
+          kmsg(err.message, true);
+        }
+        renderKw();
+      });
+      row.querySelector(".ki-play").addEventListener("click", () => playKeyword(k, S.music?.[k]?.url));
+      row.querySelector(".ki-del").addEventListener("click", async () => {
+        if (!confirm(`Retirer l'image de ${word} ?`)) return;
+        try {
+          await deleteMusic(k);
+          kmsg("Image retir\xE9e.");
+        } catch (err) {
+          kmsg(err.message, true);
+        }
+        renderKw();
+      });
     });
     let players = [];
     async function refresh() {

@@ -138,7 +138,7 @@ function words(g, W, H, L, fs, t) {
 }
 
 // Personnage détouré (image du mot-clé), préparé une fois avec son contour lumineux,
-// puis il arrive de la droite, ancré en bas.
+// puis il arrive de la droite (ou monte, s'il est centré), ancré en bas.
 function figureLayer(img, W, H, dpr) {
   const ih = Math.min(H * 0.78, W * 1.1 * img.height / img.width), iw = ih * img.width / img.height;
   const pad = Math.max(12, W / 60) * 2;
@@ -149,18 +149,20 @@ function figureLayer(img, W, H, dpr) {
   g.shadowBlur = 0; g.drawImage(img, pad, pad, iw, ih);
   return { c, iw, ih, pad };
 }
-function figure(g, W, H, F, t) {
+function figure(g, W, H, F, t, align) {
   const a = outCubic((t - 0.12) / 0.3);
   if (a <= 0) return;
   const z = 1 + 0.04 * t, iw = F.iw * z, ih = F.ih * z, pad = F.pad * z;
-  const x = W - iw * 0.98 + (1 - a) * iw * 0.8, y = H - ih;
+  const center = align === 'center' && W < H; // centré seulement sur un écran en hauteur (téléphone)
+  const x = center ? (W - iw) / 2 : W - iw * 0.98 + (1 - a) * iw * 0.8;
+  const y = H - ih + (center ? (1 - a) * ih * 0.7 : 0);
   g.save();
   g.globalAlpha = clamp(a * 1.5) * (1 - clamp((t - 1.72) / 0.25));
   g.drawImage(F.c, x - pad, y - pad, iw + 2 * pad, ih + 2 * pad);
   g.restore();
 }
 
-function frameAt(g, W, H, layout, t, fig) {
+function frameAt(g, W, H, layout, t, fig, align) {
   const frame = Math.round(t * 30);
   const end = 1 - clamp((t - 1.78) / 0.22);
   g.clearRect(0, 0, W, H);
@@ -174,7 +176,7 @@ function frameAt(g, W, H, layout, t, fig) {
   g.restore();
   band(g, W, layout.k, H / 2 - layout.gap, 1, t, frame);
   band(g, W, layout.k, H / 2 + layout.gap, -1, t, frame);
-  if (fig) figure(g, W, H, fig, t);
+  if (fig) figure(g, W, H, fig, t, align);
   words(g, W, H, layout.text, layout.fs, t);
   const fl = 1 - clamp(t / 0.18); // flash d'ouverture
   if (fl > 0) { g.fillStyle = `rgba(255,255,255,${fl * 0.85})`; g.fillRect(0, 0, W, H); }
@@ -200,7 +202,7 @@ function loadImage(src) {
   return images[src];
 }
 
-function play(text, imgSrc) {
+function play(text, imgSrc, align) {
   return loadImage(imgSrc).then((img) => new Promise((resolve) => {
     const ov = document.createElement('div');
     ov.className = 'kwfx-ov';
@@ -230,7 +232,7 @@ function play(text, imgSrc) {
       if (done) return;
       const t = (performance.now() - t0) / 1000;
       if (t >= DUR) { end(); return; }
-      frameAt(g, W, H, layout, t, fig);
+      frameAt(g, W, H, layout, t, fig, align);
       requestAnimationFrame(tick);
     };
     tick();
@@ -243,7 +245,18 @@ const videoGone = () => new Promise((ok) => {
   const check = () => (document.querySelector('.anim-ov') ? setTimeout(check, 100) : ok());
   check();
 });
-export function keywordFx(text, imgSrc) {
-  chain = chain.then(videoGone).then(() => document.fonts.load(`80px ${FONT}`).catch(() => {})).then(() => play(text, imgSrc));
+function keywordFx(text, imgSrc, align) {
+  chain = chain.then(videoGone).then(() => document.fonts.load(`80px ${FONT}`).catch(() => {})).then(() => play(text, imgSrc, align));
   return chain;
+}
+
+// Mots-clés annoncés en partie. img : l'image (Admin → Musiques) arrive de la droite, ou monte au centre sur téléphone.
+export const KEYWORDS = {
+  blocker: { text: 'BLOCKER', img: 'center' },
+  double: { text: 'DOUBLE ATTACK' },
+  banish: { text: 'BANISH', img: 'right' },
+};
+export function playKeyword(k, imgSrc) {
+  const kw = KEYWORDS[k];
+  return kw ? keywordFx(kw.text, kw.img && imgSrc, kw.img) : Promise.resolve();
 }

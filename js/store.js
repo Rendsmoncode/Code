@@ -163,8 +163,9 @@ export async function refreshCollection() {
 // ---------- cartes (admins) ----------
 // ---------- musiques et images des annonces (Admin → Musiques) ----------
 // Fichiers privés du stockage : sons/<type>-<date>.<ext> (le plus récent compte).
-// alt : chanson des Alt ; banish : image (PNG détouré) de l'annonce BANISH en partie.
-const MEDIA = { alt: { ext: 'mp3', type: 'audio/mpeg' }, banish: { ext: 'png', type: 'image/png' } };
+// alt : chanson des Alt ; blocker, banish : image (PNG détouré) de l'annonce en partie.
+const PNG = { ext: 'png', type: 'image/png' };
+const MEDIA = { alt: { ext: 'mp3', type: 'audio/mpeg' }, blocker: PNG, banish: PNG };
 S.music = {};
 export async function loadMusic() {
   const { data, error } = await sb.storage.from('cards').list('sons', { limit: 100, sortBy: { column: 'name', order: 'desc' } });

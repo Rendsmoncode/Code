@@ -8,7 +8,7 @@ import {
 import { WHEN, CONTINUOUS_ACTIONS, effectText, effectsText } from './effects.js';
 import * as net from './net.js';
 import { playMomentVideo, preloadMoments } from './video.js';
-import { keywordFx } from './kwfx.js';
+import { playKeyword } from './kwfx.js';
 import { getTheme, openSettings } from './settings.js';
 import { recordGame } from './achievements.js';
 
@@ -276,7 +276,7 @@ function onMsg(m) {
     case 'chat': G.log.push({ who: 'opp', text: m.text, chat: true }); break;
     case 'reveal': G.reveals.push({ id: uid(), c: m.c, why: m.why }); break;
     case 'anim': playMomentVideo(G.oppCards[m.c]?.anims?.[m.m]); return;
-    case 'kw': if (KW[m.k]) keywordFx(KW[m.k], kwImage(m.k)); return;
+    case 'kw': playKeyword(m.k, S.music?.[m.k]?.url); return;
     case 'attack': G.battle = { ...m.b, role: 'def' }; render(); fireAll('onOppAttack'); return;
     case 'battleUpd': if (G.battle) Object.assign(G.battle, m.b); break;
     case 'battleEnd': G.battle = null; G.select = null; endBattleMods(); break;
@@ -511,11 +511,10 @@ async function anim(inst, m) {
 }
 
 // Annonce plein écran d'un mot-clé ([Bloqueur], [Double attaque], [Exil]), chez moi et chez l'adversaire.
-const KW = { blocker: 'BLOCKER', double: 'DOUBLE ATTACK', banish: 'BANISH' };
-const kwImage = (k) => (k === 'banish' ? S.music?.banish?.url : null); // Admin → Musiques
+// Images des annonces : Admin → Musiques.
 function kwFx(k) {
   send({ t: 'kw', k });
-  return keywordFx(KW[k], kwImage(k));
+  return playKeyword(k, S.music?.[k]?.url);
 }
 
 async function playCard(u, free = false, rested = false) {
