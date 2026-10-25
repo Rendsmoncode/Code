@@ -21978,24 +21978,43 @@ ${suffix}`;
     if (stopCurrent) stopCurrent(abort);
     else if (abort) stopMusic();
   }
+  var momentCache = /* @__PURE__ */ new Map();
+  var localUrl = (url) => url.startsWith("blob:") || url.startsWith("file:");
+  async function momentVideo(url) {
+    let v = momentCache.get(url);
+    if (!v) {
+      v = document.createElement("video");
+      v.playsInline = true;
+      v.setAttribute("playsinline", "");
+      v.preload = "auto";
+      momentCache.set(url, v);
+      v.src = localUrl(url) ? url : await signedUrl(url).catch(() => resolveMedia(url));
+    }
+    return v;
+  }
+  function preloadMoments(cards) {
+    for (const c of cards || []) for (const url of Object.values(c?.anims || {})) if (url && !momentCache.has(url)) momentVideo(url).then((v) => v.load()).catch(() => {
+    });
+  }
   async function playMomentVideo(url) {
     if (!url) return;
-    const src = url.startsWith("blob:") || url.startsWith("file:") ? url : await signedUrl(url).catch(() => resolveMedia(url));
+    const v = await momentVideo(url);
     document.querySelector(".anim-ov")?.remove();
     const ov = document.createElement("div");
     ov.className = "anim-ov";
-    const v = document.createElement("video");
-    v.playsInline = true;
-    v.setAttribute("playsinline", "");
-    v.preload = "auto";
-    v.src = src;
+    v.currentTime = 0;
     ov.append(v);
     document.body.append(ov);
     return new Promise((resolve) => {
       let done = false;
+      let timer = null;
       const end = () => {
         if (done) return;
         done = true;
+        clearTimeout(timer);
+        v.removeEventListener("ended", end);
+        v.removeEventListener("error", end);
+        v.pause();
         ov.classList.add("out");
         setTimeout(() => ov.remove(), 300);
         resolve();
@@ -22003,7 +22022,7 @@ ${suffix}`;
       v.addEventListener("ended", end);
       v.addEventListener("error", end);
       ov.addEventListener("click", end);
-      setTimeout(end, 15e3);
+      timer = setTimeout(end, 15e3);
       v.muted = false;
       v.volume = 1;
       v.play().catch(() => {
@@ -22501,7 +22520,7 @@ ${suffix}`;
   });
   var ALT_INTRO = 2574;
   function altFxHTML() {
-    const minis = Array.from({ length: 22 }, (_, k) => `<i class="afx-m" style="--x:${(8 + Math.random() * 84).toFixed(1)}%;--y:${(8 + Math.random() * 84).toFixed(1)}%;--s:${(1.6 + Math.random() * 2.4).toFixed(1)}vmin;--w:${(k * 0.06).toFixed(2)}s">${STAR_SVG}</i>`).join("");
+    const minis = Array.from({ length: 22 }, (_, k) => `<i class="afx-m" style="--x:${(8 + Math.random() * 84).toFixed(1)};--y:${(8 + Math.random() * 84).toFixed(1)};--s:${(1.6 + Math.random() * 2.4).toFixed(1)}vmin;--w:${(k * 0.06).toFixed(2)}s">${STAR_SVG}</i>`).join("");
     return `<div class="afx-bg"></div><div class="afx-rays"></div>${minis}
     ${["0s", ".407s", "1.219s", "1.486s"].map((d) => `<div class="afx-ring" style="--d:${d}"></div>`).join("")}
     <div class="afx-star">${STAR_SVG}</div>`;
@@ -24464,6 +24483,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         G.oppName = m.name || G.oppName;
         G.oppUser = m.user || G.oppUser;
         G.oppCards = m.cards || G.oppCards;
+        preloadMoments([...Object.values(G.myCards || {}), ...Object.values(G.oppCards)]);
         G.opp = m.view;
         if ((m.turn?.count || 0) > (G.turn?.count || 0)) G.turn = m.turn;
         if (G.battle) {
@@ -24483,6 +24503,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         G.oppName = m.name || "Adversaire";
         G.oppUser = m.user || null;
         G.oppCards = m.cards || {};
+        preloadMoments([...Object.values(G.myCards || {}), ...Object.values(G.oppCards)]);
         G.oppHello = true;
         sys(`${G.oppName} a rejoint la partie.`);
         if (G.role === "host") coinFlip();

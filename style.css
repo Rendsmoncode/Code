@@ -981,7 +981,8 @@ details { margin-top: 12px; }
 .cv-vwrap.full { position: fixed; z-index: 400; aspect-ratio: auto; transform-origin: 0 0; clip-path: inset(0 0 0 0 round 0); transition: opacity .6s ease; }
 .cv-vwrap.full .cv-frame { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .cv-vwrap.full video { position: absolute; inset: 0; border-radius: 0; box-shadow: none; object-fit: fill; width: 100%; height: 100%; }
-.cv-vwrap.full.shrink { clip-path: var(--clip); transition: transform .75s cubic-bezier(.6, 0, .2, 1), clip-path .5s ease, opacity .6s ease; }
+.cv-vwrap.full { will-change: transform, opacity; }
+.cv-vwrap.full.shrink { clip-path: var(--clip); transition: transform .75s cubic-bezier(.6, 0, .2, 1), opacity .6s ease; }
 .cardview .cv-card { overflow: visible; }
 
 /* ---------- annonce d'une carte Alt : l'étoile s'allume, pulse sur les coups de la chanson, puis éclair ---------- */
@@ -989,7 +990,7 @@ details { margin-top: 12px; }
 .bx.fx-ALT .bx-fx > * { pointer-events: none; }
 .afx-bg { position: absolute; inset: 0; background: radial-gradient(circle at 50% 50%, #1b2a6b 0, #0a0f26 40%, #05060a 75%); opacity: 0; animation: afx-bg 2.574s ease-in forwards; }
 @keyframes afx-bg { 0% { opacity: 0; } 30% { opacity: .6; } 100% { opacity: 1; } }
-.afx-star { position: absolute; left: 50%; top: 50%; width: 22vmin; aspect-ratio: 1; transform: translate(-50%, -50%) scale(.15); color: #fff;
+.afx-star { position: absolute; left: 50%; top: 50%; width: 22vmin; aspect-ratio: 1; transform: translate(-50%, -50%) scale(.15); color: #fff; will-change: transform;
   filter: drop-shadow(0 0 2vmin #fff) drop-shadow(0 0 6vmin #a9c8ff); animation: afx-star 2.574s cubic-bezier(.5, 0, .7, 1) forwards; }
 .afx-star svg, .afx-m svg { width: 100%; height: 100%; display: block; }
 @keyframes afx-star {
@@ -1012,10 +1013,11 @@ details { margin-top: 12px; }
   background: conic-gradient(from 0deg, transparent 0 40deg, #ffffff22 44deg, transparent 48deg 130deg, #ffffff22 134deg, transparent 138deg 220deg, #ffffff22 224deg, transparent 228deg 310deg, #ffffff22 314deg, transparent 318deg);
   animation: afx-rays 2.574s linear forwards; }
 @keyframes afx-rays { 0%, 47% { opacity: 0; transform: translate(-50%, -50%) rotate(0); } 55% { opacity: 1; } 100% { opacity: 1; transform: translate(-50%, -50%) rotate(140deg); } }
-.afx-m { position: absolute; left: var(--x); top: var(--y); width: var(--s); aspect-ratio: 1; color: #fff; opacity: 0; transform: translate(-50%, -50%);
-  filter: drop-shadow(0 0 .8vmin #fff) drop-shadow(0 0 2vmin #a9c8ff); animation: afx-m 2.574s ease-in forwards; animation-delay: var(--w); }
+.afx-m { position: absolute; left: calc(var(--x) * 1vw); top: calc(var(--y) * 1vh); width: var(--s); aspect-ratio: 1; color: #fff; opacity: 0; transform: translate(-50%, -50%);
+  filter: drop-shadow(0 0 .8vmin #fff) drop-shadow(0 0 2vmin #a9c8ff); will-change: transform, opacity; animation: afx-m 2.574s ease-in forwards; animation-delay: var(--w); }
 @keyframes afx-m { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.2); } 15% { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(45deg); }
-  70% { opacity: 1; left: var(--x); top: var(--y); } 100% { opacity: 0; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(.3) rotate(180deg); } }
+  70% { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(120deg); }
+  100% { opacity: 0; transform: translate(calc(-50% + (50 - var(--x)) * 1vw), calc(-50% + (50 - var(--y)) * 1vh)) scale(.3) rotate(180deg); } }
 .afx-flash { position: absolute; inset: 0; background: #fff; animation: afx-flash .45s ease-out forwards; }
 @keyframes afx-flash { 0% { opacity: 1; } 100% { opacity: 0; } }
 .rar-chip.r-ALT { background: linear-gradient(135deg, #dfe8ff, #5a6fb0); color: #0b1430; }

@@ -325,7 +325,7 @@ const wait = (ms) => new Promise((r) => { setTimeout(r, ms); });
 // Annonce d'une Alt (2,574 s) : coups de l'étoile à 0 ; 0,407 ; 1,219 et 1,486 s, calés sur la chanson.
 const ALT_INTRO = 2574;
 function altFxHTML() {
-  const minis = Array.from({ length: 22 }, (_, k) => `<i class="afx-m" style="--x:${(8 + Math.random() * 84).toFixed(1)}%;--y:${(8 + Math.random() * 84).toFixed(1)}%;--s:${(1.6 + Math.random() * 2.4).toFixed(1)}vmin;--w:${(k * 0.06).toFixed(2)}s">${STAR_SVG}</i>`).join('');
+  const minis = Array.from({ length: 22 }, (_, k) => `<i class="afx-m" style="--x:${(8 + Math.random() * 84).toFixed(1)};--y:${(8 + Math.random() * 84).toFixed(1)};--s:${(1.6 + Math.random() * 2.4).toFixed(1)}vmin;--w:${(k * 0.06).toFixed(2)}s">${STAR_SVG}</i>`).join('');
   return `<div class="afx-bg"></div><div class="afx-rays"></div>${minis}
     ${['0s', '.407s', '1.219s', '1.486s'].map((d) => `<div class="afx-ring" style="--d:${d}"></div>`).join('')}
     <div class="afx-star">${STAR_SVG}</div>`;

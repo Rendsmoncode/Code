@@ -222,24 +222,50 @@ export function stopCardVideo(abort = false) {
 }
 
 // Animation d'une carte en partie : vidéo plein écran avec son propre son (s'il y en a), un toucher la passe.
+// Vidéos des animations préchargées en début de partie (url d'origine → <video> prête à jouer).
+const momentCache = new Map();
+const localUrl = (url) => url.startsWith('blob:') || url.startsWith('file:');
+async function momentVideo(url) {
+  let v = momentCache.get(url);
+  if (!v) {
+    v = document.createElement('video');
+    v.playsInline = true; v.setAttribute('playsinline', ''); v.preload = 'auto';
+    momentCache.set(url, v);
+    v.src = localUrl(url) ? url : await signedUrl(url).catch(() => resolveMedia(url));
+  }
+  return v;
+}
+// Précharge les animations de toutes les cartes de la partie (les miennes et celles de l'adversaire).
+export function preloadMoments(cards) {
+  for (const c of cards || []) for (const url of Object.values(c?.anims || {})) if (url && !momentCache.has(url)) momentVideo(url).then((v) => v.load()).catch(() => {});
+}
+
 export async function playMomentVideo(url) {
   if (!url) return;
-  const src = url.startsWith('blob:') || url.startsWith('file:') ? url : await signedUrl(url).catch(() => resolveMedia(url));
+  const v = await momentVideo(url);
   document.querySelector('.anim-ov')?.remove();
   const ov = document.createElement('div');
   ov.className = 'anim-ov';
-  const v = document.createElement('video');
-  v.playsInline = true; v.setAttribute('playsinline', ''); v.preload = 'auto';
-  v.src = src;
+  v.currentTime = 0;
   ov.append(v);
   document.body.append(ov);
   return new Promise((resolve) => {
     let done = false;
-    const end = () => { if (done) return; done = true; ov.classList.add('out'); setTimeout(() => ov.remove(), 300); resolve(); };
+    let timer = null;
+    const end = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      v.removeEventListener('ended', end); v.removeEventListener('error', end);
+      v.pause(); // une vidéo retirée de la page continuerait sinon à jouer son son
+      ov.classList.add('out');
+      setTimeout(() => ov.remove(), 300);
+      resolve();
+    };
     v.addEventListener('ended', end);
     v.addEventListener('error', end);
     ov.addEventListener('click', end);
-    setTimeout(end, 15000); // sécurité
+    timer = setTimeout(end, 15000); // sécurité
     v.muted = false; v.volume = 1;
     v.play().catch(() => { v.muted = true; v.play().catch(end); }); // son refusé par le navigateur : on joue sans
   });

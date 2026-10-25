@@ -7,7 +7,7 @@ import {
 } from './cards.js';
 import { WHEN, CONTINUOUS_ACTIONS, effectText, effectsText } from './effects.js';
 import * as net from './net.js';
-import { playMomentVideo } from './video.js';
+import { playMomentVideo, preloadMoments } from './video.js';
 import { getTheme, openSettings } from './settings.js';
 import { recordGame } from './achievements.js';
 
@@ -237,7 +237,7 @@ function onMsg(m) {
     case 'resume': {
       G.oppName = m.name || G.oppName;
       G.oppUser = m.user || G.oppUser;
-      G.oppCards = m.cards || G.oppCards;
+      G.oppCards = m.cards || G.oppCards; preloadMoments([...Object.values(G.myCards || {}), ...Object.values(G.oppCards)]);
       G.opp = m.view;
       if ((m.turn?.count || 0) > (G.turn?.count || 0)) G.turn = m.turn;
       // Un combat interrompu par la coupure est annulé des deux côtés.
@@ -251,7 +251,7 @@ function onMsg(m) {
       if (G.phase !== 'hello') { sys('Votre adversaire a relancé une nouvelle partie de son côté : la partie en cours ne peut pas reprendre.'); break; }
       G.oppName = m.name || 'Adversaire';
       G.oppUser = m.user || null;
-      G.oppCards = m.cards || {};
+      G.oppCards = m.cards || {}; preloadMoments([...Object.values(G.myCards || {}), ...Object.values(G.oppCards)]);
       G.oppHello = true;
       sys(`${G.oppName} a rejoint la partie.`);
       if (G.role === 'host') coinFlip();
