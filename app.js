@@ -24357,6 +24357,36 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     g.fill();
     g.stroke();
   }
+  var LEGS = { cut: 0.665, hips: [0.6, 0.66], hipY: 0.63 };
+  function legs(g, iw, ih, t) {
+    const ox = -iw / 2, oy = -ih, w = Math.max(2, ih * 0.022);
+    g.save();
+    g.lineCap = "round";
+    g.lineJoin = "round";
+    LEGS.hips.forEach((hx, i) => {
+      const sway = Math.sin(t * 9 + i * 2) * ih * 6e-3;
+      const hip = [ox + hx * iw, oy + LEGS.hipY * ih];
+      const knee = [hip[0] - ih * 0.05 + sway, oy + 0.8 * ih];
+      const foot = [hip[0] + ih * 0.01 + sway, oy + ih * 0.985];
+      const toes = [[ih * 0.09, 0], [ih * 0.07, -ih * 0.03], [-ih * 0.04, 0]];
+      for (const [col, lw] of [["#3a1f0a", w * 1.8], ["#e8902a", w]]) {
+        g.strokeStyle = col;
+        g.lineWidth = lw;
+        g.beginPath();
+        g.moveTo(...hip);
+        g.lineTo(...knee);
+        g.lineTo(...foot);
+        g.stroke();
+        for (const [dx, dy] of toes) {
+          g.beginPath();
+          g.moveTo(...foot);
+          g.lineTo(foot[0] + dx, foot[1] + dy);
+          g.stroke();
+        }
+      }
+    });
+    g.restore();
+  }
   function dash(g, W, H, F, t) {
     if (t < DASH.in0) return;
     const { iw, ih, pad } = F;
@@ -24408,7 +24438,12 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       g.globalAlpha = 1 - clamp((t - 1.72) / 0.25);
       g.translate(x + iw / 2, y0 + ih + bob);
       g.scale(1 + sq, 1 - sq);
-      g.drawImage(F.c, -iw / 2 - pad, -ih - pad, iw + 2 * pad, ih + 2 * pad);
+      if (moving) g.drawImage(F.c, -iw / 2 - pad, -ih - pad, iw + 2 * pad, ih + 2 * pad);
+      else {
+        legs(g, iw, ih, t);
+        const keep = pad + LEGS.cut * ih, k = F.c.height / (ih + 2 * pad);
+        g.drawImage(F.c, 0, 0, F.c.width, keep * k, -iw / 2 - pad, -ih - pad, iw + 2 * pad, keep);
+      }
     }
     g.restore();
   }

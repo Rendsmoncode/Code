@@ -173,6 +173,26 @@ function puff(g, x, y, r, a) {
   g.fillStyle = '#f1e6d2'; g.strokeStyle = '#bfae92'; g.lineWidth = Math.max(1.5, r / 14);
   g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); g.stroke();
 }
+// Pattes de l'image « en course » à l'arrêt (en fraction de l'image) : hanches, et coupe du tourbillon.
+const LEGS = { cut: 0.665, hips: [0.6, 0.66], hipY: 0.63 };
+function legs(g, iw, ih, t) {
+  const ox = -iw / 2, oy = -ih, w = Math.max(2, ih * 0.022);
+  g.save();
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  LEGS.hips.forEach((hx, i) => {
+    const sway = Math.sin(t * 9 + i * 2) * ih * 0.006; // il trépigne un peu
+    const hip = [ox + hx * iw, oy + LEGS.hipY * ih];
+    const knee = [hip[0] - ih * 0.05 + sway, oy + 0.8 * ih];
+    const foot = [hip[0] + ih * 0.01 + sway, oy + ih * 0.985];
+    const toes = [[ih * 0.09, 0], [ih * 0.07, -ih * 0.03], [-ih * 0.04, 0]];
+    for (const [col, lw] of [['#3a1f0a', w * 1.8], ['#e8902a', w]]) {
+      g.strokeStyle = col; g.lineWidth = lw;
+      g.beginPath(); g.moveTo(...hip); g.lineTo(...knee); g.lineTo(...foot); g.stroke();
+      for (const [dx, dy] of toes) { g.beginPath(); g.moveTo(...foot); g.lineTo(foot[0] + dx, foot[1] + dy); g.stroke(); }
+    }
+  });
+  g.restore();
+}
 function dash(g, W, H, F, t) {
   if (t < DASH.in0) return;
   const { iw, ih, pad } = F;
@@ -207,7 +227,12 @@ function dash(g, W, H, F, t) {
     }
     g.globalAlpha = 1 - clamp((t - 1.72) / 0.25);
     g.translate(x + iw / 2, y0 + ih + bob); g.scale(1 + sq, 1 - sq);
-    g.drawImage(F.c, -iw / 2 - pad, -ih - pad, iw + 2 * pad, ih + 2 * pad);
+    if (moving) g.drawImage(F.c, -iw / 2 - pad, -ih - pad, iw + 2 * pad, ih + 2 * pad);
+    else { // à l'arrêt : sans le tourbillon des pattes (bas de l'image), avec de vraies pattes posées au sol
+      legs(g, iw, ih, t);
+      const keep = pad + LEGS.cut * ih, k = F.c.height / (ih + 2 * pad);
+      g.drawImage(F.c, 0, 0, F.c.width, keep * k, -iw / 2 - pad, -ih - pad, iw + 2 * pad, keep);
+    }
   }
   g.restore();
 }
