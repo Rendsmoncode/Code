@@ -517,9 +517,13 @@ function kwFx(k) {
   return playKeyword(k, S.music?.[k]?.url);
 }
 // [Initiative] obtenue : la vidéo « rush » de la carte, sinon celle de mon Leader (pour tout son deck), sinon l'annonce RUSH.
+// Plusieurs Personnages qui l'obtiennent d'un coup (un seul effet) : une seule annonce.
+let rushing = null;
 function rushFx(inst) {
+  if (rushing) return rushing;
   const src = [inst, G.me.leader].find((x) => x && myCard(x)?.anims?.rush);
-  return src ? anim(src, 'rush') : kwFx('rush');
+  rushing = (src ? anim(src, 'rush') : kwFx('rush')).finally(() => { rushing = null; });
+  return rushing;
 }
 const hasRushKw = (inst) => hasKw(inst, 'rush') || hasKw(inst, 'rushChar');
 
@@ -597,7 +601,6 @@ async function declareAttack(targetInst, isLeader) {
   };
   log(`attaque ${name(oppCard(targetInst))} avec ${name(c)}.`);
   commit();
-  if (G.battle.double) { G.battle.dblShown = true; await kwFx('double'); }
   await anim(atk, 'onAttack');
   await fireCard(atk, 'onAttack');
 }
@@ -615,7 +618,7 @@ function sendAttack() {
   send({ t: 'attack', b: wire });
   log(`confirme l'attaque : ${b.atkPower} de puissance${b.double ? ' (Double attaque)' : ''}${b.banish ? ' (Exil)' : ''}.`);
   commit();
-  if (b.double && !b.dblShown) kwFx('double'); // Double attaque obtenue par son effet [Attaque]
+  if (b.double) kwFx('double'); // au moment de valider l'attaque, même si elle est ensuite bloquée ou contrée
 }
 
 function cancelAttack() {

@@ -25158,9 +25158,14 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     send({ t: "kw", k });
     return playKeyword(k, S.music?.[k]?.url);
   }
+  var rushing = null;
   function rushFx(inst) {
+    if (rushing) return rushing;
     const src = [inst, G.me.leader].find((x) => x && myCard(x)?.anims?.rush);
-    return src ? anim(src, "rush") : kwFx("rush");
+    rushing = (src ? anim(src, "rush") : kwFx("rush")).finally(() => {
+      rushing = null;
+    });
+    return rushing;
   }
   var hasRushKw = (inst) => hasKw(inst, "rush") || hasKw(inst, "rushChar");
   async function playCard(u, free = false, rested = false) {
@@ -25250,10 +25255,6 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     };
     log(`attaque ${name(oppCard(targetInst))} avec ${name(c)}.`);
     commit();
-    if (G.battle.double) {
-      G.battle.dblShown = true;
-      await kwFx("double");
-    }
     await anim(atk, "onAttack");
     await fireCard(atk, "onAttack");
   }
@@ -25272,7 +25273,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     send({ t: "attack", b: wire2 });
     log(`confirme l'attaque : ${b.atkPower} de puissance${b.double ? " (Double attaque)" : ""}${b.banish ? " (Exil)" : ""}.`);
     commit();
-    if (b.double && !b.dblShown) kwFx("double");
+    if (b.double) kwFx("double");
   }
   function cancelAttack() {
     const atk = locate(G.battle.attacker)?.inst;
