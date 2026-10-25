@@ -276,7 +276,7 @@ function onMsg(m) {
     case 'chat': G.log.push({ who: 'opp', text: m.text, chat: true }); break;
     case 'reveal': G.reveals.push({ id: uid(), c: m.c, why: m.why }); break;
     case 'anim': playMomentVideo(G.oppCards[m.c]?.anims?.[m.m]); return;
-    case 'kw': if (KW[m.k]) keywordFx(KW[m.k]); return;
+    case 'kw': if (KW[m.k]) keywordFx(KW[m.k], kwImage(m.k)); return;
     case 'attack': G.battle = { ...m.b, role: 'def' }; render(); fireAll('onOppAttack'); return;
     case 'battleUpd': if (G.battle) Object.assign(G.battle, m.b); break;
     case 'battleEnd': G.battle = null; G.select = null; endBattleMods(); break;
@@ -512,9 +512,10 @@ async function anim(inst, m) {
 
 // Annonce plein écran d'un mot-clé ([Bloqueur], [Double attaque], [Exil]), chez moi et chez l'adversaire.
 const KW = { blocker: 'BLOCKER', double: 'DOUBLE ATTACK', banish: 'BANISH' };
+const kwImage = (k) => (k === 'banish' ? S.music?.banish?.url : null); // Admin → Musiques
 function kwFx(k) {
   send({ t: 'kw', k });
-  return keywordFx(KW[k]);
+  return keywordFx(KW[k], kwImage(k));
 }
 
 async function playCard(u, free = false, rested = false) {

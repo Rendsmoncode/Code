@@ -67,7 +67,7 @@ function band(g, W, k, y, dir, t, frame) {
   g.restore();
 }
 
-function words(g, W, H, lines, fs, t, img) {
+function words(g, W, H, lines, fs, t) {
   const a = (t - 0.22) / 0.16;
   if (a <= 0) return;
   const s = 2.8 - 1.8 * outBack(a);
@@ -77,10 +77,6 @@ function words(g, W, H, lines, fs, t, img) {
   g.globalAlpha = clamp(a * 2) * (1 - clamp((t - 1.72) / 0.25));
   g.translate(W / 2 + (r() - 0.5) * shake, H / 2 + (r() - 0.5) * shake);
   g.scale(s, s);
-  if (img) { // image propre au mot-clé, derrière le texte
-    const ih = fs * lines.length * 1.6, iw = ih * img.width / img.height;
-    g.drawImage(img, -iw / 2, -ih / 2, iw, ih);
-  }
   g.transform(1, 0, -0.18, 1, 0, 0);
   g.font = `${fs}px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round';
   const lh = fs * 1.05, y0 = -(lines.length - 1) * lh / 2;
@@ -116,6 +112,21 @@ function words(g, W, H, lines, fs, t, img) {
   g.restore();
 }
 
+// Personnage détouré (image du mot-clé) : arrive de la droite, ancré en bas, avec un contour lumineux.
+function figure(g, W, H, img, t) {
+  const a = outCubic((t - 0.12) / 0.3);
+  if (a <= 0) return;
+  const ih = Math.min(H * 0.78, W * 1.1 * img.height / img.width) * (1 + 0.04 * t);
+  const iw = ih * img.width / img.height;
+  const x = W - iw * 0.98 + (1 - a) * iw * 0.8, y = H - ih;
+  g.save();
+  g.globalAlpha = clamp(a * 1.5) * (1 - clamp((t - 1.72) / 0.25));
+  g.shadowColor = 'rgba(170,255,60,.95)'; g.shadowBlur = Math.max(12, W / 60);
+  g.drawImage(img, x, y, iw, ih);
+  g.shadowBlur = 0; g.drawImage(img, x, y, iw, ih);
+  g.restore();
+}
+
 function frameAt(g, W, H, layout, t, img) {
   const frame = Math.round(t * 30);
   const end = 1 - clamp((t - 1.78) / 0.22);
@@ -130,7 +141,8 @@ function frameAt(g, W, H, layout, t, img) {
   g.restore();
   band(g, W, layout.k, H / 2 - layout.gap, 1, t, frame);
   band(g, W, layout.k, H / 2 + layout.gap, -1, t, frame);
-  words(g, W, H, layout.lines, layout.fs, t, img);
+  if (img) figure(g, W, H, img, t);
+  words(g, W, H, layout.lines, layout.fs, t);
   const fl = 1 - clamp(t / 0.18); // flash d'ouverture
   if (fl > 0) { g.fillStyle = `rgba(255,255,255,${fl * 0.85})`; g.fillRect(0, 0, W, H); }
 }

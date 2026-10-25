@@ -161,14 +161,16 @@ export async function refreshCollection() {
 }
 
 // ---------- cartes (admins) ----------
-// ---------- musiques des révélations (Admin → Musiques) ----------
-// Fichiers privés du stockage : sons/<type>-<date>.mp3 (le plus récent compte). type : alt.
+// ---------- musiques et images des annonces (Admin → Musiques) ----------
+// Fichiers privés du stockage : sons/<type>-<date>.<ext> (le plus récent compte).
+// alt : chanson des Alt ; banish : image (PNG détouré) de l'annonce BANISH en partie.
+const MEDIA = { alt: { ext: 'mp3', type: 'audio/mpeg' }, banish: { ext: 'png', type: 'image/png' } };
 S.music = {};
 export async function loadMusic() {
   const { data, error } = await sb.storage.from('cards').list('sons', { limit: 100, sortBy: { column: 'name', order: 'desc' } });
   if (error) return;
-  for (const kind of ['alt']) {
-    const f = (data || []).find((x) => x.name.startsWith(`${kind}-`) && x.name.endsWith('.mp3'));
+  for (const [kind, { ext }] of Object.entries(MEDIA)) {
+    const f = (data || []).find((x) => x.name.startsWith(`${kind}-`) && x.name.endsWith(`.${ext}`));
     if (!f) { delete S.music[kind]; continue; }
     const path = `sons/${f.name}`;
     await signImages([path]);
@@ -176,8 +178,9 @@ export async function loadMusic() {
   }
 }
 export async function uploadMusic(kind, file) {
-  const path = `sons/${kind}-${Date.now()}.mp3`;
-  check(await sb.storage.from('cards').upload(path, file, { contentType: 'audio/mpeg', cacheControl: '31536000' }));
+  const { ext, type } = MEDIA[kind];
+  const path = `sons/${kind}-${Date.now()}.${ext}`;
+  check(await sb.storage.from('cards').upload(path, file, { contentType: type, cacheControl: '31536000' }));
   const old = S.music[kind]?.path;
   if (old) await sb.storage.from('cards').remove([old]);
   await loadMusic();

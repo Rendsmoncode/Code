@@ -5,6 +5,7 @@ import {
 } from './store.js';
 import { esc } from './cards.js';
 import { createDeckBuilder } from './decks.js';
+import { keywordFx } from './kwfx.js';
 
 const ROLE = { owner: 'Propriétaire', admin: 'Admin', player: 'Joueur' };
 
@@ -46,6 +47,15 @@ export function initAdmin() {
         <span class="muted small mu-name"></span>
       </div>
       <p class="msg mu-msg" role="status"></p>
+      <h3>Image de l'annonce BANISH</h3>
+      <p class="muted small">Image affichée avec l'annonce <b>BANISH</b> quand une Vie est exilée en partie. PNG détouré (fond transparent), stocké en privé.</p>
+      <div class="row-btns">
+        <label class="btn"><input type="file" class="bi-file" accept="image/png" hidden>Envoyer l'image…</label>
+        <button type="button" class="btn ghost bi-play">Voir l'annonce</button>
+        <button type="button" class="btn danger bi-del">Retirer</button>
+        <span class="muted small bi-name"></span>
+      </div>
+      <p class="msg bi-msg" role="status"></p>
     </section>
     <div class="ad-starters"></div>
   </div>`;
@@ -77,6 +87,27 @@ export function initAdmin() {
     if (!confirm('Retirer la chanson des Alt ?')) return;
     try { await deleteMusic('alt'); mmsg('Chanson retirée.'); } catch (err) { mmsg(err.message, true); }
     renderMusic();
+  });
+  const bmsg = (t, err = false) => { q('.bi-msg').textContent = t; q('.bi-msg').classList.toggle('err', err); };
+  const renderBanish = () => {
+    const m = S.music?.banish;
+    q('.bi-name').textContent = m ? 'Une image est en place.' : 'Aucune image pour l\'instant.';
+    q('.bi-del').disabled = !m;
+  };
+  renderBanish();
+  q('.bi-file').addEventListener('change', async (e) => {
+    const f = e.target.files[0]; e.target.value = '';
+    if (!f) return;
+    if (f.size > 10e6) { bmsg('Image trop lourde : 10 Mo maximum.', true); return; }
+    bmsg('Envoi…');
+    try { await uploadMusic('banish', f); bmsg('Image de BANISH enregistrée.'); } catch (err) { bmsg(err.message, true); }
+    renderBanish();
+  });
+  q('.bi-play').addEventListener('click', () => keywordFx('BANISH', S.music?.banish?.url));
+  q('.bi-del').addEventListener('click', async () => {
+    if (!confirm("Retirer l'image de BANISH ?")) return;
+    try { await deleteMusic('banish'); bmsg('Image retirée.'); } catch (err) { bmsg(err.message, true); }
+    renderBanish();
   });
   let players = [];
 

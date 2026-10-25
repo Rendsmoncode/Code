@@ -21536,12 +21536,13 @@ ${suffix}`;
   async function refreshCollection() {
     S.collection = Object.fromEntries(check(await sb.from("collection").select("card_id, qty")).map((r) => [r.card_id, r.qty]));
   }
+  var MEDIA = { alt: { ext: "mp3", type: "audio/mpeg" }, banish: { ext: "png", type: "image/png" } };
   S.music = {};
   async function loadMusic() {
     const { data, error } = await sb.storage.from("cards").list("sons", { limit: 100, sortBy: { column: "name", order: "desc" } });
     if (error) return;
-    for (const kind of ["alt"]) {
-      const f = (data || []).find((x) => x.name.startsWith(`${kind}-`) && x.name.endsWith(".mp3"));
+    for (const [kind, { ext }] of Object.entries(MEDIA)) {
+      const f = (data || []).find((x) => x.name.startsWith(`${kind}-`) && x.name.endsWith(`.${ext}`));
       if (!f) {
         delete S.music[kind];
         continue;
@@ -21552,8 +21553,9 @@ ${suffix}`;
     }
   }
   async function uploadMusic(kind, file) {
-    const path = `sons/${kind}-${Date.now()}.mp3`;
-    check(await sb.storage.from("cards").upload(path, file, { contentType: "audio/mpeg", cacheControl: "31536000" }));
+    const { ext, type } = MEDIA[kind];
+    const path = `sons/${kind}-${Date.now()}.${ext}`;
+    check(await sb.storage.from("cards").upload(path, file, { contentType: type, cacheControl: "31536000" }));
     const old = S.music[kind]?.path;
     if (old) await sb.storage.from("cards").remove([old]);
     await loadMusic();
@@ -24218,7 +24220,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     }
     g.restore();
   }
-  function words(g, W, H, lines, fs, t, img) {
+  function words(g, W, H, lines, fs, t) {
     const a = (t - 0.22) / 0.16;
     if (a <= 0) return;
     const s = 2.8 - 1.8 * outBack(a);
@@ -24228,10 +24230,6 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     g.globalAlpha = clamp(a * 2) * (1 - clamp((t - 1.72) / 0.25));
     g.translate(W / 2 + (r() - 0.5) * shake, H / 2 + (r() - 0.5) * shake);
     g.scale(s, s);
-    if (img) {
-      const ih = fs * lines.length * 1.6, iw = ih * img.width / img.height;
-      g.drawImage(img, -iw / 2, -ih / 2, iw, ih);
-    }
     g.transform(1, 0, -0.18, 1, 0, 0);
     g.font = `${fs}px ${FONT}`;
     g.textAlign = "center";
@@ -24286,6 +24284,21 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     }
     g.restore();
   }
+  function figure(g, W, H, img, t) {
+    const a = outCubic((t - 0.12) / 0.3);
+    if (a <= 0) return;
+    const ih = Math.min(H * 0.78, W * 1.1 * img.height / img.width) * (1 + 0.04 * t);
+    const iw = ih * img.width / img.height;
+    const x = W - iw * 0.98 + (1 - a) * iw * 0.8, y = H - ih;
+    g.save();
+    g.globalAlpha = clamp(a * 1.5) * (1 - clamp((t - 1.72) / 0.25));
+    g.shadowColor = "rgba(170,255,60,.95)";
+    g.shadowBlur = Math.max(12, W / 60);
+    g.drawImage(img, x, y, iw, ih);
+    g.shadowBlur = 0;
+    g.drawImage(img, x, y, iw, ih);
+    g.restore();
+  }
   function frameAt(g, W, H, layout, t, img) {
     const frame = Math.round(t * 30);
     const end = 1 - clamp((t - 1.78) / 0.22);
@@ -24307,7 +24320,8 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     g.restore();
     band(g, W, layout.k, H / 2 - layout.gap, 1, t, frame);
     band(g, W, layout.k, H / 2 + layout.gap, -1, t, frame);
-    words(g, W, H, layout.lines, layout.fs, t, img);
+    if (img) figure(g, W, H, img, t);
+    words(g, W, H, layout.lines, layout.fs, t);
     const fl = 1 - clamp(t / 0.18);
     if (fl > 0) {
       g.fillStyle = `rgba(255,255,255,${fl * 0.85})`;
@@ -24822,7 +24836,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         playMomentVideo(G.oppCards[m.c]?.anims?.[m.m]);
         return;
       case "kw":
-        if (KW[m.k]) keywordFx(KW[m.k]);
+        if (KW[m.k]) keywordFx(KW[m.k], kwImage(m.k));
         return;
       case "attack":
         G.battle = { ...m.b, role: "def" };
@@ -25085,9 +25099,10 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     await playMomentVideo(url);
   }
   var KW = { blocker: "BLOCKER", double: "DOUBLE ATTACK", banish: "BANISH" };
+  var kwImage = (k) => k === "banish" ? S.music?.banish?.url : null;
   function kwFx(k) {
     send({ t: "kw", k });
-    return keywordFx(KW[k]);
+    return keywordFx(KW[k], kwImage(k));
   }
   async function playCard(u, free = false, rested = false) {
     const loc = locate(u);
@@ -27151,6 +27166,15 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         <span class="muted small mu-name"></span>
       </div>
       <p class="msg mu-msg" role="status"></p>
+      <h3>Image de l'annonce BANISH</h3>
+      <p class="muted small">Image affich\xE9e avec l'annonce <b>BANISH</b> quand une Vie est exil\xE9e en partie. PNG d\xE9tour\xE9 (fond transparent), stock\xE9 en priv\xE9.</p>
+      <div class="row-btns">
+        <label class="btn"><input type="file" class="bi-file" accept="image/png" hidden>Envoyer l'image\u2026</label>
+        <button type="button" class="btn ghost bi-play">Voir l'annonce</button>
+        <button type="button" class="btn danger bi-del">Retirer</button>
+        <span class="muted small bi-name"></span>
+      </div>
+      <p class="msg bi-msg" role="status"></p>
     </section>
     <div class="ad-starters"></div>
   </div>`;
@@ -27211,6 +27235,44 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         mmsg(err.message, true);
       }
       renderMusic();
+    });
+    const bmsg = (t, err = false) => {
+      q(".bi-msg").textContent = t;
+      q(".bi-msg").classList.toggle("err", err);
+    };
+    const renderBanish = () => {
+      const m = S.music?.banish;
+      q(".bi-name").textContent = m ? "Une image est en place." : "Aucune image pour l'instant.";
+      q(".bi-del").disabled = !m;
+    };
+    renderBanish();
+    q(".bi-file").addEventListener("change", async (e) => {
+      const f = e.target.files[0];
+      e.target.value = "";
+      if (!f) return;
+      if (f.size > 1e7) {
+        bmsg("Image trop lourde : 10 Mo maximum.", true);
+        return;
+      }
+      bmsg("Envoi\u2026");
+      try {
+        await uploadMusic("banish", f);
+        bmsg("Image de BANISH enregistr\xE9e.");
+      } catch (err) {
+        bmsg(err.message, true);
+      }
+      renderBanish();
+    });
+    q(".bi-play").addEventListener("click", () => keywordFx("BANISH", S.music?.banish?.url));
+    q(".bi-del").addEventListener("click", async () => {
+      if (!confirm("Retirer l'image de BANISH ?")) return;
+      try {
+        await deleteMusic("banish");
+        bmsg("Image retir\xE9e.");
+      } catch (err) {
+        bmsg(err.message, true);
+      }
+      renderBanish();
     });
     let players = [];
     async function refresh() {
