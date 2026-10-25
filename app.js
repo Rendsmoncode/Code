@@ -21496,6 +21496,12 @@ ${suffix}`;
     } catch {
     }
   }
+  async function signedUrl(url) {
+    const p = oldImagePath(url);
+    if (!p) return url;
+    await signImages([p]);
+    return signed[p]?.url || url;
+  }
   async function load() {
     const [status, cards, coll, decks, starters, owners] = await Promise.all([
       sb.rpc("booster_status"),
@@ -21972,8 +21978,9 @@ ${suffix}`;
     if (stopCurrent) stopCurrent(abort);
     else if (abort) stopMusic();
   }
-  function playMomentVideo(url) {
-    if (!url) return Promise.resolve();
+  async function playMomentVideo(url) {
+    if (!url) return;
+    const src = url.startsWith("blob:") || url.startsWith("file:") ? url : await signedUrl(url).catch(() => resolveMedia(url));
     document.querySelector(".anim-ov")?.remove();
     const ov = document.createElement("div");
     ov.className = "anim-ov";
@@ -21981,7 +21988,7 @@ ${suffix}`;
     v.playsInline = true;
     v.setAttribute("playsinline", "");
     v.preload = "auto";
-    v.src = resolveMedia(url);
+    v.src = src;
     ov.append(v);
     document.body.append(ov);
     return new Promise((resolve) => {

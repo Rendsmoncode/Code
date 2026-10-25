@@ -113,6 +113,14 @@ async function signImages(paths) {
   try { localStorage.setItem(SIGN_KEY, JSON.stringify(signed)); } catch { /* stockage plein : tant pis */ }
 }
 
+// Adresse lisible d'un fichier privé (image, vidéo) : on demande l'accès s'il manque (fichier ajouté depuis le chargement, accès expiré…).
+export async function signedUrl(url) {
+  const p = oldImagePath(url);
+  if (!p) return url;
+  await signImages([p]);
+  return signed[p]?.url || url;
+}
+
 export async function load() {
   const [status, cards, coll, decks, starters, owners] = await Promise.all([
     sb.rpc('booster_status'),
