@@ -163,15 +163,15 @@ export async function refreshCollection() {
 // ---------- cartes (admins) ----------
 // ---------- musiques et images des annonces (Admin → Musiques) ----------
 // Fichiers privés du stockage : sons/<type>-<date>.<ext> (le plus récent compte).
-// alt : chanson des Alt ; blocker, banish : image (PNG détouré) de l'annonce en partie.
-const PNG = { ext: 'png', type: 'image/png' };
-const MEDIA = { alt: { ext: 'mp3', type: 'audio/mpeg' }, blocker: PNG, banish: PNG };
+// alt : chanson des Alt ; blocker, double, banish : image (PNG détouré, ou JPG/WebP) de l'annonce en partie.
+const IMG = { ext: ['png', 'jpg', 'webp'], type: { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' } };
+const MEDIA = { alt: { ext: ['mp3'], type: { 'audio/mpeg': 'mp3' } }, blocker: IMG, double: IMG, banish: IMG };
 S.music = {};
 export async function loadMusic() {
   const { data, error } = await sb.storage.from('cards').list('sons', { limit: 100, sortBy: { column: 'name', order: 'desc' } });
   if (error) return;
   for (const [kind, { ext }] of Object.entries(MEDIA)) {
-    const f = (data || []).find((x) => x.name.startsWith(`${kind}-`) && x.name.endsWith(`.${ext}`));
+    const f = (data || []).find((x) => x.name.startsWith(`${kind}-`) && ext.includes(x.name.split('.').pop()));
     if (!f) { delete S.music[kind]; continue; }
     const path = `sons/${f.name}`;
     await signImages([path]);
@@ -179,9 +179,10 @@ export async function loadMusic() {
   }
 }
 export async function uploadMusic(kind, file) {
-  const { ext, type } = MEDIA[kind];
-  const path = `sons/${kind}-${Date.now()}.${ext}`;
-  check(await sb.storage.from('cards').upload(path, file, { contentType: type, cacheControl: '31536000' }));
+  const types = MEDIA[kind].type;
+  const contentType = types[file.type] ? file.type : Object.keys(types)[0];
+  const path = `sons/${kind}-${Date.now()}.${types[contentType]}`;
+  check(await sb.storage.from('cards').upload(path, file, { contentType, cacheControl: '31536000' }));
   const old = S.music[kind]?.path;
   if (old) await sb.storage.from('cards').remove([old]);
   await loadMusic();

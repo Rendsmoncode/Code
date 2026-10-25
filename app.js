@@ -21536,14 +21536,14 @@ ${suffix}`;
   async function refreshCollection() {
     S.collection = Object.fromEntries(check(await sb.from("collection").select("card_id, qty")).map((r) => [r.card_id, r.qty]));
   }
-  var PNG = { ext: "png", type: "image/png" };
-  var MEDIA = { alt: { ext: "mp3", type: "audio/mpeg" }, blocker: PNG, banish: PNG };
+  var IMG = { ext: ["png", "jpg", "webp"], type: { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" } };
+  var MEDIA = { alt: { ext: ["mp3"], type: { "audio/mpeg": "mp3" } }, blocker: IMG, double: IMG, banish: IMG };
   S.music = {};
   async function loadMusic() {
     const { data, error } = await sb.storage.from("cards").list("sons", { limit: 100, sortBy: { column: "name", order: "desc" } });
     if (error) return;
     for (const [kind, { ext }] of Object.entries(MEDIA)) {
-      const f = (data || []).find((x) => x.name.startsWith(`${kind}-`) && x.name.endsWith(`.${ext}`));
+      const f = (data || []).find((x) => x.name.startsWith(`${kind}-`) && ext.includes(x.name.split(".").pop()));
       if (!f) {
         delete S.music[kind];
         continue;
@@ -21554,9 +21554,10 @@ ${suffix}`;
     }
   }
   async function uploadMusic(kind, file) {
-    const { ext, type } = MEDIA[kind];
-    const path = `sons/${kind}-${Date.now()}.${ext}`;
-    check(await sb.storage.from("cards").upload(path, file, { contentType: type, cacheControl: "31536000" }));
+    const types = MEDIA[kind].type;
+    const contentType = types[file.type] ? file.type : Object.keys(types)[0];
+    const path = `sons/${kind}-${Date.now()}.${types[contentType]}`;
+    check(await sb.storage.from("cards").upload(path, file, { contentType, cacheControl: "31536000" }));
     const old = S.music[kind]?.path;
     if (old) await sb.storage.from("cards").remove([old]);
     await loadMusic();
@@ -24457,7 +24458,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   }
   var KEYWORDS2 = {
     blocker: { text: "BLOCKER", img: "center" },
-    double: { text: "DOUBLE ATTACK" },
+    double: { text: "DOUBLE ATTACK", img: "right" },
     banish: { text: "BANISH", img: "right" }
   };
   function playKeyword(k, imgSrc) {
@@ -27218,10 +27219,10 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       </div>
       <p class="msg mu-msg" role="status"></p>
       <h3>Images des annonces</h3>
-      <p class="muted small">Image affich\xE9e avec l'annonce en partie (<b>BLOCKER</b> : au blocage ; <b>BANISH</b> : quand une Vie est exil\xE9e). PNG d\xE9tour\xE9 (fond transparent), stock\xE9 en priv\xE9. Sans image, l'annonce s'affiche quand m\xEAme.</p>
-      ${["blocker", "banish"].map((k) => `<div class="row-btns ki" data-k="${k}">
+      <p class="muted small">Image affich\xE9e avec l'annonce en partie (<b>BLOCKER</b> : au blocage ; <b>DOUBLE ATTACK</b> : quand une attaque avec Double attaque est confirm\xE9e ; <b>BANISH</b> : quand une Vie est exil\xE9e). PNG d\xE9tour\xE9 (fond transparent) de pr\xE9f\xE9rence, JPG accept\xE9 ; stock\xE9 en priv\xE9. Sans image, l'annonce s'affiche quand m\xEAme.</p>
+      ${["blocker", "double", "banish"].map((k) => `<div class="row-btns ki" data-k="${k}">
         <b>${KEYWORDS2[k].text}</b>
-        <label class="btn"><input type="file" class="ki-file" accept="image/png" hidden>Envoyer l'image\u2026</label>
+        <label class="btn"><input type="file" class="ki-file" accept="image/png,image/jpeg,image/webp" hidden>Envoyer l'image\u2026</label>
         <button type="button" class="btn ghost ki-play">Voir l'annonce</button>
         <button type="button" class="btn danger ki-del">Retirer</button>
         <span class="muted small ki-name"></span>

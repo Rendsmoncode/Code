@@ -253,7 +253,7 @@ function keywordFx(text, imgSrc, align) {
 // Mots-clés annoncés en partie. img : l'image (Admin → Musiques) arrive de la droite, ou monte au centre sur téléphone.
 export const KEYWORDS = {
   blocker: { text: 'BLOCKER', img: 'center' },
-  double: { text: 'DOUBLE ATTACK' },
+  double: { text: 'DOUBLE ATTACK', img: 'right' },
   banish: { text: 'BANISH', img: 'right' },
 };
 export function playKeyword(k, imgSrc) {
