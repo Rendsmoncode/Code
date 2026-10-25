@@ -22001,7 +22001,7 @@ ${suffix}`;
     for (const c of cards || []) for (const url of Object.values(c?.anims || {})) if (url && !momentCache.has(url)) momentVideo(url).then((v) => v.load()).catch(() => {
     });
   }
-  async function playMomentVideo(url) {
+  async function playMomentVideo(url, { noSkip = false } = {}) {
     if (!url) return;
     const v = await momentVideo(url);
     document.querySelector(".anim-ov")?.remove();
@@ -22026,7 +22026,7 @@ ${suffix}`;
       };
       v.addEventListener("ended", end);
       v.addEventListener("error", end);
-      ov.addEventListener("click", end);
+      if (!noSkip) ov.addEventListener("click", end);
       timer = setTimeout(end, 2e4);
       v.muted = false;
       v.volume = 1;
@@ -24889,7 +24889,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         G.reveals.push({ id: uid(), c: m.c, why: m.why });
         break;
       case "anim":
-        playMomentVideo(G.oppCards[m.c]?.anims?.[m.m]);
+        playMomentVideo(G.oppCards[m.c]?.anims?.[m.m], { noSkip: m.lock });
         return;
       case "kw":
         playKeyword(m.k, S.music?.[m.k]?.url);
@@ -25099,7 +25099,9 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       manual: null,
       oppManual: null,
       recorded: false,
-      dmg: 0
+      dmg: 0,
+      rushTurn: null,
+      rushSeen: false
     });
     sys("Nouvelle partie !");
     if (G.role === "host") coinFlip();
@@ -25148,11 +25150,11 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   function reveal(inst, why) {
     send({ t: "reveal", c: inst.c, why });
   }
-  async function anim(inst, m) {
+  async function anim(inst, m, lock = false) {
     const url = myCard(inst)?.anims?.[m];
     if (!url) return;
-    send({ t: "anim", c: inst.c, m });
-    await playMomentVideo(url);
+    send({ t: "anim", c: inst.c, m, lock });
+    await playMomentVideo(url, { noSkip: lock });
   }
   function kwFx(k) {
     send({ t: "kw", k });
@@ -25161,8 +25163,15 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   var rushing = null;
   function rushFx(inst) {
     if (rushing) return rushing;
-    const src = [inst, G.me.leader].find((x) => x && myCard(x)?.anims?.rush);
-    rushing = (src ? anim(src, "rush") : kwFx("rush")).finally(() => {
+    const src = G.rushTurn !== G.turn.count && [inst, G.me.leader].find((x) => x && myCard(x)?.anims?.rush);
+    let p;
+    if (src) {
+      const first = !G.rushSeen;
+      G.rushTurn = G.turn.count;
+      G.rushSeen = true;
+      p = anim(src, "rush", first);
+    } else p = kwFx("rush");
+    rushing = p.finally(() => {
       rushing = null;
     });
     return rushing;

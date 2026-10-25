@@ -240,7 +240,8 @@ export function preloadMoments(cards) {
   for (const c of cards || []) for (const url of Object.values(c?.anims || {})) if (url && !momentCache.has(url)) momentVideo(url).then((v) => v.load()).catch(() => {});
 }
 
-export async function playMomentVideo(url) {
+// noSkip : impossible de la passer d'un toucher (ex. la 1re vidéo « Initiative » de la partie).
+export async function playMomentVideo(url, { noSkip = false } = {}) {
   if (!url) return;
   const v = await momentVideo(url);
   document.querySelector('.anim-ov')?.remove();
@@ -264,7 +265,7 @@ export async function playMomentVideo(url) {
     };
     v.addEventListener('ended', end);
     v.addEventListener('error', end);
-    ov.addEventListener('click', end);
+    if (!noSkip) ov.addEventListener('click', end);
     timer = setTimeout(end, 20000); // sécurité : 20 s maximum
     v.muted = false; v.volume = 1;
     v.play().catch(() => { v.muted = true; v.play().catch(end); }); // son refusé par le navigateur : on joue sans

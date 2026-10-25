@@ -275,7 +275,7 @@ function onMsg(m) {
     case 'contest': contested(); return;
     case 'chat': G.log.push({ who: 'opp', text: m.text, chat: true }); break;
     case 'reveal': G.reveals.push({ id: uid(), c: m.c, why: m.why }); break;
-    case 'anim': playMomentVideo(G.oppCards[m.c]?.anims?.[m.m]); return;
+    case 'anim': playMomentVideo(G.oppCards[m.c]?.anims?.[m.m], { noSkip: m.lock }); return;
     case 'kw': playKeyword(m.k, S.music?.[m.k]?.url); return;
     case 'attack': G.battle = { ...m.b, role: 'def' }; render(); fireAll('onOppAttack'); return;
     case 'battleUpd': if (G.battle) Object.assign(G.battle, m.b); break;
@@ -449,7 +449,7 @@ function saveResult() {
 function resetMatch() {
   Object.assign(G, {
     phase: 'hello', coinWinner: null, first: null, turn: { player: null, count: 0 }, me: emptySide(), opp: null,
-    meReady: false, oppReady: false, battle: null, select: null, winner: null, reveals: [], manual: null, oppManual: null, recorded: false, dmg: 0,
+    meReady: false, oppReady: false, battle: null, select: null, winner: null, reveals: [], manual: null, oppManual: null, recorded: false, dmg: 0, rushTurn: null, rushSeen: false,
   });
   sys('Nouvelle partie !');
   if (G.role === 'host') coinFlip();
@@ -503,11 +503,11 @@ function reveal(inst, why) {
 
 // Animation d'une de mes cartes pour un moment de la partie (Admin : onglet Cartes → Animations en partie).
 // Elle se joue chez moi et chez l'adversaire ; la partie attend la fin chez moi.
-async function anim(inst, m) {
+async function anim(inst, m, lock = false) {
   const url = myCard(inst)?.anims?.[m];
   if (!url) return;
-  send({ t: 'anim', c: inst.c, m });
-  await playMomentVideo(url);
+  send({ t: 'anim', c: inst.c, m, lock });
+  await playMomentVideo(url, { noSkip: lock });
 }
 
 // Annonce plein écran d'un mot-clé ([Bloqueur], [Double attaque], [Exil]), chez moi et chez l'adversaire.
@@ -517,12 +517,19 @@ function kwFx(k) {
   return playKeyword(k, S.music?.[k]?.url);
 }
 // [Initiative] obtenue : la vidéo « rush » de la carte, sinon celle de mon Leader (pour tout son deck), sinon l'annonce RUSH.
+// Vidéo une fois par tour (ensuite l'annonce RUSH) ; la toute première de la partie ne se passe pas.
 // Plusieurs Personnages qui l'obtiennent d'un coup (un seul effet) : une seule annonce.
 let rushing = null;
 function rushFx(inst) {
   if (rushing) return rushing;
-  const src = [inst, G.me.leader].find((x) => x && myCard(x)?.anims?.rush);
-  rushing = (src ? anim(src, 'rush') : kwFx('rush')).finally(() => { rushing = null; });
+  const src = G.rushTurn !== G.turn.count && [inst, G.me.leader].find((x) => x && myCard(x)?.anims?.rush);
+  let p;
+  if (src) {
+    const first = !G.rushSeen;
+    G.rushTurn = G.turn.count; G.rushSeen = true;
+    p = anim(src, 'rush', first);
+  } else p = kwFx('rush');
+  rushing = p.finally(() => { rushing = null; });
   return rushing;
 }
 const hasRushKw = (inst) => hasKw(inst, 'rush') || hasKw(inst, 'rushChar');
