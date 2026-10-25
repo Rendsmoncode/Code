@@ -21538,7 +21538,8 @@ ${suffix}`;
     S.collection = Object.fromEntries(check(await sb.from("collection").select("card_id, qty")).map((r) => [r.card_id, r.qty]));
   }
   var IMG = { ext: ["png", "jpg", "webp"], type: { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" } };
-  var MEDIA = { alt: { ext: ["mp3"], type: { "audio/mpeg": "mp3" } }, blocker: IMG, double: IMG, banish: IMG, rush: IMG };
+  var MP3 = { ext: ["mp3"], type: { "audio/mpeg": "mp3" } };
+  var MEDIA = { alt: MP3, blocker: IMG, double: IMG, banish: IMG, rush: IMG, rushsnd: MP3 };
   S.music = {};
   async function loadMusic() {
     const { data, error } = await sb.storage.from("cards").list("sons", { limit: 100, sortBy: { column: "name", order: "desc" } });
@@ -24140,8 +24141,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   var DUR2 = 2;
   var sound = new Audio("sons/kwfx.mp3");
   sound.preload = "auto";
-  var bipbip = new Audio("sons/bipbip.mp3");
-  bipbip.preload = "auto";
+  var extra = new Audio();
   function rng(s) {
     return () => {
       s |= 0;
@@ -24346,7 +24346,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     g.drawImage(F.c, x - pad, y - pad, iw + 2 * pad, ih + 2 * pad);
     g.restore();
   }
-  var DASH = { in0: 0.12, in1: 0.32, out0: 1.2, out1: 1.36 };
+  var DASH = { in0: 0.12, in1: 0.32, snd: 0.42, go: 0.71, out0: 1.13, out1: 1.29 };
   function puff(g, x, y, r, a) {
     g.globalAlpha = a;
     g.fillStyle = "#f1e6d2";
@@ -24505,7 +24505,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     }));
     return images[src];
   }
-  function play(text, imgSrc, align) {
+  function play(text, imgSrc, align, sndSrc) {
     return loadImage(imgSrc).then((img) => new Promise((resolve) => {
       const ov = document.createElement("div");
       ov.className = "kwfx-ov";
@@ -24528,14 +24528,15 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         });
       } catch {
       }
-      const bip = fig && align === "dash" && setTimeout(() => {
+      const bip = fig && align === "dash" && sndSrc && setTimeout(() => {
         try {
-          bipbip.currentTime = 0;
-          bipbip.play().catch(() => {
+          extra.src = sndSrc;
+          extra.currentTime = 0;
+          extra.play().catch(() => {
           });
         } catch {
         }
-      }, DASH.in1 * 1e3 + 100);
+      }, DASH.snd * 1e3);
       const t0 = performance.now();
       let done = false;
       const end = () => {
@@ -24546,7 +24547,10 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         ov.remove();
         resolve();
       };
-      ov.addEventListener("click", end);
+      ov.addEventListener("click", () => {
+        extra.pause();
+        end();
+      });
       const tick = () => {
         if (done) return;
         const t = (performance.now() - t0) / 1e3;
@@ -24565,9 +24569,9 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     const check2 = () => document.querySelector(".anim-ov") ? setTimeout(check2, 100) : ok();
     check2();
   });
-  function keywordFx(text, imgSrc, align) {
+  function keywordFx(text, imgSrc, align, sndSrc) {
     chain = chain.then(videoGone).then(() => document.fonts.load(`80px ${FONT}`).catch(() => {
-    })).then(() => play(text, imgSrc, align));
+    })).then(() => play(text, imgSrc, align, sndSrc));
     return chain;
   }
   var KEYWORDS2 = {
@@ -24576,9 +24580,9 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     banish: { text: "BANISH", img: "right" },
     rush: { text: "RUSH", img: "dash" }
   };
-  function playKeyword(k, imgSrc) {
+  function playKeyword(k, media = {}) {
     const kw = KEYWORDS2[k];
-    return kw ? keywordFx(kw.text, kw.img && imgSrc, kw.img) : Promise.resolve();
+    return kw ? keywordFx(kw.text, kw.img && media[k]?.url, kw.img, media[`${k}snd`]?.url) : Promise.resolve();
   }
 
   // js/settings.js
@@ -25005,7 +25009,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         playMomentVideo(G.oppCards[m.c]?.anims?.[m.m], { noSkip: m.lock });
         return;
       case "kw":
-        playKeyword(m.k, S.music?.[m.k]?.url);
+        playKeyword(m.k, S.music);
         return;
       case "attack":
         G.battle = { ...m.b, role: "def" };
@@ -25271,7 +25275,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   }
   function kwFx(k) {
     send({ t: "kw", k });
-    return playKeyword(k, S.music?.[k]?.url);
+    return playKeyword(k, S.music);
   }
   var rushing = null;
   function rushFx(inst) {
@@ -27051,17 +27055,17 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     if (!p) return `<p class="muted small">${noHover() ? "Touchez une carte puis \xAB \u{1F50D} Voir la carte \xBB pour la lire en grand." : "Survolez une carte pour la voir en grand."}</p>`;
     const c = p.side === "opp" ? G.oppCards[p.cid] : G.myCards[p.cid];
     if (!c) return "";
-    let extra = "";
+    let extra2 = "";
     const inst = p.u && (p.side === "me" ? locate(p.u)?.inst : findOpp(p.u));
     if (inst && (c.type === "leader" || c.type === "character")) {
       const ownerTurn = p.side === "me" ? myTurn() : oppTurn();
       const parts = [`base ${c.power}`];
       if (inst.d) parts.push(`${inst.d} DON!!${ownerTurn ? ` +${inst.d * 1e3}` : " (inactif hors de son tour)"}`);
       if (inst.m) parts.push(`effets ${inst.m > 0 ? "+" : ""}${inst.m}`);
-      extra = `<p class="small">Puissance : <b>${power(inst, c, ownerTurn)}</b> (${parts.join(", ")})</p>`;
+      extra2 = `<p class="small">Puissance : <b>${power(inst, c, ownerTurn)}</b> (${parts.join(", ")})</p>`;
     }
     const auto = effectsText(c);
-    return `<div class="big-card">${cardHTML(c)}</div>${extra}
+    return `<div class="big-card">${cardHTML(c)}</div>${extra2}
     <div class="pv-text"><b>${esc(c.name)}</b> <span class="muted">${TYPES[c.type]}</span>
     ${auto.main ? `<p>${fmtEffect(auto.main)}</p>` : ""}${c.effect ? `<p class="free">\u270B ${fmtEffect(c.effect)}</p>` : ""}
     ${auto.trigger || c.trigger ? `<p><span class="kw trig">D\xE9clenchement</span> ${fmtEffect([auto.trigger, c.trigger].filter(Boolean).join(" "))}</p>` : ""}</div>`;
@@ -27298,8 +27302,8 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         const ctx = await runEffect(src, effect, { idx: 99 });
         return ctx ? { played: Boolean(ctx.played) } : null;
       },
-      place: (cardId, zone = "chars", extra = {}) => {
-        const inst = { u: uid(), c: cardId, r: false, d: 0, t: 0, ...extra };
+      place: (cardId, zone = "chars", extra2 = {}) => {
+        const inst = { u: uid(), c: cardId, r: false, d: 0, t: 0, ...extra2 };
         if (zone === "stage") G.me.stage = inst;
         else G.me[zone].push(inst);
         commit();
@@ -27364,6 +27368,13 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         <button type="button" class="btn danger ki-del">Retirer</button>
         <span class="muted small ki-name"></span>
       </div>`).join("")}
+      <div class="row-btns rs">
+        <b>Son de RUSH</b>
+        <label class="btn"><input type="file" class="rs-file" accept="audio/mpeg" hidden>Envoyer le son\u2026</label>
+        <button type="button" class="btn danger rs-del">Retirer</button>
+        <span class="muted small rs-name"></span>
+      </div>
+      <p class="muted small">Son de l'annonce RUSH (MP3) : il d\xE9marre quand l'image s'arr\xEAte, et l'image repart 0,71 s plus tard.</p>
       <p class="msg ki-msg" role="status"></p>
     </section>
     <div class="ad-starters"></div>
@@ -27455,7 +27466,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         }
         renderKw();
       });
-      row.querySelector(".ki-play").addEventListener("click", () => playKeyword(k, S.music?.[k]?.url));
+      row.querySelector(".ki-play").addEventListener("click", () => playKeyword(k, S.music));
       row.querySelector(".ki-del").addEventListener("click", async () => {
         if (!confirm(`Retirer l'image de ${word} ?`)) return;
         try {
@@ -27466,6 +27477,38 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         }
         renderKw();
       });
+    });
+    const renderRs = () => {
+      q(".rs-name").textContent = S.music?.rushsnd ? "Un son est en place." : "Aucun son.";
+      q(".rs-del").disabled = !S.music?.rushsnd;
+    };
+    renderRs();
+    q(".rs-file").addEventListener("change", async (e) => {
+      const f = e.target.files[0];
+      e.target.value = "";
+      if (!f) return;
+      if (f.size > 5e6) {
+        kmsg("Son trop lourd : 5 Mo maximum.", true);
+        return;
+      }
+      kmsg("Envoi\u2026");
+      try {
+        await uploadMusic("rushsnd", f);
+        kmsg("Son de RUSH enregistr\xE9.");
+      } catch (err) {
+        kmsg(err.message, true);
+      }
+      renderRs();
+    });
+    q(".rs-del").addEventListener("click", async () => {
+      if (!confirm("Retirer le son de RUSH ?")) return;
+      try {
+        await deleteMusic("rushsnd");
+        kmsg("Son retir\xE9.");
+      } catch (err) {
+        kmsg(err.message, true);
+      }
+      renderRs();
     });
     let players = [];
     async function refresh() {

@@ -5,8 +5,9 @@
 const DUR = 2.0;
 const sound = new Audio('sons/kwfx.mp3');
 sound.preload = 'auto';
-const bipbip = new Audio('sons/bipbip.mp3'); // « bip bip ! » puis le souffle du départ (image « en course »)
-bipbip.preload = 'auto';
+// Son propre à l'image « en course » (Admin → Musiques) : il démarre quand elle s'arrête ; son 2e temps
+// (le départ) tombe DASH.go secondes plus tard.
+const extra = new Audio();
 
 function rng(s) {
   return () => {
@@ -167,7 +168,7 @@ function figure(g, W, H, F, t, align) {
 
 // Image « en course » (RUSH) : elle arrive en trombe de la gauche, s'arrête net un instant,
 // puis repart d'un coup vers la droite en laissant un nuage de poussière.
-const DASH = { in0: 0.12, in1: 0.32, out0: 1.2, out1: 1.36 };
+const DASH = { in0: 0.12, in1: 0.32, snd: 0.42, go: 0.71, out0: 1.13, out1: 1.29 }; // out0 = snd + go
 function puff(g, x, y, r, a) {
   g.globalAlpha = a;
   g.fillStyle = '#f1e6d2'; g.strokeStyle = '#bfae92'; g.lineWidth = Math.max(1.5, r / 14);
@@ -277,7 +278,7 @@ function loadImage(src) {
   return images[src];
 }
 
-function play(text, imgSrc, align) {
+function play(text, imgSrc, align, sndSrc) {
   return loadImage(imgSrc).then((img) => new Promise((resolve) => {
     const ov = document.createElement('div');
     ov.className = 'kwfx-ov';
@@ -293,7 +294,9 @@ function play(text, imgSrc, align) {
     layout.text = textLayers(layout.lines, layout.fs, dpr);
     const fig = img && figureLayer(img, W, H, dpr, align);
     try { sound.currentTime = 0; sound.volume = 0.9; sound.play().catch(() => {}); } catch { /* pas de son */ }
-    const bip = fig && align === 'dash' && setTimeout(() => { try { bipbip.currentTime = 0; bipbip.play().catch(() => {}); } catch { /* pas de son */ } }, DASH.in1 * 1000 + 100);
+    const bip = fig && align === 'dash' && sndSrc && setTimeout(() => {
+      try { extra.src = sndSrc; extra.currentTime = 0; extra.play().catch(() => {}); } catch { /* pas de son */ }
+    }, DASH.snd * 1000);
     const t0 = performance.now();
     let done = false;
     const end = () => {
@@ -304,7 +307,7 @@ function play(text, imgSrc, align) {
       ov.remove();
       resolve();
     };
-    ov.addEventListener('click', end);
+    ov.addEventListener('click', () => { extra.pause(); end(); }); // le son de l'image finit seul, sauf si on passe
     const tick = () => {
       if (done) return;
       const t = (performance.now() - t0) / 1000;
@@ -322,8 +325,8 @@ const videoGone = () => new Promise((ok) => {
   const check = () => (document.querySelector('.anim-ov') ? setTimeout(check, 100) : ok());
   check();
 });
-function keywordFx(text, imgSrc, align) {
-  chain = chain.then(videoGone).then(() => document.fonts.load(`80px ${FONT}`).catch(() => {})).then(() => play(text, imgSrc, align));
+function keywordFx(text, imgSrc, align, sndSrc) {
+  chain = chain.then(videoGone).then(() => document.fonts.load(`80px ${FONT}`).catch(() => {})).then(() => play(text, imgSrc, align, sndSrc));
   return chain;
 }
 
@@ -335,7 +338,8 @@ export const KEYWORDS = {
   banish: { text: 'BANISH', img: 'right' },
   rush: { text: 'RUSH', img: 'dash' },
 };
-export function playKeyword(k, imgSrc) {
+// media : les fichiers de l'Admin (S.music) ; <k> l'image, <k>snd le son propre (RUSH seulement).
+export function playKeyword(k, media = {}) {
   const kw = KEYWORDS[k];
-  return kw ? keywordFx(kw.text, kw.img && imgSrc, kw.img) : Promise.resolve();
+  return kw ? keywordFx(kw.text, kw.img && media[k]?.url, kw.img, media[`${k}snd`]?.url) : Promise.resolve();
 }

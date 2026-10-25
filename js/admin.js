@@ -56,6 +56,13 @@ export function initAdmin() {
         <button type="button" class="btn danger ki-del">Retirer</button>
         <span class="muted small ki-name"></span>
       </div>`).join('')}
+      <div class="row-btns rs">
+        <b>Son de RUSH</b>
+        <label class="btn"><input type="file" class="rs-file" accept="audio/mpeg" hidden>Envoyer le son…</label>
+        <button type="button" class="btn danger rs-del">Retirer</button>
+        <span class="muted small rs-name"></span>
+      </div>
+      <p class="muted small">Son de l'annonce RUSH (MP3) : il démarre quand l'image s'arrête, et l'image repart 0,71 s plus tard.</p>
       <p class="msg ki-msg" role="status"></p>
     </section>
     <div class="ad-starters"></div>
@@ -106,12 +113,30 @@ export function initAdmin() {
       try { await uploadMusic(k, f); kmsg(`Image de ${word} enregistrée.`); } catch (err) { kmsg(err.message, true); }
       renderKw();
     });
-    row.querySelector('.ki-play').addEventListener('click', () => playKeyword(k, S.music?.[k]?.url));
+    row.querySelector('.ki-play').addEventListener('click', () => playKeyword(k, S.music));
     row.querySelector('.ki-del').addEventListener('click', async () => {
       if (!confirm(`Retirer l'image de ${word} ?`)) return;
       try { await deleteMusic(k); kmsg('Image retirée.'); } catch (err) { kmsg(err.message, true); }
       renderKw();
     });
+  });
+  const renderRs = () => {
+    q('.rs-name').textContent = S.music?.rushsnd ? 'Un son est en place.' : 'Aucun son.';
+    q('.rs-del').disabled = !S.music?.rushsnd;
+  };
+  renderRs();
+  q('.rs-file').addEventListener('change', async (e) => {
+    const f = e.target.files[0]; e.target.value = '';
+    if (!f) return;
+    if (f.size > 5e6) { kmsg('Son trop lourd : 5 Mo maximum.', true); return; }
+    kmsg('Envoi…');
+    try { await uploadMusic('rushsnd', f); kmsg('Son de RUSH enregistré.'); } catch (err) { kmsg(err.message, true); }
+    renderRs();
+  });
+  q('.rs-del').addEventListener('click', async () => {
+    if (!confirm('Retirer le son de RUSH ?')) return;
+    try { await deleteMusic('rushsnd'); kmsg('Son retiré.'); } catch (err) { kmsg(err.message, true); }
+    renderRs();
   });
   let players = [];
 

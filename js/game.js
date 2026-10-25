@@ -276,7 +276,7 @@ function onMsg(m) {
     case 'chat': G.log.push({ who: 'opp', text: m.text, chat: true }); break;
     case 'reveal': G.reveals.push({ id: uid(), c: m.c, why: m.why }); break;
     case 'anim': playMomentVideo(G.oppCards[m.c]?.anims?.[m.m], { noSkip: m.lock }); return;
-    case 'kw': playKeyword(m.k, S.music?.[m.k]?.url); return;
+    case 'kw': playKeyword(m.k, S.music); return;
     case 'attack': G.battle = { ...m.b, role: 'def' }; render(); fireAll('onOppAttack'); return;
     case 'battleUpd': if (G.battle) Object.assign(G.battle, m.b); break;
     case 'battleEnd': G.battle = null; G.select = null; endBattleMods(); break;
@@ -514,7 +514,7 @@ async function anim(inst, m, lock = false) {
 // Images des annonces : Admin → Musiques.
 function kwFx(k) {
   send({ t: 'kw', k });
-  return playKeyword(k, S.music?.[k]?.url);
+  return playKeyword(k, S.music);
 }
 // [Initiative] obtenue : la vidéo « rush » de la carte, sinon celle de mon Leader (pour tout son deck), sinon l'annonce RUSH.
 // Vidéo une fois par tour (ensuite l'annonce RUSH) ; la toute première de la partie ne se passe pas.
