@@ -255,7 +255,7 @@ export const KEYWORDS = {
   blocker: { text: 'BLOCKER', img: 'center' },
   double: { text: 'DOUBLE ATTACK', img: 'right' },
   banish: { text: 'BANISH', img: 'right' },
-  rush: { text: 'RUSH' },
+  rush: { text: 'RUSH', img: 'right' },
 };
 export function playKeyword(k, imgSrc) {
   const kw = KEYWORDS[k];

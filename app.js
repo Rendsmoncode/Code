@@ -21538,7 +21538,7 @@ ${suffix}`;
     S.collection = Object.fromEntries(check(await sb.from("collection").select("card_id, qty")).map((r) => [r.card_id, r.qty]));
   }
   var IMG = { ext: ["png", "jpg", "webp"], type: { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" } };
-  var MEDIA = { alt: { ext: ["mp3"], type: { "audio/mpeg": "mp3" } }, blocker: IMG, double: IMG, banish: IMG };
+  var MEDIA = { alt: { ext: ["mp3"], type: { "audio/mpeg": "mp3" } }, blocker: IMG, double: IMG, banish: IMG, rush: IMG };
   S.music = {};
   async function loadMusic() {
     const { data, error } = await sb.storage.from("cards").list("sons", { limit: 100, sortBy: { column: "name", order: "desc" } });
@@ -24461,7 +24461,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     blocker: { text: "BLOCKER", img: "center" },
     double: { text: "DOUBLE ATTACK", img: "right" },
     banish: { text: "BANISH", img: "right" },
-    rush: { text: "RUSH" }
+    rush: { text: "RUSH", img: "right" }
   };
   function playKeyword(k, imgSrc) {
     const kw = KEYWORDS2[k];
@@ -27243,8 +27243,8 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       </div>
       <p class="msg mu-msg" role="status"></p>
       <h3>Images des annonces</h3>
-      <p class="muted small">Image affich\xE9e avec l'annonce en partie (<b>BLOCKER</b> : au blocage ; <b>DOUBLE ATTACK</b> : quand une attaque avec Double attaque est confirm\xE9e ; <b>BANISH</b> : quand une Vie est exil\xE9e). PNG d\xE9tour\xE9 (fond transparent) de pr\xE9f\xE9rence, JPG accept\xE9 ; stock\xE9 en priv\xE9. Sans image, l'annonce s'affiche quand m\xEAme.</p>
-      ${["blocker", "double", "banish"].map((k) => `<div class="row-btns ki" data-k="${k}">
+      <p class="muted small">Image affich\xE9e avec l'annonce en partie (<b>BLOCKER</b> : au blocage ; <b>DOUBLE ATTACK</b> : quand une attaque avec Double attaque est confirm\xE9e ; <b>BANISH</b> : quand une Vie est exil\xE9e ; <b>RUSH</b> : quand un Personnage obtient Initiative). PNG d\xE9tour\xE9 (fond transparent) de pr\xE9f\xE9rence, JPG accept\xE9 ; stock\xE9 en priv\xE9. Sans image, l'annonce s'affiche quand m\xEAme.</p>
+      ${["blocker", "double", "banish", "rush"].map((k) => `<div class="row-btns ki" data-k="${k}">
         <b>${KEYWORDS2[k].text}</b>
         <label class="btn"><input type="file" class="ki-file" accept="image/png,image/jpeg,image/webp" hidden>Envoyer l'image\u2026</label>
         <button type="button" class="btn ghost ki-play">Voir l'annonce</button>

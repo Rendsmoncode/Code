@@ -48,8 +48,8 @@ export function initAdmin() {
       </div>
       <p class="msg mu-msg" role="status"></p>
       <h3>Images des annonces</h3>
-      <p class="muted small">Image affichée avec l'annonce en partie (<b>BLOCKER</b> : au blocage ; <b>DOUBLE ATTACK</b> : quand une attaque avec Double attaque est confirmée ; <b>BANISH</b> : quand une Vie est exilée). PNG détouré (fond transparent) de préférence, JPG accepté ; stocké en privé. Sans image, l'annonce s'affiche quand même.</p>
-      ${['blocker', 'double', 'banish'].map((k) => `<div class="row-btns ki" data-k="${k}">
+      <p class="muted small">Image affichée avec l'annonce en partie (<b>BLOCKER</b> : au blocage ; <b>DOUBLE ATTACK</b> : quand une attaque avec Double attaque est confirmée ; <b>BANISH</b> : quand une Vie est exilée ; <b>RUSH</b> : quand un Personnage obtient Initiative). PNG détouré (fond transparent) de préférence, JPG accepté ; stocké en privé. Sans image, l'annonce s'affiche quand même.</p>
+      ${['blocker', 'double', 'banish', 'rush'].map((k) => `<div class="row-btns ki" data-k="${k}">
         <b>${KEYWORDS[k].text}</b>
         <label class="btn"><input type="file" class="ki-file" accept="image/png,image/jpeg,image/webp" hidden>Envoyer l'image…</label>
         <button type="button" class="btn ghost ki-play">Voir l'annonce</button>
