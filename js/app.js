@@ -67,6 +67,7 @@ async function start() {
   // Surprise : écran noir jusqu'au lancement, puis le booster géant (voir surprise.js).
   if (surpriseActive()) { startSurprise(show); return; }
   document.documentElement.classList.remove('sp-boot');
+  document.title = 'Nakama TCG';
   try { localStorage.removeItem('nk-surprise'); } catch { /* rien */ }
   let first = 'home';
   if (new URLSearchParams(location.search).get('join')) first = 'play';

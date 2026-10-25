@@ -1,5 +1,6 @@
 // Paramètres du joueur (gardés dans ce navigateur) : pour l'instant, l'ambiance du plateau sur téléphone.
 import { esc } from './cards.js';
+import { tutorial } from './tuto.js';
 
 export const THEMES = {
   pocket: { name: 'Pocket clair', desc: 'Blanc, aéré, couleurs douces.' },
@@ -29,6 +30,8 @@ export function openSettings() {
     <p class="small muted">Ambiance du plateau de jeu sur téléphone.</p>
     <div class="theme-list">${Object.entries(THEMES).map(([k, t]) => `<button type="button" class="theme-opt ${k === cur ? 'on' : ''}" data-theme="${k}" aria-pressed="${k === cur}">
       <img src="img/themes/${k}.webp" alt="" loading="lazy"><b>${esc(t.name)}</b><span>${esc(t.desc)}</span></button>`).join('')}</div>
+    <p class="small muted">Les règles du jeu en quelques écrans.</p>
+    <div class="row-btns"><button type="button" class="btn" data-tuto>Présentation du gameplay</button></div>
     <div class="row-btns"><button type="button" class="btn primary" data-close>Fermer</button></div></div>`;
   document.body.append(o);
   o.addEventListener('click', (e) => {
@@ -38,6 +41,7 @@ export function openSettings() {
       o.querySelectorAll('[data-theme]').forEach((x) => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); });
       return;
     }
+    if (e.target.closest('[data-tuto]')) { o.remove(); tutorial(); return; }
     if (e.target.closest('[data-close]') || e.target === o) o.remove();
   });
 }

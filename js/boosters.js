@@ -81,16 +81,21 @@ export const openFromHome = () => { qty = 1; document.querySelector('#tab-booste
 export const openMany = (n) => { qty = Math.max(1, Math.min(n, maxQty(boosterState()))); document.querySelector('#tab-boosters .bs-open')?.click(); };
 
 // Surprise : révèle les cartes offertes en attente (son deck) sans l'écran « Cadeau ! ».
-// Renvoie false s'il n'y a rien à révéler, sinon attend la fermeture du récapitulatif.
-export async function revealPending() {
+// mode 'deck' : le nombre d'exemplaires de chaque carte est toujours affiché (×1 compris).
+export async function revealPending(mode = '') {
   const list = await takeReveals();
   await refreshCollection().catch(() => {});
+  return revealList(list, mode || true);
+}
+// Révèle une liste de cartes {id, n, new} (de la Commune à la Légendaire) et attend la fermeture.
+export async function revealList(list, mode = true) {
   const pulls = list.filter((g) => S.byId[g.id]).sort((x, y) => rank(x.id) - rank(y.id));
   if (!pulls.length || !revealFn) return false;
   busy = true;
   const closed = new Promise((ok) => window.addEventListener('nk:reveal-closed', ok, { once: true }));
-  revealFn(pulls, false, true);
+  revealFn(pulls, false, mode);
   await closed;
+  await refreshCollection().catch(() => {});
   return true;
 }
 
@@ -230,7 +235,7 @@ export function initBoosters() {
         ov.classList.remove('intro');
       }
       stage.insertAdjacentHTML('beforeend', `<button class="bx-card in r-${r}" data-id="${esc(p.id)}" aria-label="Carte suivante (appui long : voir en grand)">${cardHTML(c)}</button>`);
-      ov.querySelector('.bx-info').innerHTML = `<span class="rar-chip r-${r}">${RARITIES[r]?.label || ''}</span>${c?.alt ? '<span class="rar-chip r-ALT">Alt</span>' : ''}${p.n > 1 ? `<span class="bx-new">×${p.n}</span>` : ''}${p.new ? '<span class="bx-new">Nouvelle !</span>' : ''}
+      ov.querySelector('.bx-info').innerHTML = `<span class="rar-chip r-${r}">${RARITIES[r]?.label || ''}</span>${c?.alt ? '<span class="rar-chip r-ALT">Alt</span>' : ''}${p.n > 1 || gift === 'deck' ? `<span class="bx-new">×${p.n || 1}${gift === 'deck' ? ' dans ton deck' : ''}</span>` : ''}${p.new && gift !== 'deck' ? '<span class="bx-new">Nouvelle !</span>' : ''}
         ${r === 'S' ? '<div class="bx-unique">Exemplaire unique</div>' : ''}`;
       if (hasVideo(c)) {
         // 1on1 avec vidéo : elle se lance aussitôt, les effets reviennent quand elle se fige
@@ -263,7 +268,7 @@ export function initBoosters() {
       stage.innerHTML = `<div class="bx-sum">${groups.map((g) => {
         const c = S.byId[g.id];
         return `<div class="bx-mini r-${c?.rarity}" data-id="${esc(g.id)}" role="button" tabindex="0" title="Voir en grand">${cardHTML(c)}<span class="rar-chip r-${c?.rarity}">${RARITIES[c?.rarity]?.short || ''}</span>
-          ${g.new ? '<span class="bx-new">Nouvelle</span>' : ''}${g.n > 1 ? `<span class="bx-n">×${g.n}</span>` : ''}</div>`;
+          ${g.new && gift !== 'deck' ? '<span class="bx-new">Nouvelle</span>' : ''}${g.n > 1 || gift === 'deck' ? `<span class="bx-n">×${g.n}</span>` : ''}</div>`;
       }).join('')}</div>
       <div class="bx-acts">${left ? `<button class="btn main" data-do="again">${again > 1 ? `Ouvrir ${again} autres` : 'Ouvrir un autre'} · ${left}</button>` : ''}<button class="btn ghost" data-do="close">Terminer</button></div>`;
       lock = false;

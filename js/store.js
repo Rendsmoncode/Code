@@ -406,6 +406,13 @@ export async function surpriseList() {
 export async function surpriseGo(target = null) {
   return check(await sb.rpc('admin_surprise_go', { target: target || null }));
 }
+export async function setPacks(username, packs) {
+  check(await sb.rpc('admin_set_packs', { target: username, packs }));
+}
+// Ouvre un booster de rareté de la surprise : renvoie ses cartes [{id, new}].
+export async function openSurprisePack(i) {
+  return check(await sb.rpc('open_surprise_pack', { i }));
+}
 export async function surpriseDone() {
   check(await sb.rpc('surprise_done'));
 }

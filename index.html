@@ -3,15 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Surprise en cours (ou lien d'invitation surprise) : écran noir dès le premier instant. -->
+  <script>try { if (localStorage.getItem('nk-surprise') || /[?&]invite=/.test(location.search)) { document.documentElement.classList.add('sp-boot'); document.title = '\u2063'; } } catch (e) {}</script>
   <title>Nakama TCG</title>
   <link rel="icon" href="img/favicon.svg" type="image/svg+xml">
-  <!-- Surprise en cours (ou lien d'invitation surprise) : écran noir dès le premier instant. -->
-  <script>try { if (localStorage.getItem('nk-surprise') || /[?&]invite=/.test(location.search)) document.documentElement.classList.add('sp-boot'); } catch (e) {}</script>
-  <link rel="stylesheet" href="style.css?v=mvobcvcf">
-  <link rel="stylesheet" href="cards.css?v=mvobcvcf">
+  <link rel="stylesheet" href="style.css?v=mvoc8001">
+  <link rel="stylesheet" href="cards.css?v=mvoc8001">
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <!-- app.js est généré depuis js/ par : npm run build -->
-  <script src="app.js?v=mvobcvcf" defer></script>
+  <script src="app.js?v=mvoc8001" defer></script>
 </head>
 <body>
   <header class="top">

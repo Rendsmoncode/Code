@@ -15,7 +15,7 @@ export function makeMock() {
   const R = ['C', 'UC', 'R', 'UR', 'L', 'S'];
   const pick = (r) => { for (let i = R.indexOf(r); i >= 0; i--) { const l = Object.values(st.cards).filter((c) => c.in_boosters && c.rarity === R[i]); if (l.length) return l[Math.floor(Math.random() * l.length)].id; } return Object.keys(st.cards)[0]; };
   const add = (uid, id, n) => { st.coll[uid] ||= {}; st.coll[uid][id] = (st.coll[uid][id] || 0) + n; };
-  const status = (p) => ({ username: p.username, role: p.role, free: p.free, free_max: 6, gifted: p.boosters, next_free_at: p.free < 6 ? new Date(Date.now() + 65000).toISOString() : null, starter_claimed: p.starter_claimed, surprise: p.surprise || null, now: new Date().toISOString() });
+  const status = (p) => ({ username: p.username, role: p.role, free: p.free, free_max: 6, gifted: p.boosters, next_free_at: p.free < 6 ? new Date(Date.now() + 65000).toISOString() : null, starter_claimed: p.starter_claimed, surprise: p.surprise || null, packs: (p.packs || []).map((x) => ({ r: x.r, n: x.cards.length, opened: Boolean(x.opened) })), now: new Date().toISOString() });
   async function handle(route) {
     const req = route.request(); const url = new URL(req.url()); const path = url.pathname; const m = req.method();
     const body = req.postData() ? (() => { try { return JSON.parse(req.postData()); } catch { return null; } })() : null;
@@ -27,7 +27,7 @@ export function makeMock() {
       const inv = st.invites[body.data.invite];
       if (!first && (!inv || inv.used_by || inv.username !== name)) return json(route, { msg: 'Database error saving new user' }, 500);
       const id = 'u' + (Object.keys(st.users).length + 1); const u = { id, email: body.email, aud: 'authenticated', role: 'authenticated', user_metadata: { username: name }, app_metadata: {}, created_at: new Date().toISOString() };
-      st.users[id] = { u, pw: body.password }; st.profiles[id] = { username: name, role: first ? 'owner' : 'player', boosters: inv ? inv.boosters : 0, free: first ? 6 : 0, starter_claimed: false, surprise: inv?.surprise ? 'wait' : null };
+      st.users[id] = { u, pw: body.password }; st.profiles[id] = { username: name, role: first ? 'owner' : 'player', boosters: inv ? inv.boosters : 0, free: first ? 6 : 0, starter_claimed: false, surprise: inv?.surprise ? 'wait' : null, packs: inv?.packs || null };
       if (inv) { inv.used_by = id; inv.used_at = new Date().toISOString(); if (inv.starter_id) grantStarter(id, inv.starter_id, inv.surprise); }
       return json(route, session(u));
     }
@@ -83,12 +83,15 @@ export function makeMock() {
         return json(route, token);
       }
       if (fn === 'admin_surprise_list') return json(route, [...Object.values(st.profiles).filter((x) => x.surprise).map((x) => ({ username: x.username, state: x.surprise })),
-        ...Object.values(st.invites).filter((i) => i.surprise && !i.used_by).map((i) => ({ username: i.username, state: 'invite' }))]);
+        ...Object.values(st.invites).filter((i) => i.surprise && !i.used_by).map((i) => ({ username: i.username, state: 'invite', packs: (i.packs || []).length, starter: st.starters[i.starter_id]?.leader }))]);
       if (fn === 'admin_surprise_go') { const t = Object.values(st.profiles).filter((x) => x.surprise === 'wait' && (body.target == null || x.username === body.target)); t.forEach((x) => { x.surprise = 'go'; }); return json(route, t.length); }
+      if (fn === 'admin_set_packs') { const u = tu(); if (u) st.profiles[u].packs = body.packs; else { const i = Object.values(st.invites).find((x) => x.username === body.target && !x.used_by); if (!i) return json(route, { message: 'introuvable' }, 400); i.packs = body.packs; } return json(route, null); }
+      if (fn === 'open_surprise_pack') { const pk = (p.packs || [])[body.i]; if (!pk || pk.opened) return json(route, { message: 'Booster déjà ouvert.' }, 400);
+        const out = pk.cards.map((id) => { const isNew = !st.coll[uid]?.[id]; add(uid, id, 1); return { id, new: isNew }; }); pk.opened = true; return json(route, out); }
       if (fn === 'surprise_done') { if (p.surprise === 'go') p.surprise = 'done'; return json(route, null); }
       if (fn === 'admin_reset_test') { const u = tu(); const t = st.profiles[u]; if (!t || !t.username.startsWith('test')) return json(route, { message: 'Réservé aux comptes de test.' }, 400);
         st.coll[u] = {}; (st.reveals ||= {})[u] = []; for (const k of Object.keys(st.decks)) if (st.decks[k].user_id === u) delete st.decks[k];
-        Object.assign(t, { surprise: 'wait', starter_claimed: false, boosters: body.nb, free: 0 }); if (body.starter) grantStarter(u, body.starter, true); return json(route, null); }
+        Object.assign(t, { surprise: 'wait', starter_claimed: false, boosters: body.nb, free: 0 }); (t.packs || []).forEach((x) => { x.opened = false; }); if (body.starter) grantStarter(u, body.starter, true); return json(route, null); }
       if (fn === 'admin_set_role') { const t = Object.values(st.profiles).find((x) => x.username === body.target); t.role = body.new_role; return json(route, null); }
     }
     const table = path.replace('/rest/v1/', '');

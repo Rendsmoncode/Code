@@ -114,6 +114,9 @@ create table if not exists public.pending_reveals (
 -- la surprise (wait → go), puis il ouvre son booster géant et découvre le jeu (→ done).
 alter table public.invites add column if not exists surprise boolean not null default false;
 alter table public.profiles add column if not exists surprise text check (surprise in ('wait', 'go', 'done'));
+-- Boosters de rareté offerts pendant la surprise : [{"r": "SR", "cards": ["id", …], "opened": false}, …]
+alter table public.invites add column if not exists packs jsonb;
+alter table public.profiles add column if not exists surprise_packs jsonb;
 
 -- ---------- Fonctions utilitaires ----------
 
@@ -163,8 +166,8 @@ begin
   if not found then raise exception 'Invitation invalide ou déjà utilisée.'; end if;
   if inv.username <> uname then raise exception 'Cette invitation est réservée à un autre pseudo.'; end if;
   -- Boosters offerts ; la réserve de boosters gratuits démarre à zéro.
-  insert into public.profiles (id, username, role, boosters, free_anchor, surprise)
-    values (new.id, uname, 'player', inv.boosters, now(), case when inv.surprise then 'wait' end);
+  insert into public.profiles (id, username, role, boosters, free_anchor, surprise, surprise_packs)
+    values (new.id, uname, 'player', inv.boosters, now(), case when inv.surprise then 'wait' end, inv.packs);
   update public.invites set used_by = new.id, used_at = now() where token = inv.token;
   if inv.starter_id is not null and exists (select 1 from public.starter_decks where id = inv.starter_id) then
     perform public.grant_starter(new.id, inv.starter_id);
@@ -224,7 +227,10 @@ begin
   return json_build_object(
     'username', p.username, 'role', p.role, 'free', free, 'free_max', 6, 'gifted', p.boosters,
     'next_free_at', case when free >= 6 then null else p.free_anchor + (free + 1) * interval '10 minutes' end,
-    'starter_claimed', p.starter_claimed, 'surprise', p.surprise, 'now', now());
+    'starter_claimed', p.starter_claimed, 'surprise', p.surprise,
+    'packs', (select coalesce(json_agg(json_build_object('r', x ->> 'r', 'n', jsonb_array_length(x -> 'cards'), 'opened', coalesce((x ->> 'opened')::boolean, false))), '[]')
+              from jsonb_array_elements(coalesce(p.surprise_packs, '[]')) x),
+    'now', now());
 end $$;
 
 -- Tire une carte de la rareté voulue ; si aucune n'est disponible, prend la rareté la plus proche
@@ -494,15 +500,56 @@ begin
 end $$;
 
 -- Joueurs concernés par une surprise, et invitations surprise pas encore utilisées.
-create or replace function public.admin_surprise_list() returns table (username text, state text)
+drop function if exists public.admin_surprise_list();
+create or replace function public.admin_surprise_list() returns table (username text, state text, packs int, starter text)
 language plpgsql stable security definer set search_path = public as $$
 begin
   if not public.is_admin() then raise exception 'Réservé aux admins.'; end if;
   return query
-    select p.username, p.surprise from public.profiles p where p.surprise is not null
+    select p.username, p.surprise, coalesce(jsonb_array_length(p.surprise_packs), 0),
+      (select d.leader from public.decks d where d.user_id = p.id order by d.updated_at limit 1)
+      from public.profiles p where p.surprise is not null
     union all
-    select i.username, 'invite' from public.invites i where i.surprise and i.used_by is null
+    select i.username, 'invite', coalesce(jsonb_array_length(i.packs), 0), (select sd.leader from public.starter_decks sd where sd.id = i.starter_id)
+      from public.invites i where i.surprise and i.used_by is null
     order by 1;
+end $$;
+
+-- Boosters de rareté choisis par l'admin pour un joueur (ou pour une invitation pas encore utilisée).
+create or replace function public.admin_set_packs(target text, packs jsonb) returns void
+language plpgsql security definer set search_path = public as $$
+declare u text := lower(trim(target));
+begin
+  if not public.is_admin() then raise exception 'Réservé aux admins.'; end if;
+  if jsonb_typeof(packs) <> 'array' then raise exception 'Boosters invalides.'; end if;
+  update public.profiles set surprise_packs = packs where username = u;
+  if found then return; end if;
+  update public.invites set packs = admin_set_packs.packs where username = u and used_by is null;
+  if not found then raise exception 'Joueur ou invitation introuvable.'; end if;
+end $$;
+
+-- Le joueur ouvre un de ses boosters de rareté : les cartes rejoignent sa collection.
+create or replace function public.open_surprise_pack(i int) returns json
+language plpgsql security definer set search_path = public as $$
+declare
+  p public.profiles;
+  pk jsonb;
+  cid text;
+  out jsonb := '[]';
+begin
+  select * into p from public.profiles where id = auth.uid() for update;
+  if not found then raise exception 'Profil introuvable.'; end if;
+  pk := p.surprise_packs -> i;
+  if pk is null then raise exception 'Booster introuvable.'; end if;
+  if coalesce((pk ->> 'opened')::boolean, false) then raise exception 'Booster déjà ouvert.'; end if;
+  for cid in select jsonb_array_elements_text(pk -> 'cards') loop
+    if not exists (select 1 from public.cards where id = cid) then continue; end if;
+    out := out || jsonb_build_object('id', cid, 'new', not exists (select 1 from public.collection where user_id = p.id and card_id = cid));
+    insert into public.collection (user_id, card_id, qty) values (p.id, cid, 1)
+      on conflict (user_id, card_id) do update set qty = public.collection.qty + 1;
+  end loop;
+  update public.profiles set surprise_packs = jsonb_set(surprise_packs, array[i::text, 'opened'], 'true') where id = p.id;
+  return out;
 end $$;
 
 -- Le joueur a fini la découverte.
@@ -523,7 +570,8 @@ begin
   delete from public.pending_reveals where user_id = p.id;
   delete from public.decks where user_id = p.id;
   delete from public.collection where user_id = p.id;
-  update public.profiles set surprise = 'wait', starter_claimed = false, boosters = coalesce(nb, 10), free_anchor = now() where id = p.id;
+  update public.profiles set surprise = 'wait', starter_claimed = false, boosters = coalesce(nb, 10), free_anchor = now(),
+    surprise_packs = (select jsonb_agg(x - 'opened') from jsonb_array_elements(p.surprise_packs) x) where id = p.id;
   if coalesce(starter, '') <> '' then perform public.grant_starter(p.id, starter); end if;
 end $$;
 
@@ -763,7 +811,8 @@ grant execute on function public.is_admin(), public.booster_status(), public.ope
   public.is_owner(), public.gm_collection(text), public.gm_add_card(text, text, int), public.gm_reset_collection(text),
   public.gm_restore_backup(bigint), public.gm_backups(), public.take_reveals(),
   public.admin_create_surprise(text, text, int), public.admin_prepare_surprise(text, text, int), public.admin_surprise_go(text),
-  public.admin_surprise_list(), public.surprise_done(), public.admin_reset_test(text, text, int)
+  public.admin_surprise_list(), public.surprise_done(), public.admin_reset_test(text, text, int),
+  public.admin_set_packs(text, jsonb), public.open_surprise_pack(int)
   to authenticated;
 grant usage on schema public to anon;
 grant execute on function public.invite_info(text) to anon, authenticated;

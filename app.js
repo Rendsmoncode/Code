@@ -21764,15 +21764,17 @@ ${suffix}`;
   async function surpriseGo(target = null) {
     return check(await sb.rpc("admin_surprise_go", { target: target || null }));
   }
+  async function setPacks(username, packs) {
+    check(await sb.rpc("admin_set_packs", { target: username, packs }));
+  }
+  async function openSurprisePack(i) {
+    return check(await sb.rpc("open_surprise_pack", { i }));
+  }
   async function surpriseDone() {
     check(await sb.rpc("surprise_done"));
   }
   async function resetTest(username, starterId, boosters) {
     check(await sb.rpc("admin_reset_test", { target: username, starter: starterId || "", nb: boosters }));
-  }
-  async function setPassword(password) {
-    if (String(password).length < 6) throw new Error("6 caract\xE8res minimum.");
-    check(await sb.auth.updateUser({ password }));
   }
   async function setRole(target, role) {
     check(await sb.rpc("admin_set_role", { target, new_role: role }));
@@ -22288,16 +22290,21 @@ ${suffix}`;
     qty = Math.max(1, Math.min(n3, maxQty(boosterState())));
     document.querySelector("#tab-boosters .bs-open")?.click();
   };
-  async function revealPending() {
+  async function revealPending(mode = "") {
     const list = await takeReveals();
     await refreshCollection().catch(() => {
     });
+    return revealList(list, mode || true);
+  }
+  async function revealList(list, mode = true) {
     const pulls = list.filter((g) => S.byId[g.id]).sort((x, y) => rank(x.id) - rank(y.id));
     if (!pulls.length || !revealFn) return false;
     busy = true;
     const closed = new Promise((ok) => window.addEventListener("nk:reveal-closed", ok, { once: true }));
-    revealFn(pulls, false, true);
+    revealFn(pulls, false, mode);
     await closed;
+    await refreshCollection().catch(() => {
+    });
     return true;
   }
   function initBoosters() {
@@ -22439,7 +22446,7 @@ ${suffix}`;
           ov.classList.remove("intro");
         }
         stage.insertAdjacentHTML("beforeend", `<button class="bx-card in r-${r}" data-id="${esc(p.id)}" aria-label="Carte suivante (appui long : voir en grand)">${cardHTML(c)}</button>`);
-        ov.querySelector(".bx-info").innerHTML = `<span class="rar-chip r-${r}">${RARITIES[r]?.label || ""}</span>${c?.alt ? '<span class="rar-chip r-ALT">Alt</span>' : ""}${p.n > 1 ? `<span class="bx-new">\xD7${p.n}</span>` : ""}${p.new ? '<span class="bx-new">Nouvelle !</span>' : ""}
+        ov.querySelector(".bx-info").innerHTML = `<span class="rar-chip r-${r}">${RARITIES[r]?.label || ""}</span>${c?.alt ? '<span class="rar-chip r-ALT">Alt</span>' : ""}${p.n > 1 || gift === "deck" ? `<span class="bx-new">\xD7${p.n || 1}${gift === "deck" ? " dans ton deck" : ""}</span>` : ""}${p.new && gift !== "deck" ? '<span class="bx-new">Nouvelle !</span>' : ""}
         ${r === "S" ? '<div class="bx-unique">Exemplaire unique</div>' : ""}`;
         if (hasVideo(c)) {
           lock = false;
@@ -22472,7 +22479,7 @@ ${suffix}`;
         stage.innerHTML = `<div class="bx-sum">${groups.map((g) => {
           const c = S.byId[g.id];
           return `<div class="bx-mini r-${c?.rarity}" data-id="${esc(g.id)}" role="button" tabindex="0" title="Voir en grand">${cardHTML(c)}<span class="rar-chip r-${c?.rarity}">${RARITIES[c?.rarity]?.short || ""}</span>
-          ${g.new ? '<span class="bx-new">Nouvelle</span>' : ""}${g.n > 1 ? `<span class="bx-n">\xD7${g.n}</span>` : ""}</div>`;
+          ${g.new && gift !== "deck" ? '<span class="bx-new">Nouvelle</span>' : ""}${g.n > 1 || gift === "deck" ? `<span class="bx-n">\xD7${g.n}</span>` : ""}</div>`;
         }).join("")}</div>
       <div class="bx-acts">${left ? `<button class="btn main" data-do="again">${again > 1 ? `Ouvrir ${again} autres` : "Ouvrir un autre"} \xB7 ${left}</button>` : ""}<button class="btn ghost" data-do="close">Terminer</button></div>`;
         lock = false;
@@ -22664,22 +22671,12 @@ ${suffix}`;
     const el = document.createElement("div");
     el.className = "auth";
     document.body.append(el);
-    if (!invite?.surprise) document.documentElement.classList.remove("sp-boot");
     if (invite?.surprise) {
-      el.className = "auth surprise-black";
-      const pw = Array.from(crypto.getRandomValues(new Uint8Array(18)), (b) => b.toString(36)).join("").slice(0, 24);
-      try {
-        localStorage.setItem("nk-auto-pass", JSON.stringify({ u: invite.username, p: pw }));
-        localStorage.setItem("nk-surprise", "1");
-        await signUp(invite.username, pw, token);
-        const url = new URL(location.href);
-        url.searchParams.delete("invite");
-        location.replace(url.href);
-        return;
-      } catch (err) {
-        el.className = "auth";
-      }
+      blackSignup(el, invite, token);
+      return;
     }
+    document.documentElement.classList.remove("sp-boot");
+    document.title = "Nakama TCG";
     render3();
     function render3() {
       el.innerHTML = `
@@ -22730,6 +22727,42 @@ ${suffix}`;
       } catch (err) {
         out.textContent = err.message;
         el.querySelector(".btn.primary").disabled = false;
+      }
+    });
+  }
+  function blackSignup(el, invite, token) {
+    document.title = "\u2063";
+    el.className = "auth sp-black";
+    el.innerHTML = `<form class="sp-black-form" autocomplete="on">
+    <input name="username" autocomplete="username" value="${esc(invite.username)}" hidden>
+    <p>Choisis ton mot de passe</p>
+    <input id="au-pass" type="password" minlength="6" required autocomplete="new-password" aria-label="Mot de passe" placeholder="Mot de passe">
+    <input id="au-pass2" type="password" minlength="6" required autocomplete="new-password" aria-label="Confirmer" placeholder="Confirmer">
+    <button class="btn">Valider</button>
+    <p class="sp-black-err" role="alert"></p>
+  </form>`;
+    const f = el.querySelector("form");
+    f.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const p = f.querySelector("#au-pass").value;
+      const out = f.querySelector(".sp-black-err");
+      if (p !== f.querySelector("#au-pass2").value) {
+        out.textContent = "Les deux ne correspondent pas.";
+        return;
+      }
+      f.querySelector(".btn").disabled = true;
+      try {
+        try {
+          localStorage.setItem("nk-surprise", "1");
+        } catch {
+        }
+        await signUp(invite.username, p, token);
+        const url = new URL(location.href);
+        url.searchParams.delete("invite");
+        location.replace(url.href);
+      } catch (err) {
+        out.textContent = err.message;
+        f.querySelector(".btn").disabled = false;
       }
     });
   }
@@ -24656,6 +24689,61 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     return kw ? keywordFx(kw.text, kw.img && media[k]?.url, kw.img, media[`${k}snd`]?.url) : Promise.resolve();
   }
 
+  // js/tuto.js
+  var cap2 = (x) => x.charAt(0).toUpperCase() + x.slice(1);
+  function myLeader() {
+    const d = S.decks?.[0];
+    return d ? S.byId[d.leader] : null;
+  }
+  function slides() {
+    const leader = myLeader();
+    const kwBtn = (k, t) => `<button class="btn small sp-kw" data-kw="${k}">${t}</button>`;
+    return [
+      { t: "Le but du jeu", h: `<p>Fais tomber les <b>Vies</b> du Leader adverse \xE0 z\xE9ro\u2026 puis touche-le <b>une derni\xE8re fois</b>. C'est gagn\xE9.</p><p class="muted">Chaque joueur commence avec 5 cartes en main.</p>` },
+      { t: "Ton Leader", h: `${leader ? `<div class="sp-card">${cardHTML(leader)}</div>` : ""}<p>Il reste toujours en jeu. Ses <b>Vies</b> sont des cartes face cach\xE9e : \xE0 chaque coup re\xE7u, une Vie part dans ta main.</p>` },
+      { t: "Les DON!!", h: "<p>Ta ressource : <b>1 DON!!</b> au premier tour, puis <b>2 par tour</b> (10 au total).</p><p>Ils paient le <b>co\xFBt</b> de tes cartes\u2026 ou s'attachent \xE0 un Personnage ou \xE0 ton Leader : <b>+1000 de puissance</b> chacun pendant ton tour.</p>" },
+      { t: "Ton tour", h: '<ol class="sp-list"><li>Tu pioches 1 carte</li><li>Tu re\xE7ois tes DON!!</li><li>Tu joues des <b>Personnages</b>, <b>\xC9v\xE9nements</b> et <b>Lieux</b></li><li>Tu <b>attaques</b></li><li>Fin du tour</li></ol>' },
+      { t: "Attaquer", h: `<p>L'attaquant s'<b>\xE9puise</b> (il se couche). Il vise le <b>Leader adverse</b> ou un <b>Personnage \xE9puis\xE9</b>.</p><p>Puissance <b>\xE9gale ou sup\xE9rieure</b> : \xE7a touche. Un Personnage touch\xE9 est mis KO ; un Leader touch\xE9 perd une Vie.</p><p class="muted">Un Personnage jou\xE9 ce tour-ci doit attendre le suivant\u2026 sauf s'il a [Initiative].</p>` },
+      { t: "Se d\xE9fendre", h: "<p><b>[Bloqueur]</b> : un de tes Personnages prend le coup \xE0 la place.</p><p><b>Contre</b> : d\xE9fausse des cartes de ta main pour ajouter leur valeur de Contre (+1000, +2000\u2026).</p><p><b>D\xE9clenchement</b> : quand tu perds une Vie, elle peut s'activer gratuitement.</p>" },
+      { t: "Les mots-cl\xE9s", h: `<p>Certains moments ont droit \xE0 leur annonce. Touche pour voir :</p><div class="row-btns sp-kws">${kwBtn("blocker", "Bloqueur")}${kwBtn("double", "Double attaque")}${kwBtn("banish", "Exil")}${kwBtn("rush", "Initiative")}</div><p class="muted">Double attaque : 2 Vies d'un coup \xB7 Exil : la Vie part \xE0 la d\xE9fausse, sans D\xE9clenchement.</p>` },
+      { t: "Jouer", h: `<p>Ton deck est dans l'onglet <b>Decks</b>. Pour jouer : onglet <b>Jouer</b>, cr\xE9e une partie et envoie le code \xE0 ton adversaire.</p><p class="sp-big">\xC0 toi de jouer${S.status?.username ? `, ${esc(cap2(S.status.username))}` : ""} !</p>` }
+    ];
+  }
+  function tutorial() {
+    const list = slides();
+    let i = 0;
+    return new Promise((resolve) => {
+      const o = document.createElement("div");
+      o.className = "overlay sp-tuto";
+      document.body.append(o);
+      const render3 = () => {
+        const s = list[i];
+        o.innerHTML = `<div class="dialog sp-slide" role="dialog" aria-label="${esc(s.t)}">
+        <div class="sp-dots">${list.map((_, k) => `<span class="${k === i ? "on" : ""}"></span>`).join("")}</div>
+        <h3>${esc(s.t)}</h3><div class="sp-body">${s.h}</div>
+        <div class="row-btns">${i ? '<button class="btn ghost" data-go="-1">Retour</button>' : ""}
+          <button class="btn main" data-go="1">${i === list.length - 1 ? "Terminer" : "Suivant"}</button></div></div>`;
+      };
+      render3();
+      o.addEventListener("click", (e) => {
+        const kw = e.target.closest("[data-kw]")?.dataset.kw;
+        if (kw) {
+          playKeyword(kw, S.music);
+          return;
+        }
+        const go = e.target.closest("[data-go]")?.dataset.go;
+        if (!go) return;
+        i += Number(go);
+        if (i >= list.length) {
+          o.remove();
+          resolve();
+          return;
+        }
+        render3();
+      });
+    });
+  }
+
   // js/settings.js
   var THEMES = {
     pocket: { name: "Pocket clair", desc: "Blanc, a\xE9r\xE9, couleurs douces." },
@@ -24690,6 +24778,8 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     <p class="small muted">Ambiance du plateau de jeu sur t\xE9l\xE9phone.</p>
     <div class="theme-list">${Object.entries(THEMES).map(([k, t]) => `<button type="button" class="theme-opt ${k === cur2 ? "on" : ""}" data-theme="${k}" aria-pressed="${k === cur2}">
       <img src="img/themes/${k}.webp" alt="" loading="lazy"><b>${esc(t.name)}</b><span>${esc(t.desc)}</span></button>`).join("")}</div>
+    <p class="small muted">Les r\xE8gles du jeu en quelques \xE9crans.</p>
+    <div class="row-btns"><button type="button" class="btn" data-tuto>Pr\xE9sentation du gameplay</button></div>
     <div class="row-btns"><button type="button" class="btn primary" data-close>Fermer</button></div></div>`;
     document.body.append(o);
     o.addEventListener("click", (e) => {
@@ -24700,6 +24790,11 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
           x.classList.toggle("on", x === b);
           x.setAttribute("aria-pressed", x === b);
         });
+        return;
+      }
+      if (e.target.closest("[data-tuto]")) {
+        o.remove();
+        tutorial();
         return;
       }
       if (e.target.closest("[data-close]") || e.target === o) o.remove();
@@ -26109,7 +26204,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   }
   var choiceWaits = /* @__PURE__ */ new Map();
   async function chooseOption(eff, c) {
-    const texts = [eff.actions, eff.actions2].map((l) => cap2(actionsText(l, WHEN[eff.when], c) || "Rien"));
+    const texts = [eff.actions, eff.actions2].map((l) => cap3(actionsText(l, WHEN[eff.when], c) || "Rien"));
     if (eff.choice !== "opp") {
       return ask(
         `${c.name} : choisissez`,
@@ -26138,7 +26233,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     );
     send({ t: "chosen", id: m.id, i });
   }
-  var cap2 = (x) => x.charAt(0).toUpperCase() + x.slice(1);
+  var cap3 = (x) => x.charAt(0).toUpperCase() + x.slice(1);
   async function fireCard(inst, when, opts = {}) {
     const list = effectsOf(inst);
     let ctx = null;
@@ -27815,6 +27910,28 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   }
 
   // js/gm-surprise.js
+  var PACKS = { C: 5, UC: 5, R: 5, SR: 3, UR: 2, L: 1 };
+  var TAILORED = ["SR", "UR", "L"];
+  var typesOf = (c) => String(c?.traits || "").split("/").map((t) => t.trim()).filter(Boolean);
+  var shuffle2 = (a) => {
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  };
+  function drawPack(r, n3, leaderId) {
+    const leader = S.byId[leaderId];
+    const deck = S.starters.find((d) => d.leader === leaderId);
+    const types = new Set([leader, ...Object.keys(deck?.cards || {}).map((id) => S.byId[id])].flatMap(typesOf));
+    const colors = leader?.colors || [];
+    const pool = S.cards.filter((c) => c.rarity === r && !c.alt && c.type !== "leader" && c.inBoosters !== false);
+    if (!TAILORED.includes(r) || !leader) return shuffle2(pool).slice(0, n3).map((c) => c.id);
+    const color = pool.filter((c) => c.colors?.some((x) => colors.includes(x)));
+    const best = shuffle2(color.filter((c) => typesOf(c).some((t) => types.has(t))));
+    const rest = shuffle2(color.filter((c) => !best.includes(c)));
+    return [...best, ...rest].slice(0, n3).map((c) => c.id);
+  }
   var TEST = { user: "test", deck: "test-deck", card: "test-card", leader: "test-leader" };
   var STATE2 = { invite: "lien pas encore ouvert", wait: "\xE9cran noir (en attente)", go: "surprise lanc\xE9e", done: "termin\xE9e" };
   function mountSurprise(el) {
@@ -27823,6 +27940,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     <p class="muted small">Le joueur ouvre son lien et tombe sur un \xE9cran noir. Quand tu lances la surprise, son booster g\xE9ant (\xE0 son pr\xE9nom)
       arrive avec son deck dedans, puis l'interface appara\xEEt, il ouvre ses boosters et d\xE9couvre le gameplay.</p>
     <div class="sp-list-gm"></div>
+    <div class="sp-packs-gm"></div>
     <div class="row-btns"><button class="btn main" data-sp="go">Lancer la surprise pour tous</button>
       <button class="btn ghost" data-sp="refresh">Actualiser</button></div>
     <h3>Nouvelle invitation surprise</h3>
@@ -27857,7 +27975,9 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         return;
       }
       q(".sp-list-gm").innerHTML = list.length ? `<table class="tbl"><tbody>${list.map((r) => `<tr><td><b>${esc(r.username)}</b></td><td>${STATE2[r.state] || r.state}</td>
-      <td>${r.state === "wait" ? `<button class="btn small" data-go="${esc(r.username)}">Lancer</button>` : ""}</td></tr>`).join("")}</tbody></table>` : '<p class="muted">Aucune surprise en cours.</p>';
+      <td>${r.packs ? `${r.packs} boosters de raret\xE9` : '<span class="muted">pas de booster de raret\xE9</span>'}</td>
+      <td>${["invite", "wait"].includes(r.state) ? `<button class="btn small ghost" data-packs="${esc(r.username)}" data-leader="${esc(r.starter || "")}">Boosters de raret\xE9</button>` : ""}
+        ${r.state === "wait" ? `<button class="btn small" data-go="${esc(r.username)}">Lancer</button>` : ""}</td></tr>`).join("")}</tbody></table>` : '<p class="muted">Aucune surprise en cours.</p>';
     }
     async function prepareTest() {
       const cards = [];
@@ -27901,10 +28021,51 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         return;
       }
       const tok = await createSurprise(TEST.user, TEST.deck, 10);
+      await setPacks(TEST.user, Object.entries(PACKS).map(([r, n3]) => ({ r, cards: drawPack(r, n3, TEST.leader) })).filter((p) => p.cards.length));
       showLink(tok, TEST.user);
       msg2("Compte test pr\xEAt : ouvre le lien dans une fen\xEAtre priv\xE9e.");
     }
+    let packs = null;
+    function renderPacks() {
+      const box = q(".sp-packs-gm");
+      if (!packs) {
+        box.innerHTML = "";
+        return;
+      }
+      box.innerHTML = `<div class="panel sp-packs-ed"><h4>Boosters de raret\xE9 de ${esc(packs.user)}</h4>
+      ${packs.list.map((p, i) => `<div class="sp-pk" data-i="${i}"><b>${RARITIES[p.r].label}</b>
+        <label>Cartes <input type="number" min="0" max="10" value="${p.n}" data-n></label>
+        <button class="btn small ghost" data-reroll>Relancer</button>
+        <span class="sp-pk-cards">${p.cards.map((id, k) => `<span class="chip">${esc(S.byId[id]?.name || id)} <button class="btn small ghost" data-rm="${k}" aria-label="Retirer">\xD7</button></span>`).join("") || '<span class="muted">aucune</span>'}
+        ${p.cards.length < p.n ? `<span class="muted small">(seulement ${p.cards.length} disponibles)</span>` : ""}</span></div>`).join("")}
+      <div class="row-btns"><button class="btn" data-sp="savepacks">Enregistrer pour ${esc(packs.user)}</button><button class="btn ghost" data-sp="closepacks">Fermer</button></div></div>`;
+    }
+    q(".sp-packs-gm").addEventListener("change", (e) => {
+      const pk = e.target.closest("[data-i]");
+      if (!pk || !e.target.matches("[data-n]")) return;
+      const p = packs.list[+pk.dataset.i];
+      p.n = Math.max(0, Math.min(10, Number(e.target.value) || 0));
+      p.cards = drawPack(p.r, p.n, packs.leader);
+      renderPacks();
+    });
+    q(".sp-packs-gm").addEventListener("click", (e) => {
+      const pk = e.target.closest("[data-i]");
+      if (!pk) return;
+      const p = packs.list[+pk.dataset.i];
+      if (e.target.closest("[data-reroll]")) p.cards = drawPack(p.r, p.n, packs.leader);
+      else if (e.target.closest("[data-rm]")) p.cards.splice(+e.target.closest("[data-rm]").dataset.rm, 1);
+      else return;
+      renderPacks();
+    });
     el.addEventListener("click", async (e) => {
+      const pk = e.target.closest("[data-packs]");
+      if (pk) {
+        const leader = pk.dataset.leader;
+        packs = { user: pk.dataset.packs, leader, list: Object.entries(PACKS).map(([r, n3]) => ({ r, n: n3, cards: drawPack(r, n3, leader) })) };
+        if (!S.byId[leader]) msg2("Leader du joueur inconnu : les SR, UR et LR seront tir\xE9es au hasard.", true);
+        renderPacks();
+        return;
+      }
       const go = e.target.closest("[data-go]")?.dataset.go;
       const act = e.target.closest("[data-sp]")?.dataset.sp;
       if (!go && !act) return;
@@ -27932,7 +28093,16 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
             msg2(`${u} passera sur l'\xE9cran noir \xE0 sa prochaine visite (ou en rechargeant la page).`);
           }
         } else if (act === "test") await prepareTest();
-        else if (act === "retest") {
+        else if (act === "savepacks") {
+          await setPacks(packs.user, packs.list.filter((p) => p.cards.length).map((p) => ({ r: p.r, cards: p.cards })));
+          msg2(`Boosters de raret\xE9 enregistr\xE9s pour ${packs.user}.`);
+          packs = null;
+          renderPacks();
+        } else if (act === "closepacks") {
+          packs = null;
+          renderPacks();
+          return;
+        } else if (act === "retest") {
           await resetTest(TEST.user, TEST.deck, 10);
           msg2("Compte test remis \xE0 z\xE9ro : recharge sa page, il est devant l'\xE9cran noir.");
         } else if (act === "copy") {
@@ -28120,6 +28290,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
 
   // js/surprise.js
   var STEP_KEY = "nk-surprise-step";
+  var TITLE = "Nakama TCG";
   var wait3 = (ms) => new Promise((r) => setTimeout(r, ms));
   var store2 = {
     get: () => {
@@ -28136,10 +28307,10 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       }
     }
   };
-  var cap3 = (x) => x.charAt(0).toUpperCase() + x.slice(1);
   var surpriseActive = () => ["wait", "go"].includes(S.status?.surprise);
   async function startSurprise(show2) {
     document.body.classList.add("surprise");
+    document.title = "\u2063";
     try {
       localStorage.setItem("nk-surprise", "1");
     } catch {
@@ -28157,20 +28328,17 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     let step = store2.get() || "booster";
     if (step === "booster") {
       await giantBooster(ov);
-      const had = await revealPending();
-      if (!had) await wait3(200);
-      step = "ui";
+      await revealPending("deck");
+      step = "packs";
       store2.set(step);
     }
     await revealInterface(ov, show2);
-    if (step === "ui" || step === "boosters") {
-      store2.set("boosters");
-      await tenBoosters(show2);
+    if (step === "packs") {
+      await rarityPacks();
+      step = "boosters";
+      store2.set(step);
     }
-    store2.set("tuto");
-    await tutorial();
-    store2.set("pass");
-    await finalStep();
+    if (step === "boosters") await tenBoosters(show2);
     await surpriseDone().catch(() => {
     });
     store2.set("");
@@ -28183,29 +28351,22 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     checkGifts().catch(() => {
     });
   }
-  function giantBooster(ov) {
-    const name2 = (S.status?.username || "").toUpperCase();
-    const d = S.decks?.[0];
-    const total = d ? Object.values(d.cards || {}).reduce((a, n3) => a + n3, 0) + (d.leader ? 1 : 0) : 0;
-    const stage = ov.querySelector(".sp-stage");
-    stage.innerHTML = `<div class="sp-glow"></div><div class="sp-rays"></div>
-    <button class="gpack" aria-label="Ouvrir ton booster">
-      <span class="gp-crimp gp-top"></span>
-      <span class="gp-body">
-        <span class="gp-foil"></span>
-        <span class="gp-ed">\xC9dition personnelle</span>
-        <span class="gp-logo">${logoSVG()}</span>
-        <span class="gp-name" style="--len:${name2.length}">${esc(name2)}</span>
-        <span class="gp-sub">Ton deck${total ? ` \xB7 ${total} cartes` : ""}</span>
-        <span class="gp-code">N\xB0 001</span>
-      </span>
-      <span class="gp-crimp gp-bot"></span>
-    </button>
-    <p class="sp-hint">Touche ton booster pour l'ouvrir</p>`;
-    ov.classList.add("go");
-    sfx2("sons/cling.mp3", 0.8, 1900);
+  function whitePack({ cls = "", top = "", name: name2 = "", sub = "", code = "" }) {
+    return `<button class="wpack ${cls}" aria-label="Ouvrir le booster">
+    <span class="wp-crimp wp-top"></span>
+    <span class="wp-body">
+      <span class="wp-foil"></span>
+      ${top ? `<span class="wp-ed">${esc(top)}</span>` : ""}
+      <span class="wp-logo">${logoSVG()}</span>
+      ${name2 ? `<span class="wp-name" style="--len:${name2.length}">${esc(name2)}</span>` : ""}
+      ${sub ? `<span class="wp-sub">${esc(sub)}</span>` : ""}
+      ${code ? `<span class="wp-code">${esc(code)}</span>` : ""}
+    </span>
+    <span class="wp-crimp wp-bot"></span>
+  </button>`;
+  }
+  function tearOpen(ov, pack) {
     return new Promise((resolve) => {
-      const pack = stage.querySelector(".gpack");
       pack.addEventListener("click", async () => {
         if (pack.classList.contains("tear")) return;
         unlockAudio();
@@ -28213,15 +28374,32 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         ov.classList.add("burst");
         sfx2("sons/kwfx.mp3", 0.9);
         await wait3(1100);
-        stage.innerHTML = "";
-        ov.classList.remove("go", "burst");
-        ov.classList.add("veil");
         resolve();
-      }, { once: false });
+      });
     });
+  }
+  async function giantBooster(ov) {
+    const name2 = (S.status?.username || "").toUpperCase();
+    const d = S.decks?.[0];
+    const total = d ? Object.values(d.cards || {}).reduce((a, n3) => a + n3, 0) + (d.leader ? 1 : 0) : 0;
+    const stage = ov.querySelector(".sp-stage");
+    stage.innerHTML = `<div class="sp-glow"></div><div class="sp-rays"></div><div class="sp-sparks">${"<i></i>".repeat(24)}</div>
+    ${whitePack({ cls: "giant", top: "\xC9dition personnelle", name: name2, sub: `Ton deck${total ? ` \xB7 ${total} cartes` : ""}`, code: "N\xB0 001" })}
+    <p class="sp-hint">Clique sur ton booster pour l'ouvrir</p>`;
+    stage.querySelectorAll(".sp-sparks i").forEach((i, k) => {
+      i.style.setProperty("--a", `${k * 15}deg`);
+      i.style.setProperty("--d", `${k % 6 * 0.1}s`);
+    });
+    ov.classList.add("go");
+    sfx2("sons/cling.mp3", 0.8, 2300);
+    await tearOpen(ov, stage.querySelector(".wpack"));
+    stage.innerHTML = "";
+    ov.classList.remove("go", "burst");
+    ov.classList.add("veil");
   }
   async function revealInterface(ov, show2) {
     show2("home");
+    document.title = TITLE;
     ov.classList.remove("veil");
     document.documentElement.classList.remove("sp-boot");
     ov.classList.add("open");
@@ -28231,10 +28409,27 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     await wait3(900);
     document.body.classList.remove("sp-intro");
   }
+  async function rarityPacks() {
+    const packs = (S.status?.packs || []).map((p, i) => ({ ...p, i })).filter((p) => !p.opened && p.n);
+    if (!packs.length) return;
+    await coach(`<b>${packs.length} boosters sp\xE9ciaux</b> t'attendent : un de chaque raret\xE9.`, "Les ouvrir");
+    for (const p of packs) {
+      const ov = document.createElement("div");
+      ov.className = "sp-ov go sp-rar";
+      ov.innerHTML = `<div class="sp-stage"><div class="sp-glow"></div>
+      ${whitePack({ cls: `rar r-${p.r}`, top: "Booster sp\xE9cial", sub: RARITIES[p.r]?.label || p.r, code: RARITIES[p.r]?.short || p.r })}
+      <p class="sp-hint">Clique pour l'ouvrir</p></div>`;
+      document.body.append(ov);
+      await tearOpen(ov, ov.querySelector(".wpack"));
+      const pulls = await openSurprisePack(p.i).catch(() => []);
+      ov.remove();
+      if (pulls.length) await revealList(pulls);
+    }
+  }
   async function tenBoosters(show2) {
     const n3 = Math.min(10, boosterState()?.total || 0);
     if (!n3) return;
-    await coach(`<b>${n3} booster${n3 > 1 ? "s" : ""}</b> t'attend${n3 > 1 ? "ent" : ""} !`, `Ouvrir mes ${n3} boosters`);
+    await coach(`Et <b>${n3} booster${n3 > 1 ? "s" : ""}</b> de plus !`, `Ouvrir mes ${n3} boosters`);
     show2("boosters");
     await wait3(300);
     for (; ; ) {
@@ -28254,98 +28449,6 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         c.classList.add("out");
         setTimeout(() => c.remove(), 300);
         resolve();
-      });
-    });
-  }
-  function myLeader() {
-    const d = S.decks?.[0];
-    return d ? S.byId[d.leader] : null;
-  }
-  function slides() {
-    const leader = myLeader();
-    const kwBtn = (k, t) => `<button class="btn small sp-kw" data-kw="${k}">${t}</button>`;
-    return [
-      { t: "Le but du jeu", h: `<p>Fais tomber les <b>Vies</b> du Leader adverse \xE0 z\xE9ro\u2026 puis touche-le <b>une derni\xE8re fois</b>. C'est gagn\xE9.</p><p class="muted">Chaque joueur commence avec 5 cartes en main.</p>` },
-      { t: "Ton Leader", h: `${leader ? `<div class="sp-card">${cardHTML(leader)}</div>` : ""}<p>Il reste toujours en jeu. Ses <b>Vies</b> sont des cartes face cach\xE9e : \xE0 chaque coup re\xE7u, une Vie part dans ta main.</p>` },
-      { t: "Les DON!!", h: "<p>Ta ressource : <b>1 DON!!</b> au premier tour, puis <b>2 par tour</b> (10 au total).</p><p>Ils paient le <b>co\xFBt</b> de tes cartes\u2026 ou s'attachent \xE0 un Personnage ou \xE0 ton Leader : <b>+1000 de puissance</b> chacun pendant ton tour.</p>" },
-      { t: "Ton tour", h: '<ol class="sp-list"><li>Tu pioches 1 carte</li><li>Tu re\xE7ois tes DON!!</li><li>Tu joues des <b>Personnages</b>, <b>\xC9v\xE9nements</b> et <b>Lieux</b></li><li>Tu <b>attaques</b></li><li>Fin du tour</li></ol>' },
-      { t: "Attaquer", h: `<p>L'attaquant s'<b>\xE9puise</b> (il se couche). Il vise le <b>Leader adverse</b> ou un <b>Personnage \xE9puis\xE9</b>.</p><p>Puissance <b>\xE9gale ou sup\xE9rieure</b> : \xE7a touche. Un Personnage touch\xE9 est mis KO ; un Leader touch\xE9 perd une Vie.</p><p class="muted">Un Personnage jou\xE9 ce tour-ci doit attendre le suivant\u2026 sauf s'il a [Initiative].</p>` },
-      { t: "Se d\xE9fendre", h: "<p><b>[Bloqueur]</b> : un de tes Personnages prend le coup \xE0 la place.</p><p><b>Contre</b> : d\xE9fausse des cartes de ta main pour ajouter leur valeur de Contre (+1000, +2000\u2026).</p><p><b>D\xE9clenchement</b> : quand tu perds une Vie, elle peut s'activer gratuitement.</p>" },
-      { t: "Les mots-cl\xE9s", h: `<p>Certains moments ont droit \xE0 leur annonce. Touche pour voir :</p><div class="row-btns sp-kws">${kwBtn("blocker", "Bloqueur")}${kwBtn("double", "Double attaque")}${kwBtn("banish", "Exil")}${kwBtn("rush", "Initiative")}</div><p class="muted">Double attaque : 2 Vies d'un coup \xB7 Exil : la Vie part \xE0 la d\xE9fausse, sans D\xE9clenchement.</p>` },
-      { t: "Ton deck", h: `<p>Ton deck a \xE9t\xE9 construit <b>rien que pour toi</b>. Il est d\xE9j\xE0 pr\xEAt dans l'onglet <b>Decks</b>.</p><p>Pour jouer : onglet <b>Jouer</b>, cr\xE9e une partie et envoie le code \xE0 ton adversaire.</p><p class="sp-big">\xC0 toi de jouer, ${esc(cap3(S.status?.username || ""))} !</p>` }
-    ];
-  }
-  function tutorial() {
-    const list = slides();
-    let i = 0;
-    return new Promise((resolve) => {
-      const o = document.createElement("div");
-      o.className = "overlay sp-tuto";
-      document.body.append(o);
-      const render3 = () => {
-        const s = list[i];
-        o.innerHTML = `<div class="dialog sp-slide" role="dialog" aria-label="${esc(s.t)}">
-        <div class="sp-dots">${list.map((_, k) => `<span class="${k === i ? "on" : ""}"></span>`).join("")}</div>
-        <h3>${esc(s.t)}</h3><div class="sp-body">${s.h}</div>
-        <div class="row-btns">${i ? '<button class="btn ghost" data-go="-1">Retour</button>' : ""}
-          <button class="btn main" data-go="1">${i === list.length - 1 ? "Terminer" : "Suivant"}</button></div></div>`;
-      };
-      render3();
-      o.addEventListener("click", (e) => {
-        const kw = e.target.closest("[data-kw]")?.dataset.kw;
-        if (kw) {
-          playKeyword(kw, S.music);
-          return;
-        }
-        const go = e.target.closest("[data-go]")?.dataset.go;
-        if (!go) return;
-        i += Number(go);
-        if (i >= list.length) {
-          o.remove();
-          resolve();
-          return;
-        }
-        render3();
-      });
-    });
-  }
-  function finalStep() {
-    return new Promise((resolve) => {
-      const o = document.createElement("div");
-      o.className = "overlay";
-      o.innerHTML = `<form class="dialog sp-pass" autocomplete="on">
-      <h3>Derni\xE8re chose : ton mot de passe</h3>
-      <p class="muted">Pour te reconnecter plus tard, sur ce t\xE9l\xE9phone ou un autre appareil. Ton pseudo : <b>${esc(S.status?.username || "")}</b></p>
-      <input type="text" name="username" autocomplete="username" value="${esc(S.status?.username || "")}" hidden>
-      <div class="field"><label for="sp-p1">Mot de passe</label><input id="sp-p1" type="password" minlength="6" autocomplete="new-password" required></div>
-      <div class="field"><label for="sp-p2">Confirmer</label><input id="sp-p2" type="password" minlength="6" autocomplete="new-password" required></div>
-      <p class="msg err sp-err" role="alert"></p>
-      <div class="row-btns"><button type="button" class="btn ghost" data-later>Plus tard</button><button class="btn main">C'est parti !</button></div>
-    </form>`;
-      document.body.append(o);
-      const f = o.querySelector("form");
-      o.querySelector("[data-later]").addEventListener("click", () => {
-        o.remove();
-        resolve();
-      });
-      f.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const p1 = f.querySelector("#sp-p1").value;
-        if (p1 !== f.querySelector("#sp-p2").value) {
-          f.querySelector(".sp-err").textContent = "Les deux mots de passe ne correspondent pas.";
-          return;
-        }
-        try {
-          await setPassword(p1);
-          try {
-            localStorage.removeItem("nk-auto-pass");
-          } catch {
-          }
-          o.remove();
-          resolve();
-        } catch (err) {
-          f.querySelector(".sp-err").textContent = err.message;
-        }
       });
     });
   }
@@ -28443,6 +28546,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       return;
     }
     document.documentElement.classList.remove("sp-boot");
+    document.title = "Nakama TCG";
     try {
       localStorage.removeItem("nk-surprise");
     } catch {

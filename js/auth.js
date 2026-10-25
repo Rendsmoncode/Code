@@ -12,22 +12,10 @@ export async function showAuth() {
   const el = document.createElement('div');
   el.className = 'auth';
   document.body.append(el);
-  // Invitation surprise : pas de formulaire, le compte se crée tout seul derrière un écran noir
-  // (mot de passe aléatoire gardé dans ce navigateur ; le joueur choisit le sien à la fin de la découverte).
-  if (!invite?.surprise) document.documentElement.classList.remove('sp-boot');
-  if (invite?.surprise) {
-    el.className = 'auth surprise-black';
-    const pw = Array.from(crypto.getRandomValues(new Uint8Array(18)), (b) => b.toString(36)).join('').slice(0, 24);
-    try {
-      localStorage.setItem('nk-auto-pass', JSON.stringify({ u: invite.username, p: pw }));
-      localStorage.setItem('nk-surprise', '1');
-      await signUp(invite.username, pw, token);
-      const url = new URL(location.href);
-      url.searchParams.delete('invite');
-      location.replace(url.href);
-      return;
-    } catch (err) { el.className = 'auth'; } // problème : on retombe sur le formulaire habituel
-  }
+  // Invitation surprise : un écran noir, sans logo ni nom du jeu, juste le choix du mot de passe.
+  if (invite?.surprise) { blackSignup(el, invite, token); return; }
+  document.documentElement.classList.remove('sp-boot');
+  document.title = 'Nakama TCG';
   render();
 
   function render() {
@@ -74,6 +62,37 @@ export async function showAuth() {
     } catch (err) {
       out.textContent = err.message;
       el.querySelector('.btn.primary').disabled = false;
+    }
+  });
+}
+
+function blackSignup(el, invite, token) {
+  document.title = '\u2063';
+  el.className = 'auth sp-black';
+  el.innerHTML = `<form class="sp-black-form" autocomplete="on">
+    <input name="username" autocomplete="username" value="${esc(invite.username)}" hidden>
+    <p>Choisis ton mot de passe</p>
+    <input id="au-pass" type="password" minlength="6" required autocomplete="new-password" aria-label="Mot de passe" placeholder="Mot de passe">
+    <input id="au-pass2" type="password" minlength="6" required autocomplete="new-password" aria-label="Confirmer" placeholder="Confirmer">
+    <button class="btn">Valider</button>
+    <p class="sp-black-err" role="alert"></p>
+  </form>`;
+  const f = el.querySelector('form');
+  f.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const p = f.querySelector('#au-pass').value;
+    const out = f.querySelector('.sp-black-err');
+    if (p !== f.querySelector('#au-pass2').value) { out.textContent = 'Les deux ne correspondent pas.'; return; }
+    f.querySelector('.btn').disabled = true;
+    try {
+      try { localStorage.setItem('nk-surprise', '1'); } catch { /* navigation privée */ }
+      await signUp(invite.username, p, token);
+      const url = new URL(location.href);
+      url.searchParams.delete('invite');
+      location.replace(url.href);
+    } catch (err) {
+      out.textContent = err.message;
+      f.querySelector('.btn').disabled = false;
     }
   });
 }
