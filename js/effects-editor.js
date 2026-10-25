@@ -1,11 +1,12 @@
 // Constructeur d'effets (onglet Cartes) : menus déroulants → card.effects / card.keywords.
 import {
   WHEN, CONDS, COSTS, ACTIONS, ACTION_GROUPS, CONTINUOUS_ACTIONS, SIDES, WHO, KEYWORDS_AUTO, COLORS_FR,
-  effectText, defaults, REPLACE_EV, REPLACE_WHO,
+  effectText, defaults, REPLACE_EV, REPLACE_WHO, CHOOSER,
 } from './effects.js';
 import { esc, ATTRIBUTES } from './cards.js';
 
-const SECTIONS = { conds: ['Conditions', CONDS], costs: ['Coûts', COSTS], actions: ['Actions', ACTIONS] };
+const SECTIONS = { conds: ['Conditions', CONDS], costs: ['Coûts', COSTS], actions: ['Actions', ACTIONS], actions2: ['Option 2', ACTIONS] };
+const isActs = (sec) => sec === 'actions' || sec === 'actions2';
 // Raccourcis des actions les plus fréquentes (un clic = l'action ajoutée avec des réglages courants).
 const QUICK = [
   { label: 'Piocher', k: 'draw', over: { n: 1 } },
@@ -32,7 +33,7 @@ export function mountEffectsEditor(el, getCard, onChange) {
     else if (act === 'del-effect') card.effects.splice(i, 1);
     else if (act === 'quick') {
       const q = QUICK[+b.dataset.q];
-      card.effects[i].actions.push({ k: q.k, ...defaults(ACTIONS[q.k].params), ...structuredClone(q.over || {}) });
+      card.effects[i][b.dataset.sec || 'actions'].push({ k: q.k, ...defaults(ACTIONS[q.k].params), ...structuredClone(q.over || {}) });
     }
     else if (act === 'del') card.effects[i][row.dataset.sec].splice(+row.dataset.j, 1);
     else if (act === 'up' && +row.dataset.j > 0) {
@@ -68,6 +69,9 @@ export function mountEffectsEditor(el, getCard, onChange) {
     if (t.dataset.f === 'when') { eff.when = t.value; if (WHEN[t.value]?.replace) eff.rp ||= { ev: 'ko', who: 'self' }; }
     else if (t.dataset.wp) setPath(eff, t.dataset.wp, t.type === 'number' ? (t.value === '' ? '' : Number(t.value)) : t.value);
     else if (t.dataset.f === 'once') eff.once = t.checked;
+    else if (t.dataset.f === 'choice') {
+      if (t.value) { eff.choice = t.value; eff.actions2 ||= []; } else { delete eff.choice; delete eff.actions2; }
+    }
     else if (t.dataset.p) {
       const row = t.closest('[data-j]');
       const item = eff[row.dataset.sec][+row.dataset.j];
@@ -105,6 +109,7 @@ function blockHTML(eff, i, card) {
     <div class="fxe-head">
       <label>Quand <select data-f="when">${allowed.map(([k, v]) => `<option value="${k}" ${k === eff.when ? 'selected' : ''}>${v.label}</option>`).join('')}</select></label>
       <label class="check"><input type="checkbox" data-f="once" ${eff.once ? 'checked' : ''}> Une fois par tour</label>
+      ${w.continuous ? '' : `<label>Choix entre 2 options <select data-f="choice"><option value="">non</option>${Object.entries(CHOOSER).map(([k, l]) => `<option value="${k}" ${eff.choice === k ? 'selected' : ''}>oui : ${l.toLowerCase()}</option>`).join('')}</select></label>`}
       ${w.replace ? `<label>Si ${select('rp.who', REPLACE_WHO, eff.rp?.who).replace('data-p=', 'data-wp=')}</label>
         <label>devait être ${select('rp.ev', REPLACE_EV, eff.rp?.ev).replace('data-p=', 'data-wp=')}</label>` : ''}
       ${w.subject && !(w.replace && (eff.rp?.who || 'self') === 'self') ? `<span class="fxe-when-filter"><span class="muted small">Quel Personnage ?</span>${filterHTML('wf', eff.wf || {}, 'data-wp')}</span>` : ''}
@@ -114,13 +119,15 @@ function blockHTML(eff, i, card) {
     ${sectionHTML(eff, 'conds')}
     ${w.continuous ? '' : sectionHTML(eff, 'costs')}
     ${sectionHTML(eff, 'actions', w.continuous)}
+    ${eff.choice && !w.continuous ? sectionHTML(eff, 'actions2') : ''}
     <p class="fxe-text">${esc(effectText(eff, card))}</p>
   </div>`;
 }
 
 function sectionHTML(eff, sec, continuous = false) {
-  const [title, defs] = SECTIONS[sec];
-  const rows = eff[sec].map((item, j) => {
+  const [title0, defs] = SECTIONS[sec];
+  const title = sec === 'actions' && eff.choice ? 'Option 1' : title0;
+  const rows = (eff[sec] || []).map((item, j) => {
     const def = defs[item.k];
     if (!def) return '';
     return `<div class="fxe-row" data-sec="${sec}" data-j="${j}">
@@ -130,14 +137,14 @@ function sectionHTML(eff, sec, continuous = false) {
     </div>`;
   }).join('');
   let options;
-  if (sec === 'actions') {
+  if (isActs(sec)) {
     options = Object.entries(ACTION_GROUPS).map(([g, keys]) => {
       const ks = continuous ? keys.filter((k) => CONTINUOUS_ACTIONS.includes(k)) : keys;
       return ks.length ? `<optgroup label="${g}">${ks.map((k) => `<option value="${k}">${esc(ACTIONS[k].label)}</option>`).join('')}</optgroup>` : '';
     }).join('');
   } else options = Object.entries(defs).map(([k, d]) => `<option value="${k}">${esc(d.label)}</option>`).join('');
   return `<div class="fxe-sec"><div class="fxe-sec-title">${title}</div>${rows}
-    ${sec === 'actions' ? `<div class="fxe-quick">${QUICK.filter((q) => !continuous || CONTINUOUS_ACTIONS.includes(q.k)).map((q) => `<button type="button" class="btn small" data-act="quick" data-q="${QUICK.indexOf(q)}" title="${esc(ACTIONS[q.k].label)}">+ ${q.label}</button>`).join('')}</div>` : ''}
+    ${isActs(sec) ? `<div class="fxe-quick">${QUICK.filter((q) => !continuous || CONTINUOUS_ACTIONS.includes(q.k)).map((q) => `<button type="button" class="btn small" data-act="quick" data-sec="${sec}" data-q="${QUICK.indexOf(q)}" title="${esc(ACTIONS[q.k].label)}">+ ${q.label}</button>`).join('')}</div>` : ''}
     <select data-add="${sec}" class="fxe-add"><option value="">+ Ajouter ${sec === 'conds' ? 'une condition' : sec === 'costs' ? 'un coût' : 'une action'}…</option>${options}</select></div>`;
 }
 

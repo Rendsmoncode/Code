@@ -5,7 +5,7 @@ import { S, validateDeck, onChange } from './store.js';
 import {
   cardHTML, esc, uid, fmtEffect, TYPES, isBlocker, hasRush, hasDoubleAttack, hasBanish, isUnblockable, attributesOf,
 } from './cards.js';
-import { WHEN, CONTINUOUS_ACTIONS, effectText, effectsText } from './effects.js';
+import { WHEN, CONTINUOUS_ACTIONS, effectText, effectsText, actionsText } from './effects.js';
 import * as net from './net.js';
 import { playMomentVideo, preloadMoments } from './video.js';
 import { playKeyword } from './kwfx.js';
@@ -277,6 +277,8 @@ function onMsg(m) {
     case 'reveal': G.reveals.push({ id: uid(), c: m.c, why: m.why }); break;
     case 'anim': playMomentVideo(G.oppCards[m.c]?.anims?.[m.m], { noSkip: m.lock }); return;
     case 'kw': playKeyword(m.k, S.music); return;
+    case 'choose': answerChoice(m); return;
+    case 'chosen': { const res = choiceWaits.get(m.id); choiceWaits.delete(m.id); res?.(m.i); return; }
     case 'attack': G.battle = { ...m.b, role: 'def' }; render(); fireAll('onOppAttack'); return;
     case 'battleUpd': if (G.battle) Object.assign(G.battle, m.b); break;
     case 'battleEnd': G.battle = null; G.select = null; endBattleMods(); break;
@@ -1205,12 +1207,42 @@ async function runEffectNow(src, eff, { optional = false, idx = 0 } = {}) {
   src.used = { ...(src.used || {}), [usedKey]: G.turn.count };
   log(`active l'effet de ${name(c)} : ${txt}`);
   const ctx = { src, eff };
-  for (const a of eff.actions || []) {
+  let actions = eff.actions || [];
+  if (eff.choice) actions = (await chooseOption(eff, c)) ? eff.actions2 || [] : actions;
+  for (const a of actions) {
     try { await doFx(a, ctx); } catch (err) { console.error(err); }
   }
   commit();
   return ctx;
 }
+
+// Effet à deux options : renvoie 0 (option 1) ou 1 (option 2). Si c'est l'adversaire qui choisit,
+// la question part chez lui et la partie attend sa réponse (2 minutes au plus, sinon option 1).
+const choiceWaits = new Map();
+async function chooseOption(eff, c) {
+  const texts = [eff.actions, eff.actions2].map((l) => cap(actionsText(l, WHEN[eff.when], c) || 'Rien'));
+  if (eff.choice !== 'opp') {
+    return ask(`${c.name} : choisissez`, `<div class="ask-card">${cardHTML(c)}</div>`,
+      texts.map((t, i) => ({ label: t, value: i, cls: i ? 'ghost' : 'primary' })));
+  }
+  const id = uid();
+  send({ t: 'choose', id, by: c.name, card: c.id, texts });
+  toast(`${c.name} : votre adversaire choisit…`);
+  const i = await new Promise((res) => {
+    choiceWaits.set(id, res);
+    setTimeout(() => { if (choiceWaits.delete(id)) res(0); }, 120000);
+  });
+  log(`laisse le choix à l'adversaire, qui choisit : « ${texts[i]} ».`);
+  return i;
+}
+// L'adversaire me demande de choisir (effet « votre adversaire choisit »).
+async function answerChoice(m) {
+  const c = G.oppCards[m.card];
+  const i = await ask(`${m.by} : à vous de choisir`, `${c ? `<div class="ask-card">${cardHTML(c)}</div>` : ''}<p>Votre adversaire vous laisse le choix :</p>`,
+    m.texts.map((t, k) => ({ label: t, value: k, cls: k ? 'ghost' : 'primary' })));
+  send({ t: 'chosen', id: m.id, i });
+}
+const cap = (x) => x.charAt(0).toUpperCase() + x.slice(1);
 
 // Effets d'une carte pour un déclencheur donné.
 async function fireCard(inst, when, opts = {}) {

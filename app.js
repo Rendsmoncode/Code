@@ -21096,6 +21096,14 @@ ${suffix}`;
     const strip2 = (t) => t.replace(/,$/, "");
     return [`${[strip2(list[0]), ...list.slice(1).map((t) => strip2(t).replace(/^Si /, "que ").replace(/^S'il /, "qu'il "))].join(" et ")},`];
   }
+  var CHOOSER = { me: "Choisissez", opp: "Votre adversaire choisit" };
+  function actionsText(list, w = {}, card = null) {
+    return (list || []).filter((a) => ACTIONS[a.k]).map((a) => {
+      let x = w.continuous && "dur" in a ? { ...a, dur: null } : a;
+      if (card?.type === "leader" && x.t?.who === "self") x = { ...x, t: { ...x.t, who: "selfLeader" } };
+      return ACTIONS[a.k].text(x);
+    }).join(", puis ");
+  }
   function effectText(e, card) {
     const w = WHEN[e.when] || {};
     if (w.replace) return replaceText(e, card);
@@ -21104,12 +21112,8 @@ ${suffix}`;
     const donCond = (e.conds || []).filter((c) => c.k === "donAttached").map((c) => CONDS.donAttached.text(c));
     const otherConds = joinConds((e.conds || []).filter((c) => c.k !== "donAttached" && CONDS[c.k]).map((c) => CONDS[c.k].text(c)));
     const costs = (e.costs || []).filter((c) => COSTS[c.k]).map((c, i) => i ? COSTS[c.k].text(c).replace(/^\p{Lu}(?!ON!!)/u, (x) => x.toLowerCase()) : COSTS[c.k].text(c));
-    const acts = (e.actions || []).filter((a) => ACTIONS[a.k]).map((a) => {
-      let x = w.continuous && "dur" in a ? { ...a, dur: null } : a;
-      if (card?.type === "leader" && x.t?.who === "self") x = { ...x, t: { ...x.t, who: "selfLeader" } };
-      return ACTIONS[a.k].text(x);
-    });
-    let body = acts.join(", puis ");
+    let body = actionsText(e.actions, w, card);
+    if (e.choice) body = `${CHOOSER[e.choice] || CHOOSER.me} : ${body || "(rien)"} ; ou ${actionsText(e.actions2, w, card) || "(rien)"}`;
     if (otherConds.length) body = `${otherConds.join(" ")} ${body}`;
     body = cap(body.trim());
     if (body && !body.endsWith(".")) body += ".";
@@ -22704,7 +22708,8 @@ ${suffix}`;
   }
 
   // js/effects-editor.js
-  var SECTIONS = { conds: ["Conditions", CONDS], costs: ["Co\xFBts", COSTS], actions: ["Actions", ACTIONS] };
+  var SECTIONS = { conds: ["Conditions", CONDS], costs: ["Co\xFBts", COSTS], actions: ["Actions", ACTIONS], actions2: ["Option 2", ACTIONS] };
+  var isActs = (sec) => sec === "actions" || sec === "actions2";
   var QUICK = [
     { label: "Piocher", k: "draw", over: { n: 1 } },
     { label: "Searcher", k: "look", over: { n: 5, take: 1 } },
@@ -22730,7 +22735,7 @@ ${suffix}`;
       else if (act === "del-effect") card.effects.splice(i, 1);
       else if (act === "quick") {
         const q = QUICK[+b.dataset.q];
-        card.effects[i].actions.push({ k: q.k, ...defaults(ACTIONS[q.k].params), ...structuredClone(q.over || {}) });
+        card.effects[i][b.dataset.sec || "actions"].push({ k: q.k, ...defaults(ACTIONS[q.k].params), ...structuredClone(q.over || {}) });
       } else if (act === "del") card.effects[i][row.dataset.sec].splice(+row.dataset.j, 1);
       else if (act === "up" && +row.dataset.j > 0) {
         const arr = card.effects[i][row.dataset.sec];
@@ -22767,7 +22772,15 @@ ${suffix}`;
         if (WHEN[t.value]?.replace) eff.rp || (eff.rp = { ev: "ko", who: "self" });
       } else if (t.dataset.wp) setPath(eff, t.dataset.wp, t.type === "number" ? t.value === "" ? "" : Number(t.value) : t.value);
       else if (t.dataset.f === "once") eff.once = t.checked;
-      else if (t.dataset.p) {
+      else if (t.dataset.f === "choice") {
+        if (t.value) {
+          eff.choice = t.value;
+          eff.actions2 || (eff.actions2 = []);
+        } else {
+          delete eff.choice;
+          delete eff.actions2;
+        }
+      } else if (t.dataset.p) {
         const row = t.closest("[data-j]");
         const item = eff[row.dataset.sec][+row.dataset.j];
         setPath(item, t.dataset.p, t.type === "number" ? t.value === "" ? "" : Number(t.value) : t.value);
@@ -22802,6 +22815,7 @@ ${suffix}`;
     <div class="fxe-head">
       <label>Quand <select data-f="when">${allowed.map(([k, v]) => `<option value="${k}" ${k === eff.when ? "selected" : ""}>${v.label}</option>`).join("")}</select></label>
       <label class="check"><input type="checkbox" data-f="once" ${eff.once ? "checked" : ""}> Une fois par tour</label>
+      ${w.continuous ? "" : `<label>Choix entre 2 options <select data-f="choice"><option value="">non</option>${Object.entries(CHOOSER).map(([k, l]) => `<option value="${k}" ${eff.choice === k ? "selected" : ""}>oui : ${l.toLowerCase()}</option>`).join("")}</select></label>`}
       ${w.replace ? `<label>Si ${select("rp.who", REPLACE_WHO, eff.rp?.who).replace("data-p=", "data-wp=")}</label>
         <label>devait \xEAtre ${select("rp.ev", REPLACE_EV, eff.rp?.ev).replace("data-p=", "data-wp=")}</label>` : ""}
       ${w.subject && !(w.replace && (eff.rp?.who || "self") === "self") ? `<span class="fxe-when-filter"><span class="muted small">Quel Personnage ?</span>${filterHTML("wf", eff.wf || {}, "data-wp")}</span>` : ""}
@@ -22811,12 +22825,14 @@ ${suffix}`;
     ${sectionHTML(eff, "conds")}
     ${w.continuous ? "" : sectionHTML(eff, "costs")}
     ${sectionHTML(eff, "actions", w.continuous)}
+    ${eff.choice && !w.continuous ? sectionHTML(eff, "actions2") : ""}
     <p class="fxe-text">${esc(effectText(eff, card))}</p>
   </div>`;
   }
   function sectionHTML(eff, sec, continuous = false) {
-    const [title, defs] = SECTIONS[sec];
-    const rows = eff[sec].map((item, j) => {
+    const [title0, defs] = SECTIONS[sec];
+    const title = sec === "actions" && eff.choice ? "Option 1" : title0;
+    const rows = (eff[sec] || []).map((item, j) => {
       const def = defs[item.k];
       if (!def) return "";
       return `<div class="fxe-row" data-sec="${sec}" data-j="${j}">
@@ -22826,14 +22842,14 @@ ${suffix}`;
     </div>`;
     }).join("");
     let options;
-    if (sec === "actions") {
+    if (isActs(sec)) {
       options = Object.entries(ACTION_GROUPS).map(([g, keys]) => {
         const ks = continuous ? keys.filter((k) => CONTINUOUS_ACTIONS.includes(k)) : keys;
         return ks.length ? `<optgroup label="${g}">${ks.map((k) => `<option value="${k}">${esc(ACTIONS[k].label)}</option>`).join("")}</optgroup>` : "";
       }).join("");
     } else options = Object.entries(defs).map(([k, d]) => `<option value="${k}">${esc(d.label)}</option>`).join("");
     return `<div class="fxe-sec"><div class="fxe-sec-title">${title}</div>${rows}
-    ${sec === "actions" ? `<div class="fxe-quick">${QUICK.filter((q) => !continuous || CONTINUOUS_ACTIONS.includes(q.k)).map((q) => `<button type="button" class="btn small" data-act="quick" data-q="${QUICK.indexOf(q)}" title="${esc(ACTIONS[q.k].label)}">+ ${q.label}</button>`).join("")}</div>` : ""}
+    ${isActs(sec) ? `<div class="fxe-quick">${QUICK.filter((q) => !continuous || CONTINUOUS_ACTIONS.includes(q.k)).map((q) => `<button type="button" class="btn small" data-act="quick" data-sec="${sec}" data-q="${QUICK.indexOf(q)}" title="${esc(ACTIONS[q.k].label)}">+ ${q.label}</button>`).join("")}</div>` : ""}
     <select data-add="${sec}" class="fxe-add"><option value="">+ Ajouter ${sec === "conds" ? "une condition" : sec === "costs" ? "un co\xFBt" : "une action"}\u2026</option>${options}</select></div>`;
   }
   function paramHTML(p, item) {
@@ -25011,6 +25027,15 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       case "kw":
         playKeyword(m.k, S.music);
         return;
+      case "choose":
+        answerChoice(m);
+        return;
+      case "chosen": {
+        const res = choiceWaits.get(m.id);
+        choiceWaits.delete(m.id);
+        res?.(m.i);
+        return;
+      }
       case "attack":
         G.battle = { ...m.b, role: "def" };
         render2();
@@ -26015,7 +26040,9 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     src.used = { ...src.used || {}, [usedKey]: G.turn.count };
     log(`active l'effet de ${name(c)} : ${txt}`);
     const ctx = { src, eff };
-    for (const a of eff.actions || []) {
+    let actions = eff.actions || [];
+    if (eff.choice) actions = await chooseOption(eff, c) ? eff.actions2 || [] : actions;
+    for (const a of actions) {
       try {
         await doFx(a, ctx);
       } catch (err) {
@@ -26025,6 +26052,38 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     commit();
     return ctx;
   }
+  var choiceWaits = /* @__PURE__ */ new Map();
+  async function chooseOption(eff, c) {
+    const texts = [eff.actions, eff.actions2].map((l) => cap2(actionsText(l, WHEN[eff.when], c) || "Rien"));
+    if (eff.choice !== "opp") {
+      return ask(
+        `${c.name} : choisissez`,
+        `<div class="ask-card">${cardHTML(c)}</div>`,
+        texts.map((t, i2) => ({ label: t, value: i2, cls: i2 ? "ghost" : "primary" }))
+      );
+    }
+    const id = uid();
+    send({ t: "choose", id, by: c.name, card: c.id, texts });
+    toast2(`${c.name} : votre adversaire choisit\u2026`);
+    const i = await new Promise((res) => {
+      choiceWaits.set(id, res);
+      setTimeout(() => {
+        if (choiceWaits.delete(id)) res(0);
+      }, 12e4);
+    });
+    log(`laisse le choix \xE0 l'adversaire, qui choisit : \xAB ${texts[i]} \xBB.`);
+    return i;
+  }
+  async function answerChoice(m) {
+    const c = G.oppCards[m.card];
+    const i = await ask(
+      `${m.by} : \xE0 vous de choisir`,
+      `${c ? `<div class="ask-card">${cardHTML(c)}</div>` : ""}<p>Votre adversaire vous laisse le choix :</p>`,
+      m.texts.map((t, k) => ({ label: t, value: k, cls: k ? "ghost" : "primary" }))
+    );
+    send({ t: "chosen", id: m.id, i });
+  }
+  var cap2 = (x) => x.charAt(0).toUpperCase() + x.slice(1);
   async function fireCard(inst, when, opts = {}) {
     const list = effectsOf(inst);
     let ctx = null;

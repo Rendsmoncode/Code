@@ -302,6 +302,17 @@ function joinConds(list) {
 }
 
 // card (facultatif) : la carte qui porte l'effet, pour écrire « ce Leader ».
+// Qui choisit, dans un effet à deux options (effet.choice).
+export const CHOOSER = { me: 'Choisissez', opp: 'Votre adversaire choisit' };
+// Texte d'une liste d'actions (« X, puis Y »).
+export function actionsText(list, w = {}, card = null) {
+  return (list || []).filter((a) => ACTIONS[a.k]).map((a) => {
+    let x = w.continuous && 'dur' in a ? { ...a, dur: null } : a;
+    if (card?.type === 'leader' && x.t?.who === 'self') x = { ...x, t: { ...x.t, who: 'selfLeader' } };
+    return ACTIONS[a.k].text(x);
+  }).join(', puis ');
+}
+
 export function effectText(e, card) {
   const w = WHEN[e.when] || {};
   if (w.replace) return replaceText(e, card);
@@ -311,12 +322,9 @@ export function effectText(e, card) {
   const otherConds = joinConds((e.conds || []).filter((c) => c.k !== 'donAttached' && CONDS[c.k]).map((c) => CONDS[c.k].text(c)));
   const costs = (e.costs || []).filter((c) => COSTS[c.k]).map((c, i) => (i ? COSTS[c.k].text(c).replace(/^\p{Lu}(?!ON!!)/u, (x) => x.toLowerCase()) : COSTS[c.k].text(c)));
   // Un effet permanent n'a pas de durée à écrire.
-  const acts = (e.actions || []).filter((a) => ACTIONS[a.k]).map((a) => {
-    let x = w.continuous && 'dur' in a ? { ...a, dur: null } : a;
-    if (card?.type === 'leader' && x.t?.who === 'self') x = { ...x, t: { ...x.t, who: 'selfLeader' } };
-    return ACTIONS[a.k].text(x);
-  });
-  let body = acts.join(', puis ');
+  let body = actionsText(e.actions, w, card);
+  // Choix entre deux options (fait par le joueur ou par son adversaire).
+  if (e.choice) body = `${CHOOSER[e.choice] || CHOOSER.me} : ${body || '(rien)'} ; ou ${actionsText(e.actions2, w, card) || '(rien)'}`;
   if (otherConds.length) body = `${otherConds.join(' ')} ${body}`;
   body = cap(body.trim());
   if (body && !body.endsWith('.')) body += '.';
