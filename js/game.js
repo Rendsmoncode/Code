@@ -516,6 +516,12 @@ function kwFx(k) {
   send({ t: 'kw', k });
   return playKeyword(k, S.music?.[k]?.url);
 }
+// [Initiative] obtenue : la vidéo « rush » de la carte, sinon celle de mon Leader (pour tout son deck), sinon l'annonce RUSH.
+function rushFx(inst) {
+  const src = [inst, G.me.leader].find((x) => x && myCard(x)?.anims?.rush);
+  return src ? anim(src, 'rush') : kwFx('rush');
+}
+const hasRushKw = (inst) => hasKw(inst, 'rush') || hasKw(inst, 'rushChar');
 
 async function playCard(u, free = false, rested = false) {
   const loc = locate(u);
@@ -545,6 +551,7 @@ async function playCard(u, free = false, rested = false) {
     log(`active l'Événement ${name(c)}${cost ? ` (coût ${cost})` : ''}.`);
   }
   commit();
+  if (c.type === 'character' && hasRushKw(inst)) await rushFx(inst);
   await anim(inst, 'onPlay');
   if (c.type === 'event') await fireCard(inst, 'main');
   else {
@@ -590,6 +597,7 @@ async function declareAttack(targetInst, isLeader) {
   };
   log(`attaque ${name(oppCard(targetInst))} avec ${name(c)}.`);
   commit();
+  if (G.battle.double) { G.battle.dblShown = true; await kwFx('double'); }
   await anim(atk, 'onAttack');
   await fireCard(atk, 'onAttack');
 }
@@ -607,7 +615,7 @@ function sendAttack() {
   send({ t: 'attack', b: wire });
   log(`confirme l'attaque : ${b.atkPower} de puissance${b.double ? ' (Double attaque)' : ''}${b.banish ? ' (Exil)' : ''}.`);
   commit();
-  if (b.double) kwFx('double');
+  if (b.double && !b.dblShown) kwFx('double'); // Double attaque obtenue par son effet [Attaque]
 }
 
 function cancelAttack() {
@@ -633,8 +641,8 @@ async function block(inst) {
   Object.assign(G.battle, { blocker: inst.u, target: inst.u, targetCard: inst.c, targetIsLeader: false });
   log(`bloque avec ${name(c)}.`);
   battleUpd();
-  await anim(inst, 'onBlock');
   await kwFx('blocker');
+  await anim(inst, 'onBlock');
   await fireCard(inst, 'onBlock');
 }
 
@@ -985,7 +993,9 @@ function applyMod(inst, a, fromOpp = false) {
     const key = dur === 'perm' ? 'cm' : dur === 'next' ? 'cnx' : 'cmt';
     inst[key] = (inst[key] || 0) + (Number(a.amount) || 0);
   } else if (a.k === 'grantKw') {
+    const rushNow = ['rush', 'rushChar'].includes(a.kw) && locate(inst.u)?.zone === 'chars' && !hasRushKw(inst);
     inst.kw = { ...(inst.kw || {}), [a.kw]: dur };
+    if (rushNow) rushFx(inst); // un effet lui donne [Initiative] pendant la partie
   } else if (a.k === 'protect') {
     inst.prot = { ...(inst.prot || {}), [a.by || 'both']: dur };
   } else if (a.k === 'rest') inst.r = true;

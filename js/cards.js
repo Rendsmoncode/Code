@@ -102,6 +102,7 @@ export const ANIM_MOMENTS = {
   onKO: 'Quand elle est mise KO',
   counter: 'Quand elle est utilisée en Contre',
   trigger: 'Quand son Déclenchement s\'active',
+  rush: 'Quand elle obtient Initiative (remplace l\'annonce RUSH ; sur un Leader : pour tout le deck)',
 };
 
 // o.power : puissance affichée (si modifiée), o.cls : classes en plus, o.attrs : attributs HTML en plus.

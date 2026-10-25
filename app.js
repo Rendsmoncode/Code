@@ -21251,7 +21251,8 @@ ${suffix}`;
     blockLose: "Blocage rat\xE9 (elle est mise KO)",
     onKO: "Quand elle est mise KO",
     counter: "Quand elle est utilis\xE9e en Contre",
-    trigger: "Quand son D\xE9clenchement s'active"
+    trigger: "Quand son D\xE9clenchement s'active",
+    rush: "Quand elle obtient Initiative (remplace l'annonce RUSH ; sur un Leader : pour tout le deck)"
   };
   function cardHTML(card, o = {}) {
     if (!card) return `<div class="card back ${o.cls || ""}" ${o.attrs || ""}><div class="frame"><div class="back-logo">${logoSVG()}</div></div></div>`;
@@ -24459,7 +24460,8 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   var KEYWORDS2 = {
     blocker: { text: "BLOCKER", img: "center" },
     double: { text: "DOUBLE ATTACK", img: "right" },
-    banish: { text: "BANISH", img: "right" }
+    banish: { text: "BANISH", img: "right" },
+    rush: { text: "RUSH" }
   };
   function playKeyword(k, imgSrc) {
     const kw = KEYWORDS2[k];
@@ -25156,6 +25158,11 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     send({ t: "kw", k });
     return playKeyword(k, S.music?.[k]?.url);
   }
+  function rushFx(inst) {
+    const src = [inst, G.me.leader].find((x) => x && myCard(x)?.anims?.rush);
+    return src ? anim(src, "rush") : kwFx("rush");
+  }
+  var hasRushKw = (inst) => hasKw(inst, "rush") || hasKw(inst, "rushChar");
   async function playCard(u, free = false, rested = false) {
     const loc = locate(u);
     if (!loc) return;
@@ -25185,6 +25192,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       log(`active l'\xC9v\xE9nement ${name(c)}${cost ? ` (co\xFBt ${cost})` : ""}.`);
     }
     commit();
+    if (c.type === "character" && hasRushKw(inst)) await rushFx(inst);
     await anim(inst, "onPlay");
     if (c.type === "event") await fireCard(inst, "main");
     else {
@@ -25242,6 +25250,10 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     };
     log(`attaque ${name(oppCard(targetInst))} avec ${name(c)}.`);
     commit();
+    if (G.battle.double) {
+      G.battle.dblShown = true;
+      await kwFx("double");
+    }
     await anim(atk, "onAttack");
     await fireCard(atk, "onAttack");
   }
@@ -25260,7 +25272,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     send({ t: "attack", b: wire2 });
     log(`confirme l'attaque : ${b.atkPower} de puissance${b.double ? " (Double attaque)" : ""}${b.banish ? " (Exil)" : ""}.`);
     commit();
-    if (b.double) kwFx("double");
+    if (b.double && !b.dblShown) kwFx("double");
   }
   function cancelAttack() {
     const atk = locate(G.battle.attacker)?.inst;
@@ -25283,8 +25295,8 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     Object.assign(G.battle, { blocker: inst.u, target: inst.u, targetCard: inst.c, targetIsLeader: false });
     log(`bloque avec ${name(c)}.`);
     battleUpd();
-    await anim(inst, "onBlock");
     await kwFx("blocker");
+    await anim(inst, "onBlock");
     await fireCard(inst, "onBlock");
   }
   function counterBtns() {
@@ -25643,7 +25655,9 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       const key2 = dur === "perm" ? "cm" : dur === "next" ? "cnx" : "cmt";
       inst[key2] = (inst[key2] || 0) + (Number(a.amount) || 0);
     } else if (a.k === "grantKw") {
+      const rushNow = ["rush", "rushChar"].includes(a.kw) && locate(inst.u)?.zone === "chars" && !hasRushKw(inst);
       inst.kw = { ...inst.kw || {}, [a.kw]: dur };
+      if (rushNow) rushFx(inst);
     } else if (a.k === "protect") {
       inst.prot = { ...inst.prot || {}, [a.by || "both"]: dur };
     } else if (a.k === "rest") inst.r = true;
