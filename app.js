@@ -21252,7 +21252,7 @@ ${suffix}`;
     onKO: "Quand elle est mise KO",
     counter: "Quand elle est utilis\xE9e en Contre",
     trigger: "Quand son D\xE9clenchement s'active",
-    rush: "Quand elle obtient Initiative (remplace l'annonce RUSH ; sur un Leader : pour tout le deck)"
+    rush: "Quand elle donne Initiative \xE0 un Personnage (remplace l'annonce RUSH ; une fois par tour)"
   };
   function cardHTML(card, o = {}) {
     if (!card) return `<div class="card back ${o.cls || ""}" ${o.attrs || ""}><div class="frame"><div class="back-logo">${logoSVG()}</div></div></div>`;
@@ -25278,9 +25278,9 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     return playKeyword(k, S.music);
   }
   var rushing = null;
-  function rushFx(inst) {
+  function rushFx(giver) {
     if (rushing) return rushing;
-    const src = G.rushTurn !== G.turn.count && [inst, G.me.leader].find((x) => x && myCard(x)?.anims?.rush);
+    const src = G.rushTurn !== G.turn.count && giver && myCard(giver)?.anims?.rush && giver;
     let p;
     if (src) {
       const first = !G.rushSeen;
@@ -25294,6 +25294,16 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     return rushing;
   }
   var hasRushKw = (inst) => hasKw(inst, "rush") || hasKw(inst, "rushChar");
+  var RUSH_KW = ["rush", "rushChar"];
+  function rushGiver(inst) {
+    if (inStatic || !G?.me?.leader) return null;
+    inStatic = true;
+    try {
+      return staticEffects().find(({ src, e }) => src.u !== inst.u && (e.actions || []).some((a) => a.k === "grantKw" && RUSH_KW.includes(a.kw) && staticTargets(a, src).some((x) => x?.u === inst.u)))?.src || null;
+    } finally {
+      inStatic = false;
+    }
+  }
   async function playCard(u, free = false, rested = false) {
     const loc = locate(u);
     if (!loc) return;
@@ -25323,7 +25333,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       log(`active l'\xC9v\xE9nement ${name(c)}${cost ? ` (co\xFBt ${cost})` : ""}.`);
     }
     commit();
-    if (c.type === "character" && hasRushKw(inst)) await rushFx(inst);
+    if (c.type === "character" && hasRushKw(inst)) await rushFx(rushGiver(inst));
     await anim(inst, "onPlay");
     if (c.type === "event") await fireCard(inst, "main");
     else {
@@ -25769,7 +25779,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     const test = (a) => a.by === kind || a.by === "both";
     return staticFlag(inst, "protect", test) || auraFlag(inst, "protect", test);
   }
-  function applyMod(inst, a, fromOpp = false) {
+  function applyMod(inst, a, fromOpp = false, src = null) {
     const dur = a.dur || "turn";
     if (dur === "next" && ["power", "cost", "grantKw", "protect"].includes(a.k)) {
       const x = fromOpp ? G.role : other(G.role);
@@ -25782,9 +25792,9 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       const key2 = dur === "perm" ? "cm" : dur === "next" ? "cnx" : "cmt";
       inst[key2] = (inst[key2] || 0) + (Number(a.amount) || 0);
     } else if (a.k === "grantKw") {
-      const rushNow = ["rush", "rushChar"].includes(a.kw) && locate(inst.u)?.zone === "chars" && !hasRushKw(inst);
+      const rushNow = RUSH_KW.includes(a.kw) && locate(inst.u)?.zone === "chars" && !hasRushKw(inst);
       inst.kw = { ...inst.kw || {}, [a.kw]: dur };
-      if (rushNow) rushFx(inst);
+      if (rushNow) rushFx(fromOpp ? null : src);
     } else if (a.k === "protect") {
       inst.prot = { ...inst.prot || {}, [a.by || "both"]: dur };
     } else if (a.k === "rest") inst.r = true;
@@ -26167,7 +26177,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
           } else if (a.k === "toBottom") {
             move(x.u, "deck", "bottom");
             log(`place ${name(myCard(x))} sous son deck.`);
-          } else applyMod(x, a);
+          } else applyMod(x, a, false, src);
         }
         break;
       }

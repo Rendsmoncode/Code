@@ -516,13 +516,13 @@ function kwFx(k) {
   send({ t: 'kw', k });
   return playKeyword(k, S.music);
 }
-// [Initiative] obtenue : la vidéo « rush » de la carte, sinon celle de mon Leader (pour tout son deck), sinon l'annonce RUSH.
-// Vidéo une fois par tour (ensuite l'annonce RUSH) ; la toute première de la partie ne se passe pas.
+// [Initiative] obtenue : si une carte la lui DONNE (giver, ex. le Leader) et a une vidéo « rush », cette vidéo ;
+// sinon l'annonce RUSH. Vidéo une fois par tour (ensuite l'annonce) ; la toute première de la partie ne se passe pas.
 // Plusieurs Personnages qui l'obtiennent d'un coup (un seul effet) : une seule annonce.
 let rushing = null;
-function rushFx(inst) {
+function rushFx(giver) {
   if (rushing) return rushing;
-  const src = G.rushTurn !== G.turn.count && [inst, G.me.leader].find((x) => x && myCard(x)?.anims?.rush);
+  const src = G.rushTurn !== G.turn.count && giver && myCard(giver)?.anims?.rush && giver;
   let p;
   if (src) {
     const first = !G.rushSeen;
@@ -533,6 +533,16 @@ function rushFx(inst) {
   return rushing;
 }
 const hasRushKw = (inst) => hasKw(inst, 'rush') || hasKw(inst, 'rushChar');
+const RUSH_KW = ['rush', 'rushChar'];
+// Carte dont un effet permanent donne [Initiative] à ce Personnage (ex. « vos Personnages ont [Initiative] »).
+function rushGiver(inst) {
+  if (inStatic || !G?.me?.leader) return null;
+  inStatic = true;
+  try {
+    return staticEffects().find(({ src, e }) => src.u !== inst.u && (e.actions || []).some((a) => a.k === 'grantKw' && RUSH_KW.includes(a.kw)
+      && staticTargets(a, src).some((x) => x?.u === inst.u)))?.src || null;
+  } finally { inStatic = false; }
+}
 
 async function playCard(u, free = false, rested = false) {
   const loc = locate(u);
@@ -562,7 +572,7 @@ async function playCard(u, free = false, rested = false) {
     log(`active l'Événement ${name(c)}${cost ? ` (coût ${cost})` : ''}.`);
   }
   commit();
-  if (c.type === 'character' && hasRushKw(inst)) await rushFx(inst);
+  if (c.type === 'character' && hasRushKw(inst)) await rushFx(rushGiver(inst));
   await anim(inst, 'onPlay');
   if (c.type === 'event') await fireCard(inst, 'main');
   else {
@@ -989,7 +999,8 @@ function isProtected(inst, kind) {
 
 // Applique un modificateur à une de MES cartes (effet de moi ou reçu de l'adversaire).
 // fromOpp : l'effet vient de l'adversaire (pour savoir quel « prochain tour adverse » met fin à la durée « next »).
-function applyMod(inst, a, fromOpp = false) {
+// src : la carte dont vient l'effet (pour savoir qui donne [Initiative]).
+function applyMod(inst, a, fromOpp = false, src = null) {
   const dur = a.dur || 'turn';
   if (dur === 'next' && ['power', 'cost', 'grantKw', 'protect'].includes(a.k)) {
     // Fin au terme du prochain tour de l'adversaire de celui qui joue l'effet (pas le tour en cours).
@@ -1003,9 +1014,9 @@ function applyMod(inst, a, fromOpp = false) {
     const key = dur === 'perm' ? 'cm' : dur === 'next' ? 'cnx' : 'cmt';
     inst[key] = (inst[key] || 0) + (Number(a.amount) || 0);
   } else if (a.k === 'grantKw') {
-    const rushNow = ['rush', 'rushChar'].includes(a.kw) && locate(inst.u)?.zone === 'chars' && !hasRushKw(inst);
+    const rushNow = RUSH_KW.includes(a.kw) && locate(inst.u)?.zone === 'chars' && !hasRushKw(inst);
     inst.kw = { ...(inst.kw || {}), [a.kw]: dur };
-    if (rushNow) rushFx(inst); // un effet lui donne [Initiative] pendant la partie
+    if (rushNow) rushFx(fromOpp ? null : src); // un effet lui donne [Initiative] pendant la partie
   } else if (a.k === 'protect') {
     inst.prot = { ...(inst.prot || {}), [a.by || 'both']: dur };
   } else if (a.k === 'rest') inst.r = true;
@@ -1329,7 +1340,7 @@ async function doFx(a, ctx) {
           await koMine(x);
         } else if (a.k === 'bounce') { move(x.u, 'hand'); log(`renvoie ${name(myCard(x))} en main.`); }
         else if (a.k === 'toBottom') { move(x.u, 'deck', 'bottom'); log(`place ${name(myCard(x))} sous son deck.`); }
-        else applyMod(x, a);
+        else applyMod(x, a, false, src);
       }
       break;
     }
