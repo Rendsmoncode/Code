@@ -15867,14 +15867,14 @@ ${suffix}`;
      * ```
      */
     async signInWithWeb3(credentials) {
-      const { chain } = credentials;
-      switch (chain) {
+      const { chain: chain2 } = credentials;
+      switch (chain2) {
         case "ethereum":
           return await this.signInWithEthereum(credentials);
         case "solana":
           return await this.signInWithSolana(credentials);
         default:
-          throw new Error(`@supabase/auth-js: Unsupported chain "${chain}"`);
+          throw new Error(`@supabase/auth-js: Unsupported chain "${chain2}"`);
       }
     }
     async signInWithEthereum(credentials) {
@@ -15885,7 +15885,7 @@ ${suffix}`;
         message = credentials.message;
         signature = credentials.signature;
       } else {
-        const { chain, wallet, statement, options } = credentials;
+        const { chain: chain2, wallet, statement, options } = credentials;
         let resolvedWallet;
         if (!isBrowser()) {
           if (typeof wallet !== "object" || !(options === null || options === void 0 ? void 0 : options.url)) {
@@ -15976,7 +15976,7 @@ ${suffix}`;
         message = credentials.message;
         signature = credentials.signature;
       } else {
-        const { chain, wallet, statement, options } = credentials;
+        const { chain: chain2, wallet, statement, options } = credentials;
         let resolvedWallet;
         if (!isBrowser()) {
           if (typeof wallet !== "object" || !(options === null || options === void 0 ? void 0 : options.url)) {
@@ -21136,8 +21136,8 @@ ${suffix}`;
   var GAPS = '<path d="M29 52 C40 55.5 60 55.5 71 52" stroke-width="3.4"/><path d="M30 60 C40 63.5 60 63.5 70 60" stroke-width="2.4"/>';
   var WORD = 'x="51" y="84" text-anchor="middle" font-family="Archivo Black, sans-serif" font-size="13.5" textLength="68" lengthAdjust="spacing"';
   var n2 = 0;
-  function hat(id, tr, col = "currentColor", band = "") {
-    return `<g transform="${tr}"><mask id="${id}"><rect x="-50" y="-50" width="200" height="200" fill="#fff"/><g stroke="#000" fill="none" stroke-linecap="round">${GAPS}</g></mask><g mask="url(#${id})" fill="${col}"><path d="${CROWN}"/>${BRIM}</g>${band ? `<path d="M30.6 51.2 C40 54.4 60 54.4 69.4 51.2 L69.1 49 C60 52.2 40 52.2 30.9 49 Z" fill="${band}"/>` : ""}</g>`;
+  function hat(id, tr, col = "currentColor", band2 = "") {
+    return `<g transform="${tr}"><mask id="${id}"><rect x="-50" y="-50" width="200" height="200" fill="#fff"/><g stroke="#000" fill="none" stroke-linecap="round">${GAPS}</g></mask><g mask="url(#${id})" fill="${col}"><path d="${CROWN}"/>${BRIM}</g>${band2 ? `<path d="M30.6 51.2 C40 54.4 60 54.4 69.4 51.2 L69.1 49 C60 52.2 40 52.2 30.9 49 Z" fill="${band2}"/>` : ""}</g>`;
   }
   function logoSVG(cls = "", inline = false) {
     const k = "nk" + ++n2;
@@ -21195,10 +21195,10 @@ ${suffix}`;
   ];
   var esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   var uid = () => crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2);
-  var hasWord = (card, key2, words) => {
+  var hasWord = (card, key2, words2) => {
     if (card?.keywords?.includes(key2)) return true;
     const t = `${card?.effect || ""}`.toLowerCase();
-    return words.some((w) => t.includes(w));
+    return words2.some((w) => t.includes(w));
   };
   var isBlocker = (c) => hasWord(c, "blocker", ["[bloqueur]", "[blocker]"]);
   var hasRush = (c) => hasWord(c, "rush", ["[initiative]", "[rush]"]);
@@ -24131,6 +24131,273 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     };
   }
 
+  // js/kwfx.js
+  var DUR2 = 2;
+  var sound = new Audio("sons/kwfx.mp3");
+  sound.preload = "auto";
+  function rng(s) {
+    return () => {
+      s |= 0;
+      s = s + 1831565813 | 0;
+      let t = Math.imul(s ^ s >>> 15, 1 | s);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  var clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+  var outBack = (x) => {
+    const k = 1.9;
+    x = clamp(x) - 1;
+    return 1 + (k + 1) * x * x * x + k * x * x;
+  };
+  var outCubic = (x) => 1 - (1 - clamp(x)) ** 3;
+  var FONT = '"Archivo Black", "Arial Black", Impact, sans-serif';
+  function bolt(r, x0, x1, y, amp, step) {
+    const pts = [[x0, y]];
+    let x = x0;
+    while (x < x1) {
+      x += step * (0.5 + r());
+      pts.push([Math.min(x, x1), y + (r() - 0.5) * amp]);
+    }
+    return pts;
+  }
+  function strokePts(g, pts) {
+    g.beginPath();
+    pts.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y));
+    g.stroke();
+  }
+  function band(g, W, k, y, dir, t, frame) {
+    const p = outCubic((t - 0.05) / 0.25);
+    if (p <= 0) return;
+    const x0 = dir > 0 ? 0 : W * (1 - p), x1 = dir > 0 ? W * p : W;
+    const h = 70 * k;
+    g.save();
+    g.globalAlpha = 1 - clamp((t - 1.72) / 0.25);
+    g.globalCompositeOperation = "lighter";
+    const gr = g.createLinearGradient(0, y - h, 0, y + h);
+    gr.addColorStop(0, "rgba(120,255,40,0)");
+    gr.addColorStop(0.35, "rgba(160,255,60,.28)");
+    gr.addColorStop(0.5, "rgba(255,255,170,.55)");
+    gr.addColorStop(0.65, "rgba(160,255,60,.28)");
+    gr.addColorStop(1, "rgba(120,255,40,0)");
+    g.fillStyle = gr;
+    g.fillRect(x0, y - h, x1 - x0, 2 * h);
+    const r = rng(Math.floor(frame / 2) * 97 + (dir > 0 ? 1 : 2));
+    g.lineJoin = "round";
+    for (let n3 = 0; n3 < 4; n3++) {
+      const pts = bolt(r, x0 - 20, x1 + 20, y + (r() - 0.5) * 30 * k, (60 + n3 * 20) * k, 60 * Math.max(k, 0.5));
+      g.shadowColor = "rgba(170,255,60,1)";
+      g.shadowBlur = 30 * k;
+      g.strokeStyle = "rgba(190,255,70,.55)";
+      g.lineWidth = (n3 ? 7 : 12) * k;
+      strokePts(g, pts);
+      g.shadowBlur = 8 * k;
+      g.strokeStyle = "rgba(255,255,230,.95)";
+      g.lineWidth = Math.max(1, (n3 ? 2 : 4) * k);
+      strokePts(g, pts);
+      for (let b = 0; b < 3; b++) {
+        const [bx, by] = pts[1 + (r() * (pts.length - 2) | 0)] || pts[0];
+        const br = bolt(r, bx, bx + (80 + r() * 120) * k, by, 40 * k, 50 * k).map(([x, yy], i) => [x, yy + i * (r() < 0.5 ? -9 : 9) * k]);
+        g.lineWidth = Math.max(1, 1.5 * k);
+        strokePts(g, br);
+      }
+    }
+    for (let i = 0; i < 26; i++) {
+      const s = (2 + r() * 4) * k;
+      g.fillStyle = "rgba(255,255,200,.9)";
+      g.shadowBlur = 12 * k;
+      g.fillRect(x0 + r() * (x1 - x0), y + (r() - 0.5) * 120 * k, s, s);
+    }
+    if (p < 1) {
+      const hx = dir > 0 ? x1 : x0, rad = 160 * k;
+      const rg = g.createRadialGradient(hx, y, 0, hx, y, rad);
+      rg.addColorStop(0, "rgba(255,255,220,.95)");
+      rg.addColorStop(1, "rgba(160,255,60,0)");
+      g.fillStyle = rg;
+      g.fillRect(hx - rad, y - rad, 2 * rad, 2 * rad);
+    }
+    g.restore();
+  }
+  function words(g, W, H, lines, fs, t, img) {
+    const a = (t - 0.22) / 0.16;
+    if (a <= 0) return;
+    const s = 2.8 - 1.8 * outBack(a);
+    const shake = t > 0.36 && t < 0.56 ? (1 - (t - 0.36) / 0.2) * 14 * (fs / 200) : 0;
+    const r = rng((t * 30 | 0) + 5);
+    g.save();
+    g.globalAlpha = clamp(a * 2) * (1 - clamp((t - 1.72) / 0.25));
+    g.translate(W / 2 + (r() - 0.5) * shake, H / 2 + (r() - 0.5) * shake);
+    g.scale(s, s);
+    if (img) {
+      const ih = fs * lines.length * 1.6, iw = ih * img.width / img.height;
+      g.drawImage(img, -iw / 2, -ih / 2, iw, ih);
+    }
+    g.transform(1, 0, -0.18, 1, 0, 0);
+    g.font = `${fs}px ${FONT}`;
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    g.lineJoin = "round";
+    const lh = fs * 1.05, y0 = -(lines.length - 1) * lh / 2;
+    const each = (fn) => lines.forEach((l, i) => fn(l, y0 + i * lh));
+    const u = fs / 250;
+    g.shadowColor = "rgba(0,0,0,.6)";
+    g.shadowBlur = 30 * u;
+    g.shadowOffsetY = 10 * u;
+    g.strokeStyle = "#0a0d26";
+    g.lineWidth = 44 * u;
+    each((l, y) => g.strokeText(l, 0, y));
+    g.shadowColor = "transparent";
+    each((l, y) => {
+      const og = g.createLinearGradient(0, y - fs * 0.45, 0, y + fs * 0.45);
+      og.addColorStop(0, "#fff36a");
+      og.addColorStop(0.5, "#ff9c1a");
+      og.addColorStop(1, "#e8360c");
+      g.strokeStyle = og;
+      g.lineWidth = 22 * u;
+      g.strokeText(l, 0, y);
+    });
+    g.strokeStyle = "#0a0d26";
+    g.lineWidth = 7 * u;
+    each((l, y) => g.strokeText(l, 0, y));
+    each((l, y) => {
+      const fg = g.createLinearGradient(0, y - fs * 0.4, 0, y + fs * 0.4);
+      fg.addColorStop(0, "#ffffff");
+      fg.addColorStop(0.55, "#fffbe0");
+      fg.addColorStop(1, "#ffe27a");
+      g.fillStyle = fg;
+      g.fillText(l, 0, y);
+    });
+    const sh = (t - 0.75) / 0.35;
+    if (sh > 0 && sh < 1) {
+      g.globalCompositeOperation = "source-atop";
+      const half = W / s / 2, sx = -half + sh * 2 * half;
+      const lg = g.createLinearGradient(sx - fs * 0.25, 0, sx + fs * 0.25, 0);
+      lg.addColorStop(0, "rgba(255,255,255,0)");
+      lg.addColorStop(0.5, "rgba(255,255,255,.95)");
+      lg.addColorStop(1, "rgba(255,255,255,0)");
+      g.fillStyle = lg;
+      g.fillRect(-half, -H, 2 * half, 2 * H);
+    }
+    if (a < 1.6) {
+      g.globalCompositeOperation = "lighter";
+      g.globalAlpha = (1 - clamp((a - 0.6) / 1)) * 0.9;
+      g.fillStyle = "#fff";
+      each((l, y) => g.fillText(l, 0, y));
+    }
+    g.restore();
+  }
+  function frameAt(g, W, H, layout, t, img) {
+    const frame = Math.round(t * 30);
+    const end = 1 - clamp((t - 1.78) / 0.22);
+    g.clearRect(0, 0, W, H);
+    g.fillStyle = `rgba(0,0,0,${0.6 * clamp(t / 0.3) * end})`;
+    g.fillRect(0, 0, W, H);
+    const r = rng(frame * 13 + 3);
+    g.save();
+    g.globalAlpha = 0.25 * clamp(t / 0.2) * end;
+    g.strokeStyle = "#fff";
+    for (let i = 0; i < 40; i++) {
+      const y = r() * H, x = r() * W, l = (200 + r() * 500) * layout.k;
+      g.lineWidth = 1 + r() * 2;
+      g.beginPath();
+      g.moveTo(x, y);
+      g.lineTo(x + l, y);
+      g.stroke();
+    }
+    g.restore();
+    band(g, W, layout.k, H / 2 - layout.gap, 1, t, frame);
+    band(g, W, layout.k, H / 2 + layout.gap, -1, t, frame);
+    words(g, W, H, layout.lines, layout.fs, t, img);
+    const fl = 1 - clamp(t / 0.18);
+    if (fl > 0) {
+      g.fillStyle = `rgba(255,255,255,${fl * 0.85})`;
+      g.fillRect(0, 0, W, H);
+    }
+  }
+  function layoutFor(g, W, H, text) {
+    const fit = (lines2) => {
+      g.font = `250px ${FONT}`;
+      const w = Math.max(...lines2.map((l) => g.measureText(l).width)) * 1.08;
+      return Math.min(250 * 0.86 * W / w, H * 0.17, 210);
+    };
+    let lines = [text], fs = fit(lines);
+    if (text.includes(" ") && W < H) {
+      const two = text.split(" ");
+      const f2 = fit(two);
+      if (f2 > fs * 1.3) {
+        lines = two;
+        fs = f2;
+      }
+    }
+    const k = Math.max(0.45, Math.min(1.1, fs / 200));
+    return { lines, fs, k, gap: lines.length * fs * 1.05 / 2 + fs * 0.3 + 30 * k };
+  }
+  var images = {};
+  function loadImage(src) {
+    if (!src) return Promise.resolve(null);
+    images[src] || (images[src] = new Promise((ok) => {
+      const i = new Image();
+      i.onload = () => ok(i);
+      i.onerror = () => ok(null);
+      i.src = src;
+    }));
+    return images[src];
+  }
+  function play(text, imgSrc) {
+    return loadImage(imgSrc).then((img) => new Promise((resolve) => {
+      const ov = document.createElement("div");
+      ov.className = "kwfx-ov";
+      const cv = document.createElement("canvas");
+      ov.append(cv);
+      document.body.append(ov);
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const W = window.innerWidth, H = window.innerHeight;
+      cv.width = W * dpr;
+      cv.height = H * dpr;
+      const g = cv.getContext("2d");
+      g.scale(dpr, dpr);
+      const layout = layoutFor(g, W, H, text);
+      try {
+        sound.currentTime = 0;
+        sound.volume = 0.9;
+        sound.play().catch(() => {
+        });
+      } catch {
+      }
+      const t0 = performance.now();
+      let done = false;
+      const end = () => {
+        if (done) return;
+        done = true;
+        sound.pause();
+        ov.remove();
+        resolve();
+      };
+      ov.addEventListener("click", end);
+      const tick = () => {
+        if (done) return;
+        const t = (performance.now() - t0) / 1e3;
+        if (t >= DUR2) {
+          end();
+          return;
+        }
+        frameAt(g, W, H, layout, t, img);
+        requestAnimationFrame(tick);
+      };
+      tick();
+    }));
+  }
+  var chain = Promise.resolve();
+  var videoGone = () => new Promise((ok) => {
+    const check2 = () => document.querySelector(".anim-ov") ? setTimeout(check2, 100) : ok();
+    check2();
+  });
+  function keywordFx(text, imgSrc) {
+    chain = chain.then(videoGone).then(() => document.fonts.load(`80px ${FONT}`).catch(() => {
+    })).then(() => play(text, imgSrc));
+    return chain;
+  }
+
   // js/settings.js
   var THEMES = {
     pocket: { name: "Pocket clair", desc: "Blanc, a\xE9r\xE9, couleurs douces." },
@@ -24554,6 +24821,9 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       case "anim":
         playMomentVideo(G.oppCards[m.c]?.anims?.[m.m]);
         return;
+      case "kw":
+        if (KW[m.k]) keywordFx(KW[m.k]);
+        return;
       case "attack":
         G.battle = { ...m.b, role: "def" };
         render2();
@@ -24814,6 +25084,11 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     send({ t: "anim", c: inst.c, m });
     await playMomentVideo(url);
   }
+  var KW = { blocker: "BLOCKER", double: "DOUBLE ATTACK", banish: "BANISH" };
+  function kwFx(k) {
+    send({ t: "kw", k });
+    return keywordFx(KW[k]);
+  }
   async function playCard(u, free = false, rested = false) {
     const loc = locate(u);
     if (!loc) return;
@@ -24918,6 +25193,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     send({ t: "attack", b: wire2 });
     log(`confirme l'attaque : ${b.atkPower} de puissance${b.double ? " (Double attaque)" : ""}${b.banish ? " (Exil)" : ""}.`);
     commit();
+    if (b.double) kwFx("double");
   }
   function cancelAttack() {
     const atk = locate(G.battle.attacker)?.inst;
@@ -24941,6 +25217,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     log(`bloque avec ${name(c)}.`);
     battleUpd();
     await anim(inst, "onBlock");
+    await kwFx("blocker");
     await fireCard(inst, "onBlock");
   }
   function counterBtns() {
@@ -25026,6 +25303,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     commit();
   }
   async function takeDamage(n3, banish) {
+    if (banish && G.me.life.length) await kwFx("banish");
     for (let k = 0; k < n3; k++) {
       const me = G.me;
       if (!me.life.length) {
