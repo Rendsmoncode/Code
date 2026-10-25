@@ -22022,7 +22022,7 @@ ${suffix}`;
       v.addEventListener("ended", end);
       v.addEventListener("error", end);
       ov.addEventListener("click", end);
-      timer = setTimeout(end, 15e3);
+      timer = setTimeout(end, 2e4);
       v.muted = false;
       v.volume = 1;
       v.play().catch(() => {
@@ -23056,7 +23056,7 @@ ${suffix}`;
           <span class="muted small ed-vname"></span>
         </div>
         <label class="small">Position de la carte dans la vid\xE9o <input type="range" id="ed-vx" min="0" max="1" step="0.001"> <span class="ed-vxv"></span></label></div>
-      <div class="field f-anims"><label>Animations en partie <small>(une vid\xE9o par moment, jou\xE9e en plein \xE9cran chez les deux joueurs, avec son son s'il y en a ; un toucher la passe. MP4, 25 Mo maximum)</small></label>
+      <div class="field f-anims"><label>Animations en partie <small>(une vid\xE9o par moment, jou\xE9e en plein \xE9cran chez les deux joueurs, avec son son s'il y en a ; un toucher la passe. MP4, 20 s et 25 Mo maximum)</small></label>
         <div class="ed-anims"></div></div>
       <div class="field lay"><label>Cadrage de l'image <small>(ou glissez l'image sur l'aper\xE7u, molette pour zoomer)</small></label>
         <div class="lay-grid">

@@ -78,7 +78,7 @@ export function initEditor() {
           <span class="muted small ed-vname"></span>
         </div>
         <label class="small">Position de la carte dans la vidéo <input type="range" id="ed-vx" min="0" max="1" step="0.001"> <span class="ed-vxv"></span></label></div>
-      <div class="field f-anims"><label>Animations en partie <small>(une vidéo par moment, jouée en plein écran chez les deux joueurs, avec son son s'il y en a ; un toucher la passe. MP4, 25 Mo maximum)</small></label>
+      <div class="field f-anims"><label>Animations en partie <small>(une vidéo par moment, jouée en plein écran chez les deux joueurs, avec son son s'il y en a ; un toucher la passe. MP4, 20 s et 25 Mo maximum)</small></label>
         <div class="ed-anims"></div></div>
       <div class="field lay"><label>Cadrage de l'image <small>(ou glissez l'image sur l'aperçu, molette pour zoomer)</small></label>
         <div class="lay-grid">
