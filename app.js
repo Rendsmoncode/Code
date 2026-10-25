@@ -24140,6 +24140,8 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   var DUR2 = 2;
   var sound = new Audio("sons/kwfx.mp3");
   sound.preload = "auto";
+  var bipbip = new Audio("sons/bipbip.mp3");
+  bipbip.preload = "auto";
   function rng(s) {
     return () => {
       s |= 0;
@@ -24319,8 +24321,9 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     }
     g.restore();
   }
-  function figureLayer(img, W, H, dpr) {
-    const ih = Math.min(H * 0.78, W * 1.1 * img.height / img.width), iw = ih * img.width / img.height;
+  function figureLayer(img, W, H, dpr, align) {
+    const ratio = img.height / img.width;
+    const ih = align === "dash" ? Math.min(H * 0.42, W * 0.7 * ratio) : Math.min(H * 0.78, W * 1.1 * ratio), iw = ih / ratio;
     const pad = Math.max(12, W / 60) * 2;
     const c = offscreen((iw + 2 * pad) * dpr, (ih + 2 * pad) * dpr), g = c.getContext("2d");
     g.scale(dpr, dpr);
@@ -24341,6 +24344,72 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     g.save();
     g.globalAlpha = clamp(a * 1.5) * (1 - clamp((t - 1.72) / 0.25));
     g.drawImage(F.c, x - pad, y - pad, iw + 2 * pad, ih + 2 * pad);
+    g.restore();
+  }
+  var DASH = { in0: 0.12, in1: 0.32, out0: 1.2, out1: 1.36 };
+  function puff(g, x, y, r, a) {
+    g.globalAlpha = a;
+    g.fillStyle = "#f1e6d2";
+    g.strokeStyle = "#bfae92";
+    g.lineWidth = Math.max(1.5, r / 14);
+    g.beginPath();
+    g.arc(x, y, r, 0, 7);
+    g.fill();
+    g.stroke();
+  }
+  function dash(g, W, H, F, t) {
+    if (t < DASH.in0) return;
+    const { iw, ih, pad } = F;
+    const stopX = (W - iw) / 2 + W * 0.04, y0 = H - ih - H * 0.04;
+    let x, moving = 0;
+    if (t < DASH.in1) {
+      const a = outCubic((t - DASH.in0) / (DASH.in1 - DASH.in0));
+      x = -iw * 1.3 + (stopX + iw * 1.3) * a;
+      moving = 1 - a;
+    } else if (t < DASH.out0) x = stopX;
+    else {
+      const a = clamp((t - DASH.out0) / (DASH.out1 - DASH.out0));
+      x = stopX + (W + pad - stopX) * a * a;
+      moving = a;
+    }
+    const gone = t >= DASH.out1;
+    g.save();
+    const dust = (t0, n3, size, life) => {
+      const k = (t - t0) / life;
+      if (k <= 0 || k >= 1) return;
+      const rr = rng(Math.round(t0 * 100));
+      for (let i = 0; i < n3; i++) {
+        const ox = (rr() - 0.2) * iw * 0.5, oy = -rr() * ih * 0.25;
+        puff(g, stopX + iw * 0.25 + ox - k * iw * 0.3 * rr(), y0 + ih * 0.92 + oy - k * ih * 0.15, size * (0.4 + rr() * 0.6) * (0.5 + k), (1 - k) * 0.95);
+      }
+    };
+    dust(DASH.in1, 4, ih * 0.12, 0.45);
+    dust(DASH.out0, 10, ih * 0.22, 0.8);
+    if (!gone) {
+      const sq = t > DASH.in1 && t < DASH.in1 + 0.15 ? Math.sin((t - DASH.in1) / 0.15 * Math.PI) * 0.08 : 0;
+      const bob = moving ? 0 : Math.sin(t * 45) * ih * 6e-3;
+      if (moving > 0.05) {
+        g.globalAlpha = 0.6 * moving;
+        g.strokeStyle = "#fff";
+        g.lineWidth = Math.max(2, ih / 60);
+        const rr = rng(Math.round(t * 30));
+        for (let i = 0; i < 7; i++) {
+          const ly = y0 + ih * (0.15 + rr() * 0.7);
+          g.beginPath();
+          g.moveTo(x - iw * (0.4 + rr()), ly);
+          g.lineTo(x + iw * 0.1, ly);
+          g.stroke();
+        }
+        for (let k = 3; k >= 1; k--) {
+          g.globalAlpha = 0.18 * moving * (4 - k) / 3;
+          g.drawImage(F.c, x - pad - k * iw * 0.12 * moving, y0 - pad, iw + 2 * pad, ih + 2 * pad);
+        }
+      }
+      g.globalAlpha = 1 - clamp((t - 1.72) / 0.25);
+      g.translate(x + iw / 2, y0 + ih + bob);
+      g.scale(1 + sq, 1 - sq);
+      g.drawImage(F.c, -iw / 2 - pad, -ih - pad, iw + 2 * pad, ih + 2 * pad);
+    }
     g.restore();
   }
   function frameAt(g, W, H, layout, t, fig, align) {
@@ -24364,7 +24433,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     g.restore();
     band(g, W, layout.k, H / 2 - layout.gap, 1, t, frame);
     band(g, W, layout.k, H / 2 + layout.gap, -1, t, frame);
-    if (fig) figure(g, W, H, fig, t, align);
+    if (fig) (align === "dash" ? dash : figure)(g, W, H, fig, t, align);
     words(g, W, H, layout.text, layout.fs, t);
     const fl = 1 - clamp(t / 0.18);
     if (fl > 0) {
@@ -24416,7 +24485,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       g.scale(dpr, dpr);
       const layout = layoutFor(g, W, H, text);
       layout.text = textLayers(layout.lines, layout.fs, dpr);
-      const fig = img && figureLayer(img, W, H, dpr);
+      const fig = img && figureLayer(img, W, H, dpr, align);
       try {
         sound.currentTime = 0;
         sound.volume = 0.9;
@@ -24424,12 +24493,21 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         });
       } catch {
       }
+      const bip = fig && align === "dash" && setTimeout(() => {
+        try {
+          bipbip.currentTime = 0;
+          bipbip.play().catch(() => {
+          });
+        } catch {
+        }
+      }, DASH.in1 * 1e3 + 100);
       const t0 = performance.now();
       let done = false;
       const end = () => {
         if (done) return;
         done = true;
         sound.pause();
+        clearTimeout(bip);
         ov.remove();
         resolve();
       };
@@ -24461,7 +24539,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     blocker: { text: "BLOCKER", img: "center" },
     double: { text: "DOUBLE ATTACK", img: "right" },
     banish: { text: "BANISH", img: "right" },
-    rush: { text: "RUSH", img: "right" }
+    rush: { text: "RUSH", img: "dash" }
   };
   function playKeyword(k, imgSrc) {
     const kw = KEYWORDS2[k];
