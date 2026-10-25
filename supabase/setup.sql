@@ -110,6 +110,11 @@ create table if not exists public.pending_reveals (
   primary key (user_id, card_id)
 );
 
+-- Surprise : un joueur invité « en surprise » voit un écran noir jusqu'à ce que le propriétaire lance
+-- la surprise (wait → go), puis il ouvre son booster géant et découvre le jeu (→ done).
+alter table public.invites add column if not exists surprise boolean not null default false;
+alter table public.profiles add column if not exists surprise text check (surprise in ('wait', 'go', 'done'));
+
 -- ---------- Fonctions utilitaires ----------
 
 -- Met une carte offerte de côté pour l'ouverture façon booster (à appeler AVANT de l'ajouter à la collection).
@@ -158,8 +163,8 @@ begin
   if not found then raise exception 'Invitation invalide ou déjà utilisée.'; end if;
   if inv.username <> uname then raise exception 'Cette invitation est réservée à un autre pseudo.'; end if;
   -- Boosters offerts ; la réserve de boosters gratuits démarre à zéro.
-  insert into public.profiles (id, username, role, boosters, free_anchor)
-    values (new.id, uname, 'player', inv.boosters, now());
+  insert into public.profiles (id, username, role, boosters, free_anchor, surprise)
+    values (new.id, uname, 'player', inv.boosters, now(), case when inv.surprise then 'wait' end);
   update public.invites set used_by = new.id, used_at = now() where token = inv.token;
   if inv.starter_id is not null and exists (select 1 from public.starter_decks where id = inv.starter_id) then
     perform public.grant_starter(new.id, inv.starter_id);
@@ -219,7 +224,7 @@ begin
   return json_build_object(
     'username', p.username, 'role', p.role, 'free', free, 'free_max', 6, 'gifted', p.boosters,
     'next_free_at', case when free >= 6 then null else p.free_anchor + (free + 1) * interval '10 minutes' end,
-    'starter_claimed', p.starter_claimed, 'now', now());
+    'starter_claimed', p.starter_claimed, 'surprise', p.surprise, 'now', now());
 end $$;
 
 -- Tire une carte de la rareté voulue ; si aucune n'est disponible, prend la rareté la plus proche
@@ -448,8 +453,78 @@ begin
   if t is null or t !~ '^[0-9a-f-]{36}$' then return null; end if;
   select * into inv from public.invites where token = t::uuid and used_by is null;
   if not found then return null; end if;
-  return json_build_object('username', inv.username, 'boosters', inv.boosters,
+  return json_build_object('username', inv.username, 'boosters', inv.boosters, 'surprise', inv.surprise,
     'starter', (select name from public.starter_decks where id = inv.starter_id));
+end $$;
+
+-- ---------- Surprise ----------
+
+-- Invitation « surprise » : comme une invitation normale, mais le joueur attend devant un écran noir.
+create or replace function public.admin_create_surprise(uname text, starter text, nb int) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare t uuid;
+begin
+  t := public.admin_create_invite(uname, starter, nb);
+  update public.invites set surprise = true where token = t;
+  return t;
+end $$;
+
+-- Joueur déjà inscrit : il passe en attente (écran noir), reçoit le deck préconstruit (s'il ne l'a pas déjà
+-- reçu) et des boosters.
+create or replace function public.admin_prepare_surprise(target text, starter text, nb int) returns void
+language plpgsql security definer set search_path = public as $$
+declare p public.profiles;
+begin
+  if not public.is_admin() then raise exception 'Réservé aux admins.'; end if;
+  select * into p from public.profiles where username = lower(trim(target)) for update;
+  if not found then raise exception 'Joueur introuvable.'; end if;
+  update public.profiles set surprise = 'wait', boosters = boosters + coalesce(nb, 0) where id = p.id;
+  if coalesce(starter, '') <> '' and not p.starter_claimed then perform public.grant_starter(p.id, starter); end if;
+end $$;
+
+-- Lance la surprise (target null = tous les joueurs en attente). Renvoie le nombre de joueurs concernés.
+create or replace function public.admin_surprise_go(target text) returns int
+language plpgsql security definer set search_path = public as $$
+declare n int;
+begin
+  if not public.is_admin() then raise exception 'Réservé aux admins.'; end if;
+  update public.profiles set surprise = 'go' where surprise = 'wait' and (target is null or username = lower(target));
+  get diagnostics n = row_count;
+  return n;
+end $$;
+
+-- Joueurs concernés par une surprise, et invitations surprise pas encore utilisées.
+create or replace function public.admin_surprise_list() returns table (username text, state text)
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.is_admin() then raise exception 'Réservé aux admins.'; end if;
+  return query
+    select p.username, p.surprise from public.profiles p where p.surprise is not null
+    union all
+    select i.username, 'invite' from public.invites i where i.surprise and i.used_by is null
+    order by 1;
+end $$;
+
+-- Le joueur a fini la découverte.
+create or replace function public.surprise_done() returns void
+language sql security definer set search_path = public as $$
+  update public.profiles set surprise = 'done' where id = auth.uid() and surprise = 'go';
+$$;
+
+-- Compte de test uniquement (pseudo commençant par « test ») : on efface tout et on rejoue la surprise.
+create or replace function public.admin_reset_test(target text, starter text, nb int) returns void
+language plpgsql security definer set search_path = public as $$
+declare p public.profiles;
+begin
+  if not public.is_admin() then raise exception 'Réservé aux admins.'; end if;
+  select * into p from public.profiles where username = lower(trim(target)) for update;
+  if not found then raise exception 'Joueur introuvable.'; end if;
+  if p.username !~ '^test' or p.role <> 'player' then raise exception 'Réservé aux comptes de test (pseudo commençant par « test »).'; end if;
+  delete from public.pending_reveals where user_id = p.id;
+  delete from public.decks where user_id = p.id;
+  delete from public.collection where user_id = p.id;
+  update public.profiles set surprise = 'wait', starter_claimed = false, boosters = coalesce(nb, 10), free_anchor = now() where id = p.id;
+  if coalesce(starter, '') <> '' then perform public.grant_starter(p.id, starter); end if;
 end $$;
 
 -- ---------- Sécurité : RLS ----------
@@ -686,7 +761,9 @@ grant execute on function public.is_admin(), public.booster_status(), public.ope
   public.admin_create_invite(text, text, int), public.is_revealed(text), public.open_boosters(int),
   public.record_game(boolean, text, int, boolean), public.check_achievements(),
   public.is_owner(), public.gm_collection(text), public.gm_add_card(text, text, int), public.gm_reset_collection(text),
-  public.gm_restore_backup(bigint), public.gm_backups(), public.take_reveals()
+  public.gm_restore_backup(bigint), public.gm_backups(), public.take_reveals(),
+  public.admin_create_surprise(text, text, int), public.admin_prepare_surprise(text, text, int), public.admin_surprise_go(text),
+  public.admin_surprise_list(), public.surprise_done(), public.admin_reset_test(text, text, int)
   to authenticated;
 grant usage on schema public to anon;
 grant execute on function public.invite_info(text) to anon, authenticated;

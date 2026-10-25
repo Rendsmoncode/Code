@@ -2,9 +2,10 @@
 // Faux serveur Supabase en mémoire, branché via page.route.
 export function makeMock() {
   const st = { users: {}, profiles: {}, cards: {}, starters: {}, coll: {}, decks: {}, tokens: {}, invites: {}, stats: {}, ach: {} };
-  const grantStarter = (uid, sid) => {
+  const grantStarter = (uid, sid, reveal = false) => {
     const s = st.starters[sid]; if (!s) return;
     add(uid, s.leader, 1); for (const [k, v] of Object.entries(s.cards)) add(uid, k, v);
+    if (reveal) (st.reveals ||= {})[uid] = [...(st.reveals[uid] || []), { id: s.leader, n: 1, new: true }, ...Object.entries(s.cards).map(([id, n]) => ({ id, n, new: true }))];
     const id = 'deck-' + Math.random(); st.decks[id] = { id, user_id: uid, name: s.name, leader: s.leader, cards: s.cards };
     st.profiles[uid].starter_claimed = true;
   };
@@ -14,7 +15,7 @@ export function makeMock() {
   const R = ['C', 'UC', 'R', 'UR', 'L', 'S'];
   const pick = (r) => { for (let i = R.indexOf(r); i >= 0; i--) { const l = Object.values(st.cards).filter((c) => c.in_boosters && c.rarity === R[i]); if (l.length) return l[Math.floor(Math.random() * l.length)].id; } return Object.keys(st.cards)[0]; };
   const add = (uid, id, n) => { st.coll[uid] ||= {}; st.coll[uid][id] = (st.coll[uid][id] || 0) + n; };
-  const status = (p) => ({ username: p.username, role: p.role, free: p.free, free_max: 6, gifted: p.boosters, next_free_at: p.free < 6 ? new Date(Date.now() + 65000).toISOString() : null, starter_claimed: p.starter_claimed, now: new Date().toISOString() });
+  const status = (p) => ({ username: p.username, role: p.role, free: p.free, free_max: 6, gifted: p.boosters, next_free_at: p.free < 6 ? new Date(Date.now() + 65000).toISOString() : null, starter_claimed: p.starter_claimed, surprise: p.surprise || null, now: new Date().toISOString() });
   async function handle(route) {
     const req = route.request(); const url = new URL(req.url()); const path = url.pathname; const m = req.method();
     const body = req.postData() ? (() => { try { return JSON.parse(req.postData()); } catch { return null; } })() : null;
@@ -26,12 +27,13 @@ export function makeMock() {
       const inv = st.invites[body.data.invite];
       if (!first && (!inv || inv.used_by || inv.username !== name)) return json(route, { msg: 'Database error saving new user' }, 500);
       const id = 'u' + (Object.keys(st.users).length + 1); const u = { id, email: body.email, aud: 'authenticated', role: 'authenticated', user_metadata: { username: name }, app_metadata: {}, created_at: new Date().toISOString() };
-      st.users[id] = { u, pw: body.password }; st.profiles[id] = { username: name, role: first ? 'owner' : 'player', boosters: inv ? inv.boosters : 0, free: first ? 6 : 0, starter_claimed: false };
-      if (inv) { inv.used_by = id; inv.used_at = new Date().toISOString(); if (inv.starter_id) grantStarter(id, inv.starter_id); }
+      st.users[id] = { u, pw: body.password }; st.profiles[id] = { username: name, role: first ? 'owner' : 'player', boosters: inv ? inv.boosters : 0, free: first ? 6 : 0, starter_claimed: false, surprise: inv?.surprise ? 'wait' : null };
+      if (inv) { inv.used_by = id; inv.used_at = new Date().toISOString(); if (inv.starter_id) grantStarter(id, inv.starter_id, inv.surprise); }
       return json(route, session(u));
     }
     if (path === '/auth/v1/token') { const e = Object.values(st.users).find((x) => x.u.email === body.email && x.pw === body.password); return e ? json(route, session(e.u)) : json(route, { error: 'invalid_grant', error_description: 'Invalid login credentials', msg: 'Invalid login credentials' }, 400); }
     if (path === '/auth/v1/logout') return route.fulfill({ status: 204 });
+    if (path === '/auth/v1/user' && m === 'PUT') { st.users[uid].pw = body.password; return json(route, st.users[uid].u); }
     if (path === '/auth/v1/user') return json(route, st.users[uid].u);
     if (path === '/storage/v1/object/sign/cards') return json(route, (body.paths || []).map((p) => ({ path: p, signedURL: `/object/sign/cards/${p}?token=t`, signedUrl: `https://mock.supabase.co/storage/v1/object/sign/cards/${p}?token=t`, error: null })));
     if (path === '/storage/v1/object/list/cards') return json(route, (st.files || []).filter((f) => f.startsWith(`${body.prefix}/`)).map((f) => ({ name: f.slice(body.prefix.length + 1), id: f })).sort((a, b) => (a.name < b.name ? 1 : -1)));
@@ -66,7 +68,7 @@ export function makeMock() {
       if (fn === 'claim_starter') { const s = st.starters[body.starter_id]; if (st.starterReveal) (st.reveals ||= {})[uid] = [{ id: s.leader, n: 1, new: true }, ...Object.entries(s.cards).map(([id, n]) => ({ id, n, new: true }))]; add(uid, s.leader, 1); for (const [k, v] of Object.entries(s.cards)) add(uid, k, v); const id = 'deck-' + Date.now(); st.decks[id] = { id, user_id: uid, name: s.name, leader: s.leader, cards: s.cards }; p.starter_claimed = true; return json(route, id); }
       if (fn === 'admin_give_boosters') { if (!['admin', 'owner'].includes(p.role)) return json(route, { message: 'Réservé aux admins.' }, 400); const t = Object.values(st.profiles).filter((x) => body.target == null || x.username === body.target); t.forEach((x) => { x.boosters += body.amount; }); return json(route, t.length); }
       if (fn === 'one_of_one_owners') return json(route, Object.entries(st.coll).flatMap(([u, c]) => Object.keys(c).filter((id) => st.cards[id]?.rarity === 'S').map((id) => ({ card_id: id, username: st.profiles[u]?.username }))));
-      if (fn === 'invite_info') { const v = st.invites[body.t]; return json(route, v && !v.used_by ? { username: v.username, boosters: v.boosters, starter: st.starters[v.starter_id]?.name || null } : null); }
+      if (fn === 'invite_info') { const v = st.invites[body.t]; return json(route, v && !v.used_by ? { username: v.username, boosters: v.boosters, surprise: Boolean(v.surprise), starter: st.starters[v.starter_id]?.name || null } : null); }
       if (fn === 'admin_create_invite') {
         if (!['admin', 'owner'].includes(p?.role)) return json(route, { message: 'Réservé aux admins.' }, 400);
         const u = body.uname.trim().toLowerCase();
@@ -74,6 +76,19 @@ export function makeMock() {
         const token = crypto.randomUUID(); st.invites[token] = { token, username: u, starter_id: body.starter || null, boosters: body.nb, used_by: null, created_at: new Date().toISOString() };
         return json(route, token);
       }
+      if (fn === 'admin_create_surprise') {
+        const u = body.uname.trim().toLowerCase();
+        if (Object.values(st.profiles).some((x) => x.username === u)) return json(route, { message: 'Ce pseudo est déjà pris par un joueur.' }, 400);
+        const token = crypto.randomUUID(); st.invites[token] = { token, username: u, starter_id: body.starter || null, boosters: body.nb, used_by: null, surprise: true, created_at: new Date().toISOString() };
+        return json(route, token);
+      }
+      if (fn === 'admin_surprise_list') return json(route, [...Object.values(st.profiles).filter((x) => x.surprise).map((x) => ({ username: x.username, state: x.surprise })),
+        ...Object.values(st.invites).filter((i) => i.surprise && !i.used_by).map((i) => ({ username: i.username, state: 'invite' }))]);
+      if (fn === 'admin_surprise_go') { const t = Object.values(st.profiles).filter((x) => x.surprise === 'wait' && (body.target == null || x.username === body.target)); t.forEach((x) => { x.surprise = 'go'; }); return json(route, t.length); }
+      if (fn === 'surprise_done') { if (p.surprise === 'go') p.surprise = 'done'; return json(route, null); }
+      if (fn === 'admin_reset_test') { const u = tu(); const t = st.profiles[u]; if (!t || !t.username.startsWith('test')) return json(route, { message: 'Réservé aux comptes de test.' }, 400);
+        st.coll[u] = {}; (st.reveals ||= {})[u] = []; for (const k of Object.keys(st.decks)) if (st.decks[k].user_id === u) delete st.decks[k];
+        Object.assign(t, { surprise: 'wait', starter_claimed: false, boosters: body.nb, free: 0 }); if (body.starter) grantStarter(u, body.starter, true); return json(route, null); }
       if (fn === 'admin_set_role') { const t = Object.values(st.profiles).find((x) => x.username === body.target); t.role = body.new_role; return json(route, null); }
     }
     const table = path.replace('/rest/v1/', '');

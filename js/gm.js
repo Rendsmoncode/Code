@@ -4,12 +4,14 @@ import {
   S, listPlayers, giveBoosters, refreshCollection, gmCollection, gmAddCard, gmResetCollection, gmRestoreBackup, gmBackups,
 } from './store.js';
 import { RARITIES, RARITY_ORDER, esc, cardHTML } from './cards.js';
+import { mountSurprise } from './gm-surprise.js';
 
 export function initGM() {
   const el = document.getElementById('tab-gm');
   el.innerHTML = `
   <div class="gm">
     <div class="ach-head"><h2>Game Master</h2></div>
+    <section class="panel gm-surprise"></section>
     <section class="panel gm-who">
       <label>Joueur <select class="gm-player" aria-label="Joueur"></select></label>
       <span class="gm-sum muted"></span>
@@ -39,6 +41,7 @@ export function initGM() {
     </section>
   </div>`;
   const q = (s) => el.querySelector(s);
+  mountSurprise(q('.gm-surprise'));
   let player = '';
   let coll = {};
   let loaded = false;

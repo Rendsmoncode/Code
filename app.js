@@ -7751,26 +7751,26 @@ Suggested solution: ${env.workaround}`;
   var RECONNECT_INTERVALS = [1e3, 2e3, 5e3, 1e4];
   var DEFAULT_RECONNECT_FALLBACK = 1e4;
   function createMemorySessionStorage() {
-    const store2 = /* @__PURE__ */ new Map();
+    const store3 = /* @__PURE__ */ new Map();
     return {
       get length() {
-        return store2.size;
+        return store3.size;
       },
       clear() {
-        store2.clear();
+        store3.clear();
       },
       getItem(key2) {
-        return store2.has(key2) ? store2.get(key2) : null;
+        return store3.has(key2) ? store3.get(key2) : null;
       },
       key(index) {
         var _a;
-        return (_a = Array.from(store2.keys())[index]) !== null && _a !== void 0 ? _a : null;
+        return (_a = Array.from(store3.keys())[index]) !== null && _a !== void 0 ? _a : null;
       },
       removeItem(key2) {
-        store2.delete(key2);
+        store3.delete(key2);
       },
       setItem(key2, value) {
-        store2.set(key2, String(value));
+        store3.set(key2, String(value));
       }
     };
   }
@@ -13834,16 +13834,16 @@ Suggested solution: ${env.workaround}`;
   };
 
   // node_modules/@supabase/auth-js/dist/module/lib/local-storage.js
-  function memoryLocalStorageAdapter(store2 = {}) {
+  function memoryLocalStorageAdapter(store3 = {}) {
     return {
       getItem: (key2) => {
-        return store2[key2] || null;
+        return store3[key2] || null;
       },
       setItem: (key2, value) => {
-        store2[key2] = value;
+        store3[key2] = value;
       },
       removeItem: (key2) => {
-        delete store2[key2];
+        delete store3[key2];
       }
     };
   }
@@ -21752,6 +21752,28 @@ ${suffix}`;
   async function deleteInvite(token) {
     check(await sb.from("invites").delete().eq("token", token));
   }
+  async function createSurprise(username, starterId, boosters) {
+    return check(await sb.rpc("admin_create_surprise", { uname: username, starter: starterId || "", nb: boosters }));
+  }
+  async function prepareSurprise(username, starterId, boosters) {
+    check(await sb.rpc("admin_prepare_surprise", { target: username, starter: starterId || "", nb: boosters }));
+  }
+  async function surpriseList() {
+    return check(await sb.rpc("admin_surprise_list"));
+  }
+  async function surpriseGo(target = null) {
+    return check(await sb.rpc("admin_surprise_go", { target: target || null }));
+  }
+  async function surpriseDone() {
+    check(await sb.rpc("surprise_done"));
+  }
+  async function resetTest(username, starterId, boosters) {
+    check(await sb.rpc("admin_reset_test", { target: username, starter: starterId || "", nb: boosters }));
+  }
+  async function setPassword(password) {
+    if (String(password).length < 6) throw new Error("6 caract\xE8res minimum.");
+    check(await sb.auth.updateUser({ password }));
+  }
   async function setRole(target, role) {
     check(await sb.rpc("admin_set_role", { target, new_role: role }));
   }
@@ -22231,7 +22253,7 @@ ${suffix}`;
   var mmss = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
   var revealFn = null;
   async function checkGifts() {
-    if (!revealFn || busy || document.querySelector(".bx")) return;
+    if (!revealFn || busy || document.querySelector(".bx") || document.body.classList.contains("surprise")) return;
     const list = await takeReveals();
     if (!list.length) return;
     await refreshCollection().catch(() => {
@@ -22262,6 +22284,22 @@ ${suffix}`;
     qty = 1;
     document.querySelector("#tab-boosters .bs-open")?.click();
   };
+  var openMany = (n3) => {
+    qty = Math.max(1, Math.min(n3, maxQty(boosterState())));
+    document.querySelector("#tab-boosters .bs-open")?.click();
+  };
+  async function revealPending() {
+    const list = await takeReveals();
+    await refreshCollection().catch(() => {
+    });
+    const pulls = list.filter((g) => S.byId[g.id]).sort((x, y) => rank(x.id) - rank(y.id));
+    if (!pulls.length || !revealFn) return false;
+    busy = true;
+    const closed = new Promise((ok) => window.addEventListener("nk:reveal-closed", ok, { once: true }));
+    revealFn(pulls, false, true);
+    await closed;
+    return true;
+  }
   function initBoosters() {
     const el = document.getElementById("tab-boosters");
     el.innerHTML = `
@@ -22475,7 +22513,8 @@ ${suffix}`;
           for (const ev of ["pointerup", "pointercancel"]) document.removeEventListener(ev, release);
           busy = false;
           renderHead();
-          if (gift) checkGifts().catch(() => {
+          window.dispatchEvent(new CustomEvent("nk:reveal-closed", { detail: { gift, again: d === "again" } }));
+          if (gift && !document.body.classList.contains("surprise")) checkGifts().catch(() => {
           });
           if (d === "again") {
             qty = Math.max(1, Math.min(10, pulls.length / 5));
@@ -22625,6 +22664,22 @@ ${suffix}`;
     const el = document.createElement("div");
     el.className = "auth";
     document.body.append(el);
+    if (!invite?.surprise) document.documentElement.classList.remove("sp-boot");
+    if (invite?.surprise) {
+      el.className = "auth surprise-black";
+      const pw = Array.from(crypto.getRandomValues(new Uint8Array(18)), (b) => b.toString(36)).join("").slice(0, 24);
+      try {
+        localStorage.setItem("nk-auto-pass", JSON.stringify({ u: invite.username, p: pw }));
+        localStorage.setItem("nk-surprise", "1");
+        await signUp(invite.username, pw, token);
+        const url = new URL(location.href);
+        url.searchParams.delete("invite");
+        location.replace(url.href);
+        return;
+      } catch (err) {
+        el.className = "auth";
+      }
+    }
     render3();
     function render3() {
       el.innerHTML = `
@@ -27759,12 +27814,150 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     render3();
   }
 
+  // js/gm-surprise.js
+  var TEST = { user: "test", deck: "test-deck", card: "test-card", leader: "test-leader" };
+  var STATE2 = { invite: "lien pas encore ouvert", wait: "\xE9cran noir (en attente)", go: "surprise lanc\xE9e", done: "termin\xE9e" };
+  function mountSurprise(el) {
+    el.innerHTML = `
+    <h3>Surprise</h3>
+    <p class="muted small">Le joueur ouvre son lien et tombe sur un \xE9cran noir. Quand tu lances la surprise, son booster g\xE9ant (\xE0 son pr\xE9nom)
+      arrive avec son deck dedans, puis l'interface appara\xEEt, il ouvre ses boosters et d\xE9couvre le gameplay.</p>
+    <div class="sp-list-gm"></div>
+    <div class="row-btns"><button class="btn main" data-sp="go">Lancer la surprise pour tous</button>
+      <button class="btn ghost" data-sp="refresh">Actualiser</button></div>
+    <h3>Nouvelle invitation surprise</h3>
+    <div class="row-btns">
+      <input class="sp-u" placeholder="pseudo (ex. mathieu)" maxlength="20" aria-label="Pseudo">
+      <select class="sp-st" aria-label="Deck pr\xE9construit"></select>
+      <label>Boosters <input class="sp-nb" type="number" min="0" max="100" value="10"></label>
+      <button class="btn" data-sp="invite">Cr\xE9er le lien</button>
+      <button class="btn ghost" data-sp="prepare" title="Pour un joueur qui a d\xE9j\xE0 un compte">Joueur d\xE9j\xE0 inscrit</button>
+    </div>
+    <p class="sp-link"></p>
+    <h3>Compte de test</h3>
+    <p class="muted small">Pseudo \xAB test \xBB, deck de 50 cartes \xAB Test \xBB et 10 boosters. Ouvre le lien dans une fen\xEAtre de navigation priv\xE9e,
+      puis lance la surprise ici. \xAB Rejouer \xBB remet le compte test \xE0 z\xE9ro et le renvoie sur l'\xE9cran noir.</p>
+    <div class="row-btns"><button class="btn" data-sp="test">Pr\xE9parer le compte test</button>
+      <button class="btn ghost" data-sp="retest">Rejouer la surprise du compte test</button></div>
+    <p class="msg sp-msg" role="status"></p>`;
+    const q = (s) => el.querySelector(s);
+    const msg2 = (t, err = false) => {
+      q(".sp-msg").textContent = t;
+      q(".sp-msg").classList.toggle("err", err);
+    };
+    const showLink = (tok, who) => {
+      const url = inviteLink(tok);
+      q(".sp-link").innerHTML = `Lien pour <b>${esc(who)}</b> : <input readonly value="${esc(url)}" aria-label="Lien"> <button class="btn small" data-sp="copy">Copier</button>`;
+    };
+    async function refresh() {
+      q(".sp-st").innerHTML = S.starters.map((d) => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join("") || '<option value="">Aucun deck pr\xE9construit</option>';
+      const list = await surpriseList().catch(() => null);
+      if (!list) {
+        q(".sp-list-gm").innerHTML = '<p class="msg err">Relance le script supabase/setup.sql dans Supabase pour activer la surprise.</p>';
+        return;
+      }
+      q(".sp-list-gm").innerHTML = list.length ? `<table class="tbl"><tbody>${list.map((r) => `<tr><td><b>${esc(r.username)}</b></td><td>${STATE2[r.state] || r.state}</td>
+      <td>${r.state === "wait" ? `<button class="btn small" data-go="${esc(r.username)}">Lancer</button>` : ""}</td></tr>`).join("")}</tbody></table>` : '<p class="muted">Aucune surprise en cours.</p>';
+    }
+    async function prepareTest() {
+      const cards = [];
+      if (!S.byId[TEST.leader]) {
+        cards.push({
+          ...newCard(),
+          id: TEST.leader,
+          name: "Test",
+          type: "leader",
+          colors: ["jaune", "violet"],
+          life: 5,
+          power: 5e3,
+          counter: 0,
+          traits: "Test",
+          inBoosters: false
+        });
+      }
+      if (!S.byId[TEST.card]) {
+        cards.push({
+          ...newCard(),
+          id: TEST.card,
+          name: "Test",
+          type: "character",
+          colors: ["jaune"],
+          cost: 1,
+          power: 1e3,
+          counter: 1e3,
+          traits: "Test",
+          keywords: ["unlimited"],
+          inBoosters: false
+        });
+      }
+      if (cards.length) await saveCards(cards);
+      if (!S.starters.some((d) => d.id === TEST.deck)) {
+        await saveDeck({ id: TEST.deck, name: "Test", leader: TEST.leader, cards: { [TEST.card]: 50 } }, "starter_decks");
+      }
+      const players = await listPlayers();
+      if (players.some((p) => p.username === TEST.user)) {
+        await resetTest(TEST.user, TEST.deck, 10);
+        msg2("Le compte test existe d\xE9j\xE0 : il a \xE9t\xE9 remis \xE0 z\xE9ro et attend devant l'\xE9cran noir (connecte-toi avec lui).");
+        return;
+      }
+      const tok = await createSurprise(TEST.user, TEST.deck, 10);
+      showLink(tok, TEST.user);
+      msg2("Compte test pr\xEAt : ouvre le lien dans une fen\xEAtre priv\xE9e.");
+    }
+    el.addEventListener("click", async (e) => {
+      const go = e.target.closest("[data-go]")?.dataset.go;
+      const act = e.target.closest("[data-sp]")?.dataset.sp;
+      if (!go && !act) return;
+      try {
+        if (go) {
+          await surpriseGo(go);
+          msg2(`Surprise lanc\xE9e pour ${go} !`);
+        } else if (act === "go") {
+          if (!confirm("Lancer la surprise pour tous les joueurs devant l'\xE9cran noir ?")) return;
+          const n3 = await surpriseGo(null);
+          msg2(n3 ? `Surprise lanc\xE9e pour ${n3} joueur${n3 > 1 ? "s" : ""} !` : "Personne n'attend devant l'\xE9cran noir.");
+        } else if (act === "invite" || act === "prepare") {
+          const u = q(".sp-u").value.trim().toLowerCase();
+          const st = q(".sp-st").value;
+          const nb = Math.max(0, Number(q(".sp-nb").value) || 0);
+          if (!u) {
+            msg2("Indique un pseudo.", true);
+            return;
+          }
+          if (act === "invite") {
+            showLink(await createSurprise(u, st, nb), u);
+            msg2("Invitation surprise cr\xE9\xE9e : envoie le lien.");
+          } else {
+            await prepareSurprise(u, st, nb);
+            msg2(`${u} passera sur l'\xE9cran noir \xE0 sa prochaine visite (ou en rechargeant la page).`);
+          }
+        } else if (act === "test") await prepareTest();
+        else if (act === "retest") {
+          await resetTest(TEST.user, TEST.deck, 10);
+          msg2("Compte test remis \xE0 z\xE9ro : recharge sa page, il est devant l'\xE9cran noir.");
+        } else if (act === "copy") {
+          const i = q(".sp-link input");
+          i.select();
+          navigator.clipboard?.writeText(i.value).catch(() => {
+          });
+          msg2("Lien copi\xE9.");
+          return;
+        }
+        await refresh();
+      } catch (err) {
+        msg2(err.message, true);
+      }
+    });
+    refresh();
+  }
+
   // js/gm.js
   function initGM() {
     const el = document.getElementById("tab-gm");
     el.innerHTML = `
   <div class="gm">
     <div class="ach-head"><h2>Game Master</h2></div>
+    <section class="panel gm-surprise"></section>
     <section class="panel gm-who">
       <label>Joueur <select class="gm-player" aria-label="Joueur"></select></label>
       <span class="gm-sum muted"></span>
@@ -27794,6 +27987,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     </section>
   </div>`;
     const q = (s) => el.querySelector(s);
+    mountSurprise(q(".gm-surprise"));
     let player2 = "";
     let coll = {};
     let loaded = false;
@@ -27924,6 +28118,261 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     }).observe(el, { attributes: true, attributeFilter: ["hidden"] });
   }
 
+  // js/surprise.js
+  var STEP_KEY = "nk-surprise-step";
+  var wait3 = (ms) => new Promise((r) => setTimeout(r, ms));
+  var store2 = {
+    get: () => {
+      try {
+        return localStorage.getItem(STEP_KEY);
+      } catch {
+        return null;
+      }
+    },
+    set: (v) => {
+      try {
+        localStorage.setItem(STEP_KEY, v);
+      } catch {
+      }
+    }
+  };
+  var cap3 = (x) => x.charAt(0).toUpperCase() + x.slice(1);
+  var surpriseActive = () => ["wait", "go"].includes(S.status?.surprise);
+  async function startSurprise(show2) {
+    document.body.classList.add("surprise");
+    try {
+      localStorage.setItem("nk-surprise", "1");
+    } catch {
+    }
+    const ov = document.createElement("div");
+    ov.className = "sp-ov";
+    ov.innerHTML = '<div class="sp-stage"></div>';
+    document.body.append(ov);
+    ov.addEventListener("pointerdown", unlockAudio, { once: true });
+    while (S.status?.surprise === "wait") {
+      await wait3(1500);
+      await refreshStatus().catch(() => {
+      });
+    }
+    let step = store2.get() || "booster";
+    if (step === "booster") {
+      await giantBooster(ov);
+      const had = await revealPending();
+      if (!had) await wait3(200);
+      step = "ui";
+      store2.set(step);
+    }
+    await revealInterface(ov, show2);
+    if (step === "ui" || step === "boosters") {
+      store2.set("boosters");
+      await tenBoosters(show2);
+    }
+    store2.set("tuto");
+    await tutorial();
+    store2.set("pass");
+    await finalStep();
+    await surpriseDone().catch(() => {
+    });
+    store2.set("");
+    try {
+      localStorage.removeItem("nk-surprise");
+    } catch {
+    }
+    document.body.classList.remove("surprise");
+    show2("home");
+    checkGifts().catch(() => {
+    });
+  }
+  function giantBooster(ov) {
+    const name2 = (S.status?.username || "").toUpperCase();
+    const d = S.decks?.[0];
+    const total = d ? Object.values(d.cards || {}).reduce((a, n3) => a + n3, 0) + (d.leader ? 1 : 0) : 0;
+    const stage = ov.querySelector(".sp-stage");
+    stage.innerHTML = `<div class="sp-glow"></div><div class="sp-rays"></div>
+    <button class="gpack" aria-label="Ouvrir ton booster">
+      <span class="gp-crimp gp-top"></span>
+      <span class="gp-body">
+        <span class="gp-foil"></span>
+        <span class="gp-ed">\xC9dition personnelle</span>
+        <span class="gp-logo">${logoSVG()}</span>
+        <span class="gp-name" style="--len:${name2.length}">${esc(name2)}</span>
+        <span class="gp-sub">Ton deck${total ? ` \xB7 ${total} cartes` : ""}</span>
+        <span class="gp-code">N\xB0 001</span>
+      </span>
+      <span class="gp-crimp gp-bot"></span>
+    </button>
+    <p class="sp-hint">Touche ton booster pour l'ouvrir</p>`;
+    ov.classList.add("go");
+    sfx2("sons/cling.mp3", 0.8, 1900);
+    return new Promise((resolve) => {
+      const pack = stage.querySelector(".gpack");
+      pack.addEventListener("click", async () => {
+        if (pack.classList.contains("tear")) return;
+        unlockAudio();
+        pack.classList.add("tear");
+        ov.classList.add("burst");
+        sfx2("sons/kwfx.mp3", 0.9);
+        await wait3(1100);
+        stage.innerHTML = "";
+        ov.classList.remove("go", "burst");
+        ov.classList.add("veil");
+        resolve();
+      }, { once: false });
+    });
+  }
+  async function revealInterface(ov, show2) {
+    show2("home");
+    ov.classList.remove("veil");
+    document.documentElement.classList.remove("sp-boot");
+    ov.classList.add("open");
+    document.body.classList.add("sp-intro");
+    await wait3(1700);
+    ov.remove();
+    await wait3(900);
+    document.body.classList.remove("sp-intro");
+  }
+  async function tenBoosters(show2) {
+    const n3 = Math.min(10, boosterState()?.total || 0);
+    if (!n3) return;
+    await coach(`<b>${n3} booster${n3 > 1 ? "s" : ""}</b> t'attend${n3 > 1 ? "ent" : ""} !`, `Ouvrir mes ${n3} boosters`);
+    show2("boosters");
+    await wait3(300);
+    for (; ; ) {
+      const closed = new Promise((ok) => window.addEventListener("nk:reveal-closed", (e) => ok(e.detail), { once: true }));
+      openMany(n3);
+      const d = await closed;
+      if (!d.again) break;
+    }
+  }
+  function coach(html, label) {
+    return new Promise((resolve) => {
+      const c = document.createElement("div");
+      c.className = "sp-coach";
+      c.innerHTML = `<p>${html}</p><button class="btn main">${esc(label)}</button>`;
+      document.body.append(c);
+      c.querySelector("button").addEventListener("click", () => {
+        c.classList.add("out");
+        setTimeout(() => c.remove(), 300);
+        resolve();
+      });
+    });
+  }
+  function myLeader() {
+    const d = S.decks?.[0];
+    return d ? S.byId[d.leader] : null;
+  }
+  function slides() {
+    const leader = myLeader();
+    const kwBtn = (k, t) => `<button class="btn small sp-kw" data-kw="${k}">${t}</button>`;
+    return [
+      { t: "Le but du jeu", h: `<p>Fais tomber les <b>Vies</b> du Leader adverse \xE0 z\xE9ro\u2026 puis touche-le <b>une derni\xE8re fois</b>. C'est gagn\xE9.</p><p class="muted">Chaque joueur commence avec 5 cartes en main.</p>` },
+      { t: "Ton Leader", h: `${leader ? `<div class="sp-card">${cardHTML(leader)}</div>` : ""}<p>Il reste toujours en jeu. Ses <b>Vies</b> sont des cartes face cach\xE9e : \xE0 chaque coup re\xE7u, une Vie part dans ta main.</p>` },
+      { t: "Les DON!!", h: "<p>Ta ressource : <b>1 DON!!</b> au premier tour, puis <b>2 par tour</b> (10 au total).</p><p>Ils paient le <b>co\xFBt</b> de tes cartes\u2026 ou s'attachent \xE0 un Personnage ou \xE0 ton Leader : <b>+1000 de puissance</b> chacun pendant ton tour.</p>" },
+      { t: "Ton tour", h: '<ol class="sp-list"><li>Tu pioches 1 carte</li><li>Tu re\xE7ois tes DON!!</li><li>Tu joues des <b>Personnages</b>, <b>\xC9v\xE9nements</b> et <b>Lieux</b></li><li>Tu <b>attaques</b></li><li>Fin du tour</li></ol>' },
+      { t: "Attaquer", h: `<p>L'attaquant s'<b>\xE9puise</b> (il se couche). Il vise le <b>Leader adverse</b> ou un <b>Personnage \xE9puis\xE9</b>.</p><p>Puissance <b>\xE9gale ou sup\xE9rieure</b> : \xE7a touche. Un Personnage touch\xE9 est mis KO ; un Leader touch\xE9 perd une Vie.</p><p class="muted">Un Personnage jou\xE9 ce tour-ci doit attendre le suivant\u2026 sauf s'il a [Initiative].</p>` },
+      { t: "Se d\xE9fendre", h: "<p><b>[Bloqueur]</b> : un de tes Personnages prend le coup \xE0 la place.</p><p><b>Contre</b> : d\xE9fausse des cartes de ta main pour ajouter leur valeur de Contre (+1000, +2000\u2026).</p><p><b>D\xE9clenchement</b> : quand tu perds une Vie, elle peut s'activer gratuitement.</p>" },
+      { t: "Les mots-cl\xE9s", h: `<p>Certains moments ont droit \xE0 leur annonce. Touche pour voir :</p><div class="row-btns sp-kws">${kwBtn("blocker", "Bloqueur")}${kwBtn("double", "Double attaque")}${kwBtn("banish", "Exil")}${kwBtn("rush", "Initiative")}</div><p class="muted">Double attaque : 2 Vies d'un coup \xB7 Exil : la Vie part \xE0 la d\xE9fausse, sans D\xE9clenchement.</p>` },
+      { t: "Ton deck", h: `<p>Ton deck a \xE9t\xE9 construit <b>rien que pour toi</b>. Il est d\xE9j\xE0 pr\xEAt dans l'onglet <b>Decks</b>.</p><p>Pour jouer : onglet <b>Jouer</b>, cr\xE9e une partie et envoie le code \xE0 ton adversaire.</p><p class="sp-big">\xC0 toi de jouer, ${esc(cap3(S.status?.username || ""))} !</p>` }
+    ];
+  }
+  function tutorial() {
+    const list = slides();
+    let i = 0;
+    return new Promise((resolve) => {
+      const o = document.createElement("div");
+      o.className = "overlay sp-tuto";
+      document.body.append(o);
+      const render3 = () => {
+        const s = list[i];
+        o.innerHTML = `<div class="dialog sp-slide" role="dialog" aria-label="${esc(s.t)}">
+        <div class="sp-dots">${list.map((_, k) => `<span class="${k === i ? "on" : ""}"></span>`).join("")}</div>
+        <h3>${esc(s.t)}</h3><div class="sp-body">${s.h}</div>
+        <div class="row-btns">${i ? '<button class="btn ghost" data-go="-1">Retour</button>' : ""}
+          <button class="btn main" data-go="1">${i === list.length - 1 ? "Terminer" : "Suivant"}</button></div></div>`;
+      };
+      render3();
+      o.addEventListener("click", (e) => {
+        const kw = e.target.closest("[data-kw]")?.dataset.kw;
+        if (kw) {
+          playKeyword(kw, S.music);
+          return;
+        }
+        const go = e.target.closest("[data-go]")?.dataset.go;
+        if (!go) return;
+        i += Number(go);
+        if (i >= list.length) {
+          o.remove();
+          resolve();
+          return;
+        }
+        render3();
+      });
+    });
+  }
+  function finalStep() {
+    return new Promise((resolve) => {
+      const o = document.createElement("div");
+      o.className = "overlay";
+      o.innerHTML = `<form class="dialog sp-pass" autocomplete="on">
+      <h3>Derni\xE8re chose : ton mot de passe</h3>
+      <p class="muted">Pour te reconnecter plus tard, sur ce t\xE9l\xE9phone ou un autre appareil. Ton pseudo : <b>${esc(S.status?.username || "")}</b></p>
+      <input type="text" name="username" autocomplete="username" value="${esc(S.status?.username || "")}" hidden>
+      <div class="field"><label for="sp-p1">Mot de passe</label><input id="sp-p1" type="password" minlength="6" autocomplete="new-password" required></div>
+      <div class="field"><label for="sp-p2">Confirmer</label><input id="sp-p2" type="password" minlength="6" autocomplete="new-password" required></div>
+      <p class="msg err sp-err" role="alert"></p>
+      <div class="row-btns"><button type="button" class="btn ghost" data-later>Plus tard</button><button class="btn main">C'est parti !</button></div>
+    </form>`;
+      document.body.append(o);
+      const f = o.querySelector("form");
+      o.querySelector("[data-later]").addEventListener("click", () => {
+        o.remove();
+        resolve();
+      });
+      f.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const p1 = f.querySelector("#sp-p1").value;
+        if (p1 !== f.querySelector("#sp-p2").value) {
+          f.querySelector(".sp-err").textContent = "Les deux mots de passe ne correspondent pas.";
+          return;
+        }
+        try {
+          await setPassword(p1);
+          try {
+            localStorage.removeItem("nk-auto-pass");
+          } catch {
+          }
+          o.remove();
+          resolve();
+        } catch (err) {
+          f.querySelector(".sp-err").textContent = err.message;
+        }
+      });
+    });
+  }
+  var unlocked2 = false;
+  function unlockAudio() {
+    if (unlocked2) return;
+    unlocked2 = true;
+    try {
+      const a = new Audio("sons/cling.mp3");
+      a.volume = 0;
+      a.play().then(() => a.pause()).catch(() => {
+      });
+    } catch {
+    }
+  }
+  function sfx2(src, vol = 1, delay = 0) {
+    setTimeout(() => {
+      try {
+        const a = new Audio(src);
+        a.volume = vol;
+        a.play().catch(() => {
+        });
+      } catch {
+      }
+    }, delay);
+  }
+
   // js/app.js
   document.querySelector(".top .brand").innerHTML = logoSVG("", true);
   document.querySelectorAll("[data-ico]").forEach((b) => b.insertAdjacentHTML("afterbegin", icon(b.dataset.ico)));
@@ -27953,6 +28402,10 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     if (!await currentUser()) {
       showAuth();
       return;
+    }
+    try {
+      if (localStorage.getItem("nk-surprise")) document.documentElement.classList.add("sp-boot");
+    } catch {
     }
     await load();
     await refreshStatus();
@@ -27985,6 +28438,15 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       initAdmin();
     }
     if (isOwner()) initGM();
+    if (surpriseActive()) {
+      startSurprise(show);
+      return;
+    }
+    document.documentElement.classList.remove("sp-boot");
+    try {
+      localStorage.removeItem("nk-surprise");
+    } catch {
+    }
     let first = "home";
     if (new URLSearchParams(location.search).get("join")) first = "play";
     show(first);
@@ -27993,6 +28455,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     });
   }
   start().catch((e) => {
+    document.documentElement.classList.remove("sp-boot");
     document.querySelector("main").innerHTML = `<div class="panel"><h2>Impossible de charger le jeu</h2>
     <p class="msg err">${esc(e.message)}</p><p class="muted">V\xE9rifiez votre connexion Internet puis rechargez la page.</p></div>`;
   });

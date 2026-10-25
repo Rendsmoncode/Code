@@ -12,6 +12,22 @@ export async function showAuth() {
   const el = document.createElement('div');
   el.className = 'auth';
   document.body.append(el);
+  // Invitation surprise : pas de formulaire, le compte se crée tout seul derrière un écran noir
+  // (mot de passe aléatoire gardé dans ce navigateur ; le joueur choisit le sien à la fin de la découverte).
+  if (!invite?.surprise) document.documentElement.classList.remove('sp-boot');
+  if (invite?.surprise) {
+    el.className = 'auth surprise-black';
+    const pw = Array.from(crypto.getRandomValues(new Uint8Array(18)), (b) => b.toString(36)).join('').slice(0, 24);
+    try {
+      localStorage.setItem('nk-auto-pass', JSON.stringify({ u: invite.username, p: pw }));
+      localStorage.setItem('nk-surprise', '1');
+      await signUp(invite.username, pw, token);
+      const url = new URL(location.href);
+      url.searchParams.delete('invite');
+      location.replace(url.href);
+      return;
+    } catch (err) { el.className = 'auth'; } // problème : on retombe sur le formulaire habituel
+  }
   render();
 
   function render() {

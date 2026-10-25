@@ -48,7 +48,7 @@ let revealFn = null; // ouverture plein écran (définie par initBoosters)
 
 // Cartes offertes en attente : écran « Cadeau ! », puis chaque carte différente se révèle comme dans un booster.
 export async function checkGifts() {
-  if (!revealFn || busy || document.querySelector('.bx')) return;
+  if (!revealFn || busy || document.querySelector('.bx') || document.body.classList.contains('surprise')) return;
   const list = await takeReveals();
   if (!list.length) return;
   await refreshCollection().catch(() => {});
@@ -77,6 +77,22 @@ export async function checkGifts() {
 
 // Ouvre un booster depuis un autre onglet (accueil).
 export const openFromHome = () => { qty = 1; document.querySelector('#tab-boosters .bs-open')?.click(); };
+// Surprise : ouvre n boosters d'un coup.
+export const openMany = (n) => { qty = Math.max(1, Math.min(n, maxQty(boosterState()))); document.querySelector('#tab-boosters .bs-open')?.click(); };
+
+// Surprise : révèle les cartes offertes en attente (son deck) sans l'écran « Cadeau ! ».
+// Renvoie false s'il n'y a rien à révéler, sinon attend la fermeture du récapitulatif.
+export async function revealPending() {
+  const list = await takeReveals();
+  await refreshCollection().catch(() => {});
+  const pulls = list.filter((g) => S.byId[g.id]).sort((x, y) => rank(x.id) - rank(y.id));
+  if (!pulls.length || !revealFn) return false;
+  busy = true;
+  const closed = new Promise((ok) => window.addEventListener('nk:reveal-closed', ok, { once: true }));
+  revealFn(pulls, false, true);
+  await closed;
+  return true;
+}
 
 export function initBoosters() {
   const el = document.getElementById('tab-boosters');
@@ -289,7 +305,8 @@ export function initBoosters() {
         for (const ev of ['pointerup', 'pointercancel']) document.removeEventListener(ev, release);
         busy = false;
         renderHead();
-        if (gift) checkGifts().catch(() => {});
+        window.dispatchEvent(new CustomEvent('nk:reveal-closed', { detail: { gift, again: d === 'again' } }));
+        if (gift && !document.body.classList.contains('surprise')) checkGifts().catch(() => {});
         if (d === 'again') { qty = Math.max(1, Math.min(10, pulls.length / 5)); renderHead(); q('.bs-open').click(); }
         return;
       }

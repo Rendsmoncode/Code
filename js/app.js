@@ -13,6 +13,7 @@ import { icon } from './icons.js';
 import { initHome } from './home.js';
 import { initAchievements } from './achievements.js';
 import { initGM } from './gm.js';
+import { surpriseActive, startSurprise } from './surprise.js';
 
 document.querySelector('.top .brand').innerHTML = logoSVG('', true);
 document.querySelectorAll('[data-ico]').forEach((b) => b.insertAdjacentHTML('afterbegin', icon(b.dataset.ico)));
@@ -39,6 +40,7 @@ tabs.forEach((t) => t.addEventListener('click', () => show(t.dataset.tab)));
 
 async function start() {
   if (!(await currentUser())) { showAuth(); return; }
+  try { if (localStorage.getItem('nk-surprise')) document.documentElement.classList.add('sp-boot'); } catch { /* rien */ }
   await load();
   await refreshStatus();
   const admin = isAdmin();
@@ -62,6 +64,10 @@ async function start() {
   if (admin) { initEditor(); initAdmin(); }
   if (isOwner()) initGM();
 
+  // Surprise : écran noir jusqu'au lancement, puis le booster géant (voir surprise.js).
+  if (surpriseActive()) { startSurprise(show); return; }
+  document.documentElement.classList.remove('sp-boot');
+  try { localStorage.removeItem('nk-surprise'); } catch { /* rien */ }
   let first = 'home';
   if (new URLSearchParams(location.search).get('join')) first = 'play';
   show(first);
@@ -70,6 +76,7 @@ async function start() {
 }
 
 start().catch((e) => {
+  document.documentElement.classList.remove('sp-boot');
   document.querySelector('main').innerHTML = `<div class="panel"><h2>Impossible de charger le jeu</h2>
     <p class="msg err">${esc(e.message)}</p><p class="muted">Vérifiez votre connexion Internet puis rechargez la page.</p></div>`;
 });

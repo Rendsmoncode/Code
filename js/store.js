@@ -392,6 +392,32 @@ export async function deleteInvite(token) {
   check(await sb.from('invites').delete().eq('token', token));
 }
 
+// ---------- surprise (écran noir, puis booster géant au lancement) ----------
+export async function createSurprise(username, starterId, boosters) {
+  return check(await sb.rpc('admin_create_surprise', { uname: username, starter: starterId || '', nb: boosters }));
+}
+export async function prepareSurprise(username, starterId, boosters) {
+  check(await sb.rpc('admin_prepare_surprise', { target: username, starter: starterId || '', nb: boosters }));
+}
+export async function surpriseList() {
+  return check(await sb.rpc('admin_surprise_list'));
+}
+// target vide : tous les joueurs en attente.
+export async function surpriseGo(target = null) {
+  return check(await sb.rpc('admin_surprise_go', { target: target || null }));
+}
+export async function surpriseDone() {
+  check(await sb.rpc('surprise_done'));
+}
+export async function resetTest(username, starterId, boosters) {
+  check(await sb.rpc('admin_reset_test', { target: username, starter: starterId || '', nb: boosters }));
+}
+// Nouveau mot de passe du joueur connecté.
+export async function setPassword(password) {
+  if (String(password).length < 6) throw new Error('6 caractères minimum.');
+  check(await sb.auth.updateUser({ password }));
+}
+
 export async function setRole(target, role) {
   check(await sb.rpc('admin_set_role', { target, new_role: role }));
 }
