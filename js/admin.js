@@ -62,6 +62,12 @@ export function initAdmin() {
         <button type="button" class="btn danger rs-del">Retirer</button>
         <span class="muted small rs-name"></span>
       </div>
+      <div class="row-btns in">
+        <b>Intro de la surprise</b>
+        <label class="btn"><input type="file" class="in-file" accept="video/mp4" hidden>Envoyer la vidéo…</label>
+        <button type="button" class="btn danger in-del">Retirer</button>
+        <span class="muted small in-name"></span>
+      </div>
       <p class="muted small">Son de l'annonce RUSH (MP3) : il démarre quand l'image s'arrête, et l'image repart 0,71 s plus tard.</p>
       <p class="msg ki-msg" role="status"></p>
     </section>
@@ -137,6 +143,25 @@ export function initAdmin() {
     if (!confirm('Retirer le son de RUSH ?')) return;
     try { await deleteMusic('rushsnd'); kmsg('Son retiré.'); } catch (err) { kmsg(err.message, true); }
     renderRs();
+  });
+  // Vidéo d'intro de la surprise (jouée sur l'écran noir, avant le booster géant).
+  const renderIn = () => {
+    q('.in-name').textContent = S.music?.intro ? 'Une vidéo est en place.' : 'Aucune vidéo.';
+    q('.in-del').disabled = !S.music?.intro;
+  };
+  renderIn();
+  q('.in-file').addEventListener('change', async (e) => {
+    const f = e.target.files[0]; e.target.value = '';
+    if (!f) return;
+    if (f.size > 25e6) { kmsg('Vidéo trop lourde : 25 Mo maximum.', true); return; }
+    kmsg('Envoi de la vidéo…');
+    try { await uploadMusic('intro', f); kmsg('Intro enregistrée.'); } catch (err) { kmsg(err.message, true); }
+    renderIn();
+  });
+  q('.in-del').addEventListener('click', async () => {
+    if (!confirm('Retirer la vidéo d\'intro ?')) return;
+    try { await deleteMusic('intro'); kmsg('Vidéo retirée.'); } catch (err) { kmsg(err.message, true); }
+    renderIn();
   });
   let players = [];
 

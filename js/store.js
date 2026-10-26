@@ -183,10 +183,11 @@ export async function refreshCollection() {
 // ---------- musiques et images des annonces (Admin → Musiques) ----------
 // Fichiers privés du stockage : sons/<type>-<date>.<ext> (le plus récent compte).
 // alt : chanson des Alt ; blocker, double, banish, rush : image (PNG détouré, ou JPG/WebP) de l'annonce en partie ;
-// rushsnd : son de l'annonce RUSH.
+// rushsnd : son de l'annonce RUSH ; intro : vidéo d'intro de la surprise.
 const IMG = { ext: ['png', 'jpg', 'webp'], type: { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' } };
 const MP3 = { ext: ['mp3'], type: { 'audio/mpeg': 'mp3' } };
-const MEDIA = { alt: MP3, blocker: IMG, double: IMG, banish: IMG, rush: IMG, rushsnd: MP3 };
+const MP4 = { ext: ['mp4'], type: { 'video/mp4': 'mp4' } };
+const MEDIA = { alt: MP3, blocker: IMG, double: IMG, banish: IMG, rush: IMG, rushsnd: MP3, intro: MP4 };
 S.music = {};
 export async function loadMusic() {
   const { data, error } = await sb.storage.from('cards').list('sons', { limit: 100, sortBy: { column: 'name', order: 'desc' } });

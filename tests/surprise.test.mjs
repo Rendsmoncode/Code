@@ -1,3 +1,4 @@
+import fs from 'fs';
 // Parcours surprise de bout en bout : compte test préparé par le propriétaire (Game Master), lien ouvert →
 // écran noir → lancement → booster géant → révélation du deck → interface → boosters → gameplay → mot de passe.
 import { chromium } from 'playwright';
@@ -11,7 +12,11 @@ for (let i = 0; i < 8; i++) C('B' + i, {}, ['C', 'UC', 'R', 'SR'][i % 4]);
 const b = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
 const errs = []; const results = [];
 const check = (l, ok, i = '') => results.push([ok ? 'OK ' : 'ÉCHEC', l, i]);
+// Vidéo d'intro (Admin → Musiques) : un petit clip de 2 s servi à son adresse signée.
+(mock.st.files ||= []).push('sons/intro-1.mp4');
+const INTRO = fs.readFileSync(new URL('./intro-test.mp4', import.meta.url));
 const mk = async (name, opts = {}) => { const ctx = await b.newContext(opts); await ctx.route(/supabase\.co/, mock.handle); await ctx.route(/unpkg\.com/, (r) => r.abort());
+  await ctx.route(/object\/sign\/cards\/sons\/intro-/, (r) => r.fulfill({ status: 200, contentType: 'video/mp4', body: INTRO }));
   const p = await ctx.newPage(); p.on('pageerror', (e) => errs.push(name + ': ' + e.message)); p.on('dialog', (d) => d.accept()); return { ctx, p }; };
 const { p: A } = await mk('A', { viewport: { width: 1300, height: 900 } });
 await A.goto(SITE + '?test=1');
@@ -35,7 +40,8 @@ check('mot de passe choisi au départ', tu?.pw === 'secret9');
 await A.click('[data-sp=refresh]'); await A.waitForTimeout(400);
 check('Game Master voit « test » en attente', (await A.textContent('.sp-list-gm')).includes('écran noir'));
 await A.click('[data-sp=go]'); await A.waitForTimeout(300);
-await T.waitForSelector('.wpack.giant', { timeout: 6000 }); await T.waitForTimeout(4200);
+check('l\'intro vidéo passe avant le booster', await T.waitForSelector('.sp-intro-vid', { timeout: 6000 }).then(() => T.evaluate(() => !document.querySelector('.wpack.giant'))).catch(() => false));
+await T.waitForSelector('.wpack.giant', { timeout: 12000 }); await T.waitForTimeout(4200);
 check('booster géant blanc au prénom', (await T.textContent('.wp-name')).trim() === 'TEST');
 await shot('1-booster.png');
 await T.click('.wpack.giant', { force: true }); await T.waitForSelector('.bx', { timeout: 6000 }); await T.waitForTimeout(1300);

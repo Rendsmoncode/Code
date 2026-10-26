@@ -21572,7 +21572,8 @@ ${suffix}`;
   }
   var IMG = { ext: ["png", "jpg", "webp"], type: { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" } };
   var MP3 = { ext: ["mp3"], type: { "audio/mpeg": "mp3" } };
-  var MEDIA = { alt: MP3, blocker: IMG, double: IMG, banish: IMG, rush: IMG, rushsnd: MP3 };
+  var MP4 = { ext: ["mp4"], type: { "video/mp4": "mp4" } };
+  var MEDIA = { alt: MP3, blocker: IMG, double: IMG, banish: IMG, rush: IMG, rushsnd: MP3, intro: MP4 };
   S.music = {};
   async function loadMusic() {
     const { data, error } = await sb.storage.from("cards").list("sons", { limit: 100, sortBy: { column: "name", order: "desc" } });
@@ -27968,6 +27969,12 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         <button type="button" class="btn danger rs-del">Retirer</button>
         <span class="muted small rs-name"></span>
       </div>
+      <div class="row-btns in">
+        <b>Intro de la surprise</b>
+        <label class="btn"><input type="file" class="in-file" accept="video/mp4" hidden>Envoyer la vid\xE9o\u2026</label>
+        <button type="button" class="btn danger in-del">Retirer</button>
+        <span class="muted small in-name"></span>
+      </div>
       <p class="muted small">Son de l'annonce RUSH (MP3) : il d\xE9marre quand l'image s'arr\xEAte, et l'image repart 0,71 s plus tard.</p>
       <p class="msg ki-msg" role="status"></p>
     </section>
@@ -28103,6 +28110,38 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         kmsg(err.message, true);
       }
       renderRs();
+    });
+    const renderIn = () => {
+      q(".in-name").textContent = S.music?.intro ? "Une vid\xE9o est en place." : "Aucune vid\xE9o.";
+      q(".in-del").disabled = !S.music?.intro;
+    };
+    renderIn();
+    q(".in-file").addEventListener("change", async (e) => {
+      const f = e.target.files[0];
+      e.target.value = "";
+      if (!f) return;
+      if (f.size > 25e6) {
+        kmsg("Vid\xE9o trop lourde : 25 Mo maximum.", true);
+        return;
+      }
+      kmsg("Envoi de la vid\xE9o\u2026");
+      try {
+        await uploadMusic("intro", f);
+        kmsg("Intro enregistr\xE9e.");
+      } catch (err) {
+        kmsg(err.message, true);
+      }
+      renderIn();
+    });
+    q(".in-del").addEventListener("click", async () => {
+      if (!confirm("Retirer la vid\xE9o d'intro ?")) return;
+      try {
+        await deleteMusic("intro");
+        kmsg("Vid\xE9o retir\xE9e.");
+      } catch (err) {
+        kmsg(err.message, true);
+      }
+      renderIn();
     });
     let players = [];
     async function refresh() {
@@ -29039,6 +29078,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     }
     let step = store2.get() || "booster";
     if (step === "booster") {
+      await playIntro(ov);
       await giantBooster(ov);
       await revealPending("deck");
       step = "packs";
@@ -29061,6 +29101,43 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     document.body.classList.remove("surprise");
     show2("home");
     checkGifts().catch(() => {
+    });
+  }
+  function playIntro(ov) {
+    const url = S.music?.intro?.url;
+    if (!url) return Promise.resolve();
+    return new Promise((resolve) => {
+      const v = document.createElement("video");
+      v.className = "sp-intro-vid";
+      v.src = url;
+      v.playsInline = true;
+      ov.append(v);
+      let done = false;
+      const end = () => {
+        if (done) return;
+        done = true;
+        ov.querySelector(".sp-play")?.remove();
+        v.classList.add("out");
+        setTimeout(() => {
+          v.remove();
+          resolve();
+        }, 500);
+      };
+      v.addEventListener("ended", end);
+      v.addEventListener("error", end);
+      setTimeout(end, 4e4);
+      v.play().catch(() => {
+        if (done) return;
+        const b = document.createElement("button");
+        b.className = "sp-play";
+        b.setAttribute("aria-label", "Lancer");
+        b.textContent = "\u25B6";
+        ov.append(b);
+        b.addEventListener("click", () => {
+          b.remove();
+          v.play().catch(end);
+        }, { once: true });
+      });
     });
   }
   function whitePack({ cls = "", top = "", name: name2 = "", sub = "", code = "" }) {

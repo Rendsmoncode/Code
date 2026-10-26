@@ -33,6 +33,7 @@ export async function startSurprise(show) {
   }
   let step = store.get() || 'booster';
   if (step === 'booster') {
+    await playIntro(ov);
     await giantBooster(ov);
     await revealPending('deck');
     step = 'packs';
@@ -51,6 +52,40 @@ export async function startSurprise(show) {
   document.body.classList.remove('surprise');
   show('home');
   checkGifts().catch(() => {});
+}
+
+// ---------- 0. la vidéo d'intro (Admin → Musiques), plein écran sur le noir ----------
+function playIntro(ov) {
+  const url = S.music?.intro?.url;
+  if (!url) return Promise.resolve();
+  return new Promise((resolve) => {
+    const v = document.createElement('video');
+    v.className = 'sp-intro-vid';
+    v.src = url;
+    v.playsInline = true;
+    ov.append(v);
+    let done = false;
+    const end = () => {
+      if (done) return;
+      done = true;
+      ov.querySelector('.sp-play')?.remove();
+      v.classList.add('out');
+      setTimeout(() => { v.remove(); resolve(); }, 500);
+    };
+    v.addEventListener('ended', end);
+    v.addEventListener('error', end);
+    setTimeout(end, 40000); // sécurité
+    // Son bloqué par le navigateur (page rechargée, aucun clic) : un bouton ▶ discret lance la vidéo.
+    v.play().catch(() => {
+      if (done) return;
+      const b = document.createElement('button');
+      b.className = 'sp-play';
+      b.setAttribute('aria-label', 'Lancer');
+      b.textContent = '▶';
+      ov.append(b);
+      b.addEventListener('click', () => { b.remove(); v.play().catch(end); }, { once: true });
+    });
+  });
 }
 
 // Paquet blanc et or (booster géant et boosters de rareté).
