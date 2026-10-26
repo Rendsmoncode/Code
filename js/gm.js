@@ -6,6 +6,7 @@ import {
 import { RARITIES, RARITY_ORDER, esc, cardHTML } from './cards.js';
 import { mountSurprise } from './gm-surprise.js';
 import { mountLive } from './gm-live.js';
+import { mountSettings } from './gm-settings.js';
 
 export function initGM() {
   const el = document.getElementById('tab-gm');
@@ -14,6 +15,7 @@ export function initGM() {
     <div class="ach-head"><h2>Game Master</h2></div>
     <section class="panel gm-live"></section>
     <section class="panel gm-surprise"></section>
+    <section class="panel gm-settings"></section>
     <section class="panel gm-who">
       <label>Joueur <select class="gm-player" aria-label="Joueur"></select></label>
       <span class="gm-sum muted"></span>
@@ -45,6 +47,7 @@ export function initGM() {
   const q = (s) => el.querySelector(s);
   mountLive(q('.gm-live'));
   mountSurprise(q('.gm-surprise'));
+  mountSettings(q('.gm-settings'));
   let player = '';
   let coll = {};
   let loaded = false;

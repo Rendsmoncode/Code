@@ -53,6 +53,25 @@ export async function signOut() {
   location.reload();
 }
 
+// ---------- réglages du site (Game Master → Paramètres) ----------
+// Valeurs par défaut : celles du jeu avant les réglages. Le serveur ne garde que ce qui a été changé.
+export const DEFAULT_SETTINGS = {
+  free_minutes: 10, free_max: 6, rate_sr: 4, rate_ur: 15, rate_l: 50, rate_s: 2000, rate_god: 1000, alt_pct: -1,
+  game: { hand: 5, don_first: 1, don_turn: 2, don_max: 10, life_bonus: 0, mulligan: true },
+  maintenance: { on: false, msg: '' }, banner: '',
+};
+S.settings = structuredClone(DEFAULT_SETTINGS);
+export async function loadSettings() {
+  const { data } = await sb.rpc('get_settings');
+  const d = data || {};
+  S.settings = { ...structuredClone(DEFAULT_SETTINGS), ...d, game: { ...DEFAULT_SETTINGS.game, ...(d.game || {}) }, maintenance: { ...DEFAULT_SETTINGS.maintenance, ...(d.maintenance || {}) } };
+  return S.settings;
+}
+export async function saveSettings(d) {
+  check(await sb.rpc('admin_set_settings', { d }));
+  await loadSettings();
+}
+
 export async function currentUser() {
   const { data } = await sb.auth.getSession();
   S.user = data.session?.user || null;

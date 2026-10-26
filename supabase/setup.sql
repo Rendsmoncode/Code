@@ -118,6 +118,14 @@ alter table public.profiles add column if not exists surprise text check (surpri
 alter table public.invites add column if not exists packs jsonb;
 alter table public.profiles add column if not exists surprise_packs jsonb;
 
+-- Réglages du site (Game Master) : une seule ligne. Une valeur absente = la valeur par défaut.
+create table if not exists public.site_settings (
+  id int primary key default 1 check (id = 1),
+  data jsonb not null default '{}',
+  updated_at timestamptz not null default now()
+);
+insert into public.site_settings (id) values (1) on conflict do nothing;
+
 -- Parties en cours (pour le Game Master) : chaque joueur signale sa partie toutes les 30 secondes.
 create table if not exists public.live_games (
   code text primary key,
@@ -220,9 +228,17 @@ create trigger decks_check before insert or update on public.decks
 -- ---------- Boosters ----------
 -- 1 booster gratuit toutes les 10 minutes, 6 en réserve au maximum.
 
+-- Réglage numérique du site (Game Master → Paramètres), ou sa valeur par défaut.
+create or replace function public.setting(k text, def numeric) returns numeric
+language sql stable security definer set search_path = public as $$
+  select coalesce((select (data ->> k)::numeric from public.site_settings where id = 1 and jsonb_typeof(data -> k) = 'number'), def);
+$$;
+
+-- Boosters gratuits : 1 toutes les « free_minutes » minutes (10), « free_max » en réserve au maximum (6).
 create or replace function public.free_boosters(anchor timestamptz) returns int
-language sql stable as $$
-  select least(6, greatest(0, floor(extract(epoch from (now() - anchor)) / 600)))::int;
+language sql stable security definer set search_path = public as $$
+  select least(public.setting('free_max', 6)::int,
+    greatest(0, floor(extract(epoch from (now() - anchor)) / (60 * public.setting('free_minutes', 10)))))::int;
 $$;
 
 create or replace function public.booster_status() returns json
@@ -235,8 +251,9 @@ begin
   if not found then raise exception 'Profil introuvable.'; end if;
   free := public.free_boosters(p.free_anchor);
   return json_build_object(
-    'username', p.username, 'role', p.role, 'free', free, 'free_max', 6, 'gifted', p.boosters,
-    'next_free_at', case when free >= 6 then null else p.free_anchor + (free + 1) * interval '10 minutes' end,
+    'username', p.username, 'role', p.role, 'free', free, 'free_max', public.setting('free_max', 6)::int, 'gifted', p.boosters,
+    'next_free_at', case when free >= public.setting('free_max', 6) then null
+      else p.free_anchor + (free + 1) * public.setting('free_minutes', 10) * interval '1 minute' end,
     'starter_claimed', p.starter_claimed, 'surprise', p.surprise,
     'packs', (select coalesce(json_agg(json_build_object('r', x ->> 'r', 'n', jsonb_array_length(x -> 'cards'), 'opened', coalesce((x ->> 'opened')::boolean, false))), '[]')
               from jsonb_array_elements(coalesce(p.surprise_packs, '[]')) x),
@@ -252,12 +269,21 @@ declare
   ranks text[] := array['C', 'UC', 'R', 'SR', 'UR', 'L', 'S'];
   idx int := array_position(ranks, want);
   cid text;
+  -- Alt : sans réglage, elles sont tirées avec les autres cartes de leur rareté ; avec « alt_pct »,
+  -- ce pourcentage des cartes tirées est une Alt (quand il en existe une dans la rareté), les autres jamais.
+  alt_pct numeric := public.setting('alt_pct', -1);
+  want_alt boolean := alt_pct >= 0 and random() * 100 < alt_pct;
 begin
   for i in reverse idx..1 loop
     select id into cid from public.cards c
       where in_boosters and rarity = ranks[i]
         and (rarity <> 'S' or not exists (select 1 from public.collection where card_id = c.id))
+        and (alt_pct < 0 or rarity = 'S' or (coalesce(c.data ->> 'alt', 'false') = 'true') = want_alt)
       order by random() limit 1;
+    -- Pas d'Alt disponible dans cette rareté : une carte normale.
+    if cid is null and want_alt then
+      select id into cid from public.cards c where in_boosters and rarity = ranks[i] and rarity <> 'S' order by random() limit 1;
+    end if;
     if cid is not null then return cid; end if;
   end loop;
   for i in idx + 1..6 loop
@@ -276,7 +302,13 @@ language plpgsql security definer set search_path = public as $$
 declare
   p public.profiles;
   roll float := random();
-  god boolean := random() < 1.0 / 1000;
+  god boolean := random() < 1.0 / greatest(public.setting('rate_god', 1000), 1);
+  -- Taux (Game Master → Paramètres) : 1 sur N.
+  r_s float := 1.0 / greatest(public.setting('rate_s', 2000), 1);
+  r_l float := 1.0 / greatest(public.setting('rate_l', 50), 1);
+  r_ur float := 1.0 / greatest(public.setting('rate_ur', 15), 1);
+  r_sr float := 1.0 / greatest(public.setting('rate_sr', 4), 1);
+  step interval := public.setting('free_minutes', 10) * interval '1 minute';
   slots text[];
   r text;
   cid text;
@@ -288,7 +320,7 @@ begin
   if not found then raise exception 'Profil introuvable.'; end if;
   if not gift_only and public.free_boosters(p.free_anchor) > 0 then
     update public.profiles
-      set free_anchor = greatest(free_anchor, now() - interval '60 minutes') + interval '10 minutes'
+      set free_anchor = greatest(free_anchor, now() - step * public.setting('free_max', 6)) + step
       where id = p.id;
   elsif p.boosters > 0 then
     update public.profiles set boosters = boosters - 1 where id = p.id;
@@ -299,10 +331,10 @@ begin
     slots := array['L', 'L', 'L', 'L', case when random() < 0.1 then 'S' else 'L' end];
   else
     slots := array['C', 'C', 'C', 'UC', case
-      when roll < 1.0 / 2000 then 'S'
-      when roll < 1.0 / 2000 + 1.0 / 50 then 'L'
-      when roll < 1.0 / 2000 + 1.0 / 50 + 1.0 / 15 then 'UR'
-      when roll < 1.0 / 2000 + 1.0 / 50 + 1.0 / 15 + 1.0 / 4 then 'SR'
+      when roll < r_s then 'S'
+      when roll < r_s + r_l then 'L'
+      when roll < r_s + r_l + r_ur then 'UR'
+      when roll < r_s + r_l + r_ur + r_sr then 'SR'
       else 'R' end];
   end if;
   foreach r in array slots loop
@@ -585,6 +617,21 @@ begin
   if coalesce(starter, '') <> '' then perform public.grant_starter(p.id, starter); end if;
 end $$;
 
+-- ---------- Réglages du site ----------
+-- Lisibles par tout le monde (même avant connexion : maintenance), modifiables par le propriétaire seulement.
+create or replace function public.get_settings() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select coalesce((select data from public.site_settings where id = 1), '{}');
+$$;
+create or replace function public.admin_set_settings(d jsonb) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_owner() then raise exception 'Réservé au propriétaire.'; end if;
+  if jsonb_typeof(d) <> 'object' then raise exception 'Réglages invalides.'; end if;
+  insert into public.site_settings (id, data, updated_at) values (1, d, now())
+    on conflict (id) do update set data = excluded.data, updated_at = now();
+end $$;
+
 -- ---------- Parties en cours ----------
 create or replace function public.game_ping(gcode text, grole text, gmode text, gphase text) returns void
 language plpgsql security definer set search_path = public as $$
@@ -619,6 +666,7 @@ alter table public.achievements enable row level security;
 alter table public.collection_backups enable row level security;
 alter table public.pending_reveals enable row level security;
 alter table public.live_games enable row level security;
+alter table public.site_settings enable row level security;
 
 drop policy if exists "mes stats" on public.stats;
 create policy "mes stats" on public.stats for select to authenticated using (user_id = auth.uid());
@@ -845,10 +893,10 @@ grant execute on function public.is_admin(), public.booster_status(), public.ope
   public.admin_create_surprise(text, text, int), public.admin_prepare_surprise(text, text, int), public.admin_surprise_go(text),
   public.admin_surprise_list(), public.surprise_done(), public.admin_reset_test(text, text, int),
   public.admin_set_packs(text, jsonb), public.open_surprise_pack(int),
-  public.game_ping(text, text, text, text), public.admin_live_games()
+  public.game_ping(text, text, text, text), public.admin_live_games(), public.admin_set_settings(jsonb)
   to authenticated;
 grant usage on schema public to anon;
-grant execute on function public.invite_info(text) to anon, authenticated;
+grant execute on function public.invite_info(text), public.get_settings() to anon, authenticated;
 
 -- ---------- Images des cartes (stockage PRIVÉ : visibles seulement par les joueurs connectés) ----------
 -- Le site demande des adresses temporaires (« signées ») pour afficher les images.

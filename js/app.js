@@ -1,4 +1,4 @@
-import { S, load, refreshStatus, currentUser, isAdmin, isOwner, signOut } from './store.js';
+import { S, load, refreshStatus, currentUser, isAdmin, isOwner, signOut, loadSettings } from './store.js';
 import { esc } from './cards.js';
 import { showAuth, maybeAskStarter } from './auth.js';
 import { initEditor } from './editor.js';
@@ -38,11 +38,31 @@ function show(name) {
 
 tabs.forEach((t) => t.addEventListener('click', () => show(t.dataset.tab)));
 
+// Maintenance : tout le monde voit ce message, sauf le propriétaire (qui peut se connecter et tout régler).
+function maintenanceScreen() {
+  const m = S.settings.maintenance;
+  document.querySelector('main').innerHTML = `<div class="panel maint"><h2>Petite pause</h2>
+    <p>${esc(m.msg || 'Le jeu est en maintenance. Reviens dans quelques minutes !')}</p></div>`;
+}
+function banner() {
+  const t = S.settings.banner || (S.settings.maintenance.on && isOwner() ? 'Maintenance activée : les joueurs ne peuvent pas jouer.' : '');
+  document.querySelector('.site-banner')?.remove();
+  if (t) document.querySelector('main').insertAdjacentHTML('beforebegin', `<p class="site-banner">${esc(t)}</p>`);
+}
+
 async function start() {
-  if (!(await currentUser())) { showAuth(); return; }
+  await loadSettings().catch(() => {});
+  if (!(await currentUser())) {
+    await showAuth();
+    if (S.settings.maintenance.on) document.querySelector('.auth form')?.insertAdjacentHTML('afterbegin', `<p class="msg err">${esc(S.settings.maintenance.msg || 'Le jeu est en maintenance.')}</p>`);
+    return;
+  }
   try { if (localStorage.getItem('nk-surprise')) document.documentElement.classList.add('sp-boot'); } catch { /* rien */ }
   await load();
   await refreshStatus();
+  if (S.settings.maintenance.on && !isOwner()) { document.documentElement.classList.remove('sp-boot'); maintenanceScreen(); return; }
+  banner();
+  window.addEventListener('nk:settings', banner);
   const admin = isAdmin();
   document.querySelectorAll('.admin-only').forEach((t) => { t.hidden = !admin; });
   document.querySelectorAll('.owner-only').forEach((t) => { t.hidden = !isOwner(); });

@@ -28,6 +28,8 @@ const shuffle = (a) => {
   return a;
 };
 const send = (m) => link?.send(m);
+// Règles de partie réglables par le Game Master (main de départ, DON!!, Vies en plus, mulligan).
+const RULES = () => S.settings?.game || { hand: 5, don_first: 1, don_turn: 2, don_max: 10, life_bonus: 0, mulligan: true };
 const myTurn = () => G?.phase === 'play' && G.turn.player === G.role;
 const oppTurn = () => G?.phase === 'play' && G.turn.player === other(G.role);
 const myCard = (inst) => G.myCards[inst.c];
@@ -41,7 +43,7 @@ const name = (c) => `« ${c?.name || '?'} »`;
 
 const emptySide = () => ({
   leader: null, life: [], deck: [], hand: [], chars: [], stage: null, trash: [],
-  donDeck: 10, donActive: 0, donRested: 0,
+  donDeck: RULES().don_max, donActive: 0, donRested: 0,
 });
 
 // ---------- sauvegarde de la partie (reprise après rechargement) ----------
@@ -412,7 +414,7 @@ function applyFirst(f) {
   me.leader = { u: uid(), c: leaderId, r: false, d: 0, m: 0 };
   me.deck = shuffle(Object.entries(G.deckDef.cards).flatMap(([c, n]) =>
     Array.from({ length: n }, () => ({ u: uid(), c, r: false, d: 0, m: 0 }))));
-  me.hand = me.deck.splice(0, 5);
+  me.hand = me.deck.splice(0, RULES().hand);
   G.phase = 'mulligan';
   commit();
 }
@@ -422,11 +424,11 @@ function finishMulligan(redo) {
     me.deck.push(...me.hand);
     me.hand = [];
     shuffle(me.deck);
-    me.hand = me.deck.splice(0, 5);
+    me.hand = me.deck.splice(0, RULES().hand);
     log('fait un mulligan.');
   } else log('garde sa main.');
   // La carte du dessus du deck va en bas de la Vie : la fin du tableau = dessus de la Vie.
-  const n = Number(myCard(me.leader).life) || 5;
+  const n = Math.max(1, (Number(myCard(me.leader).life) || 5) + (Number(RULES().life_bonus) || 0));
   for (let i = 0; i < n && me.deck.length; i++) me.life.push(me.deck.shift());
   G.phase = 'ready';
   G.meReady = true;
@@ -466,7 +468,7 @@ async function beginTurn(count) {
     me.hand.push(me.deck.shift());
   }
   // Phase DON!!
-  const n = Math.min(first ? 1 : 2, me.donDeck);
+  const n = Math.min(first ? RULES().don_first : RULES().don_turn, me.donDeck);
   me.donDeck -= n;
   me.donActive += n;
   log(`${first ? 'ne pioche pas (1er tour)' : 'pioche 1 carte'} et reçoit ${n} DON!!.`);
@@ -2017,7 +2019,7 @@ function centerHTML() {
       : `<p>${esc(G.oppName)} a gagné le tirage et choisit qui commence…</p>`;
   } else if (G.phase === 'mulligan') {
     inner = `<p><b>Votre main de départ.</b> ${G.first === G.role ? 'Vous commencez.' : `${esc(G.oppName)} commence.`} Garder ou refaire (une seule fois) ?</p>
-      <div class="row-btns"><button class="btn primary" data-do="keep">Garder</button><button class="btn" data-do="mull">Mulligan</button></div>`;
+      <div class="row-btns"><button class="btn primary" data-do="keep">Garder</button>${RULES().mulligan ? '<button class="btn" data-do="mull">Mulligan</button>' : ''}</div>`;
   } else if (G.phase === 'ready') inner = `<p>En attente de ${esc(G.oppName)}…</p>`;
   else if (G.phase === 'over') {
     const win = G.winner === G.role;

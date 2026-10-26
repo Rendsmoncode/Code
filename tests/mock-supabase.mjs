@@ -42,6 +42,8 @@ export function makeMock() {
     if (path.startsWith('/rest/v1/rpc/')) {
       const fn = path.split('/').pop();
       if (fn === 'booster_status') return json(route, status(p));
+      if (fn === 'get_settings') return json(route, st.settings || {});
+      if (fn === 'admin_set_settings') { if (p?.role !== 'owner') return json(route, { message: 'Réservé au propriétaire.' }, 400); st.settings = body.d; return json(route, null); }
       const stats = () => (st.stats[uid] ||= { boosters_opened: 0, best_batch: 0, wins: 0, games: 0, best_win_streak: 0, win_streak: 0, perfect_wins: 0, comeback_wins: 0, beaten: [], god_packs: 0, max_dry_streak: 0, two_legends: false });
       const openOne = (giftOnly = false) => { if (p.free > 0 && !giftOnly) p.free--; else if (p.boosters > 0) p.boosters--; else return null;
         const roll = Math.random(); const god = st.god === true; const slots = god ? ['L', 'L', 'L', 'L', 'L'] : ['C', 'C', 'C', 'UC', st.force || (roll < 0.3 ? 'S' : roll < 0.6 ? 'L' : 'R')];

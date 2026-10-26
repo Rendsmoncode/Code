@@ -4240,7 +4240,7 @@ ${cause.stack}`;
     * }
     * ```
     */
-    rpc(fn, args = {}, { head: head2 = false, get: get2 = false, count } = {}) {
+    rpc(fn, args = {}, { head: head2 = false, get: get3 = false, count } = {}) {
       var _this$fetch2;
       let method;
       const url = new URL(`${this.url}/rpc/${fn}`);
@@ -4250,7 +4250,7 @@ ${cause.stack}`;
       if (_hasObjectArg) {
         method = "POST";
         body = args;
-      } else if (head2 || get2) {
+      } else if (head2 || get3) {
         method = head2 ? "HEAD" : "GET";
         Object.entries(args).filter(([_, value]) => value !== void 0).map(([name2, value]) => [name2, Array.isArray(value) ? `{${value.join(",")}}` : `${value}`]).forEach(([name2, value]) => {
           url.searchParams.append(name2, value);
@@ -5535,18 +5535,18 @@ Suggested solution: ${env.workaround}`;
         let { onJoin, onLeave, onSync } = this.caller;
         this.joinRef = this.channel.joinRef();
         this.state = _Presence.syncState(this.state, newState, onJoin, onLeave);
-        this.pendingDiffs.forEach((diff) => {
-          this.state = _Presence.syncDiff(this.state, diff, onJoin, onLeave);
+        this.pendingDiffs.forEach((diff2) => {
+          this.state = _Presence.syncDiff(this.state, diff2, onJoin, onLeave);
         });
         this.pendingDiffs = [];
         onSync();
       });
-      this.channel.on(events.diff, (diff) => {
+      this.channel.on(events.diff, (diff2) => {
         let { onJoin, onLeave, onSync } = this.caller;
         if (this.inPendingSyncState()) {
-          this.pendingDiffs.push(diff);
+          this.pendingDiffs.push(diff2);
         } else {
-          this.state = _Presence.syncDiff(this.state, diff, onJoin, onLeave);
+          this.state = _Presence.syncDiff(this.state, diff2, onJoin, onLeave);
           onSync();
         }
       });
@@ -5642,9 +5642,9 @@ Suggested solution: ${env.workaround}`;
      *
      * @returns {Record<string, PresenceState>}
      */
-    static syncDiff(state, diff, onJoin, onLeave) {
+    static syncDiff(state, diff2, onJoin, onLeave) {
       state = this.toNullProtoObj(state);
-      let { joins, leaves } = this.clone(diff);
+      let { joins, leaves } = this.clone(diff2);
       if (!onJoin) {
         onJoin = function() {
         };
@@ -21267,8 +21267,8 @@ ${suffix}`;
     if (fighter) {
       const base = Number(card.power) || 0;
       const shown = o.power ?? base;
-      const diff = shown > base ? " up" : shown < base ? " down" : "";
-      pow = `<div class="pow${diff}" title="Puissance"><span>${shown}</span></div>`;
+      const diff2 = shown > base ? " up" : shown < base ? " down" : "";
+      pow = `<div class="pow${diff2}" title="Puissance"><span>${shown}</span></div>`;
     }
     const ctr = t === "character" && Number(card.counter) > 0 ? `<div class="ctr" title="Contre"><span>+${esc(card.counter)}</span></div>` : "";
     const attrs = attributesOf(card);
@@ -21441,6 +21441,30 @@ ${suffix}`;
     await sb.auth.signOut();
     location.reload();
   }
+  var DEFAULT_SETTINGS = {
+    free_minutes: 10,
+    free_max: 6,
+    rate_sr: 4,
+    rate_ur: 15,
+    rate_l: 50,
+    rate_s: 2e3,
+    rate_god: 1e3,
+    alt_pct: -1,
+    game: { hand: 5, don_first: 1, don_turn: 2, don_max: 10, life_bonus: 0, mulligan: true },
+    maintenance: { on: false, msg: "" },
+    banner: ""
+  };
+  S.settings = structuredClone(DEFAULT_SETTINGS);
+  async function loadSettings() {
+    const { data } = await sb.rpc("get_settings");
+    const d = data || {};
+    S.settings = { ...structuredClone(DEFAULT_SETTINGS), ...d, game: { ...DEFAULT_SETTINGS.game, ...d.game || {} }, maintenance: { ...DEFAULT_SETTINGS.maintenance, ...d.maintenance || {} } };
+    return S.settings;
+  }
+  async function saveSettings(d) {
+    check(await sb.rpc("admin_set_settings", { d }));
+    await loadSettings();
+  }
   async function currentUser() {
     const { data } = await sb.auth.getSession();
     S.user = data.session?.user || null;
@@ -21459,9 +21483,9 @@ ${suffix}`;
   }
   var altsOf = (id) => S.cards.filter((c) => c.alt && c.base === id);
   function allTraits() {
-    const set = /* @__PURE__ */ new Set();
-    for (const c of S.cards) String(c.traits || "").split("/").map((t) => t.trim()).filter(Boolean).forEach((t) => set.add(t));
-    return [...set].sort((a, b) => a.localeCompare(b, "fr"));
+    const set2 = /* @__PURE__ */ new Set();
+    for (const c of S.cards) String(c.traits || "").split("/").map((t) => t.trim()).filter(Boolean).forEach((t) => set2.add(t));
+    return [...set2].sort((a, b) => a.localeCompare(b, "fr"));
   }
   function refreshTraitsList() {
     let dl = document.getElementById("all-traits");
@@ -22236,9 +22260,9 @@ ${suffix}`;
   var SPECIAL = { UR: 1100, L: 1700, S: 2600 };
   var rank = (id) => RARITY_ORDER.indexOf(S.byId[id]?.rarity);
   var SR = RARITY_ORDER.indexOf("SR");
-  function packHTML(cls = "", set = "SB01", sub = "Booster \xB7 5 cartes") {
+  function packHTML(cls = "", set2 = "SB01", sub = "Booster \xB7 5 cartes") {
     return `<div class="bpack ${cls}" aria-hidden="true"><div class="bp-seal bp-top"></div>
-    <div class="bp-body"><div class="bp-set">${set}</div><div class="bp-logo">${logoSVG()}</div><div class="bp-sub">${sub}</div></div>
+    <div class="bp-body"><div class="bp-set">${set2}</div><div class="bp-logo">${logoSVG()}</div><div class="bp-sub">${sub}</div></div>
     <div class="bp-seal bp-bot"></div></div>`;
   }
   function boosterState() {
@@ -22843,10 +22867,10 @@ ${suffix}`;
       const card = getCard();
       const t = e.target;
       if (t.dataset.kw) {
-        const set = new Set(card.keywords || []);
-        if (t.checked) set.add(t.dataset.kw);
-        else set.delete(t.dataset.kw);
-        card.keywords = [...set];
+        const set2 = new Set(card.keywords || []);
+        if (t.checked) set2.add(t.dataset.kw);
+        else set2.delete(t.dataset.kw);
+        card.keywords = [...set2];
         onChange2();
         return;
       }
@@ -23727,20 +23751,20 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     for (const p of Object.values(pendingAnims)) URL.revokeObjectURL(p.url);
     pendingAnims = {};
     const r = root();
-    const set = (id, x) => {
+    const set2 = (id, x) => {
       r.querySelector("#" + id).value = x ?? "";
     };
-    set("ed-name", cur.name);
-    set("ed-code", cur.code);
-    set("ed-cost", cur.cost);
-    set("ed-life", cur.life || "");
+    set2("ed-name", cur.name);
+    set2("ed-code", cur.code);
+    set2("ed-cost", cur.cost);
+    set2("ed-life", cur.life || "");
     const [a1, a2] = attributesOf(cur);
-    set("ed-power", cur.power);
-    set("ed-counter", cur.counter || 0);
-    set("ed-attr", a1);
-    set("ed-attr2", a2);
-    set("ed-effect", cur.effect);
-    set("ed-trigger", cur.trigger);
+    set2("ed-power", cur.power);
+    set2("ed-counter", cur.counter || 0);
+    set2("ed-attr", a1);
+    set2("ed-attr2", a2);
+    set2("ed-effect", cur.effect);
+    set2("ed-trigger", cur.trigger);
     renderTraits();
     r.querySelectorAll("#ed-type [data-type]").forEach((b) => b.classList.toggle("on", b.dataset.type === cur.type));
     r.querySelector("#ed-inb").checked = cur.inBoosters !== false;
@@ -24897,6 +24921,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     return a;
   };
   var send = (m) => link?.send(m);
+  var RULES = () => S.settings?.game || { hand: 5, don_first: 1, don_turn: 2, don_max: 10, life_bonus: 0, mulligan: true };
   var myTurn = () => G?.phase === "play" && G.turn.player === G.role;
   var oppTurn = () => G?.phase === "play" && G.turn.player === other(G.role);
   var myCard = (inst) => G.myCards[inst.c];
@@ -24913,7 +24938,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     chars: [],
     stage: null,
     trash: [],
-    donDeck: 10,
+    donDeck: RULES().don_max,
     donActive: 0,
     donRested: 0
   });
@@ -25560,7 +25585,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     const leaderId = G.deckDef.leader;
     me.leader = { u: uid(), c: leaderId, r: false, d: 0, m: 0 };
     me.deck = shuffle(Object.entries(G.deckDef.cards).flatMap(([c, n3]) => Array.from({ length: n3 }, () => ({ u: uid(), c, r: false, d: 0, m: 0 }))));
-    me.hand = me.deck.splice(0, 5);
+    me.hand = me.deck.splice(0, RULES().hand);
     G.phase = "mulligan";
     commit();
   }
@@ -25570,10 +25595,10 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       me.deck.push(...me.hand);
       me.hand = [];
       shuffle(me.deck);
-      me.hand = me.deck.splice(0, 5);
+      me.hand = me.deck.splice(0, RULES().hand);
       log("fait un mulligan.");
     } else log("garde sa main.");
-    const n3 = Number(myCard(me.leader).life) || 5;
+    const n3 = Math.max(1, (Number(myCard(me.leader).life) || 5) + (Number(RULES().life_bonus) || 0));
     for (let i = 0; i < n3 && me.deck.length; i++) me.life.push(me.deck.shift());
     G.phase = "ready";
     G.meReady = true;
@@ -25613,7 +25638,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       }
       me.hand.push(me.deck.shift());
     }
-    const n3 = Math.min(first ? 1 : 2, me.donDeck);
+    const n3 = Math.min(first ? RULES().don_first : RULES().don_turn, me.donDeck);
     me.donDeck -= n3;
     me.donActive += n3;
     log(`${first ? "ne pioche pas (1er tour)" : "pioche 1 carte"} et re\xE7oit ${n3} DON!!.`);
@@ -27465,7 +27490,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
          <div class="row-btns"><button class="btn primary" data-do="first">Jouer en premier</button><button class="btn" data-do="second">Jouer en second</button></div>` : `<p>${esc(G.oppName)} a gagn\xE9 le tirage et choisit qui commence\u2026</p>`;
     } else if (G.phase === "mulligan") {
       inner = `<p><b>Votre main de d\xE9part.</b> ${G.first === G.role ? "Vous commencez." : `${esc(G.oppName)} commence.`} Garder ou refaire (une seule fois) ?</p>
-      <div class="row-btns"><button class="btn primary" data-do="keep">Garder</button><button class="btn" data-do="mull">Mulligan</button></div>`;
+      <div class="row-btns"><button class="btn primary" data-do="keep">Garder</button>${RULES().mulligan ? '<button class="btn" data-do="mull">Mulligan</button>' : ""}</div>`;
     } else if (G.phase === "ready") inner = `<p>En attente de ${esc(G.oppName)}\u2026</p>`;
     else if (G.phase === "over") {
       const win = G.winner === G.role;
@@ -28581,6 +28606,98 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     render3();
   }
 
+  // js/gm-settings.js
+  var num = (k, label, help, min = 0, max = 1e5, step = 1) => ({ k, label, help, min, max, step });
+  var SECTIONS2 = [
+    ["Boosters gratuits", [
+      num("free_minutes", "Un booster gratuit toutes les (minutes)", "10 au d\xE9part", 1, 1440),
+      num("free_max", "R\xE9serve maximale de boosters gratuits", "6 au d\xE9part", 0, 100)
+    ]],
+    ["Taux de raret\xE9 (derni\xE8re carte du booster : 1 sur N)", [
+      num("rate_sr", "Super rare : 1 booster sur", "4", 1),
+      num("rate_ur", "Ultra rare : 1 booster sur", "15", 1),
+      num("rate_l", "L\xE9gendaire : 1 booster sur", "50", 1),
+      num("rate_s", "1on1 : 1 booster sur", "2000", 1),
+      num("rate_god", "God Pack (5 L\xE9gendaires) : 1 booster sur", "1000", 1),
+      num("alt_pct", "Alt : % des cartes tir\xE9es (\u22121 = tir\xE9es comme les autres)", "\u22121", -1, 100)
+    ]],
+    ["R\xE8gles de partie", [
+      num("game.hand", "Cartes en main au d\xE9part", "5", 1, 15),
+      num("game.don_first", "DON!! re\xE7us au tout premier tour", "1", 0, 10),
+      num("game.don_turn", "DON!! re\xE7us par tour ensuite", "2", 0, 10),
+      num("game.don_max", "DON!! au total (deck DON!!)", "10", 0, 30),
+      num("game.life_bonus", "Vies en plus (ou en moins) pour chaque Leader", "0", -4, 10)
+    ]]
+  ];
+  var get2 = (o, path) => path.split(".").reduce((x, k) => x?.[k], o);
+  var set = (o, path, v) => {
+    const ks = path.split(".");
+    let x = o;
+    for (const k of ks.slice(0, -1)) x = x[k] || (x[k] = {});
+    x[ks.at(-1)] = v;
+  };
+  function mountSettings(el) {
+    const render3 = () => {
+      const st = S.settings;
+      el.innerHTML = `<h3>Param\xE8tres du site</h3>
+      <p class="muted small">Tout s'applique imm\xE9diatement pour tout le monde (les parties d\xE9j\xE0 commenc\xE9es gardent leurs r\xE8gles).</p>
+      ${SECTIONS2.map(([title, fields]) => `<fieldset class="gs-set"><legend>${title}</legend>${fields.map((f) => `
+        <label class="gs-f"><span>${f.label}</span><input type="number" data-k="${f.k}" min="${f.min}" max="${f.max}" step="${f.step}" value="${esc(get2(st, f.k))}"><small class="muted">d\xE9faut ${f.help}</small></label>`).join("")}
+        ${title === "R\xE8gles de partie" ? `<label class="check"><input type="checkbox" data-k="game.mulligan" ${st.game.mulligan ? "checked" : ""}> Mulligan autoris\xE9</label>` : ""}</fieldset>`).join("")}
+      <fieldset class="gs-set"><legend>Maintenance et message</legend>
+        <label class="check"><input type="checkbox" data-k="maintenance.on" ${st.maintenance.on ? "checked" : ""}> Site en maintenance (tout le monde est bloqu\xE9 sauf toi)</label>
+        <label class="gs-f wide"><span>Message de maintenance</span><input type="text" data-k="maintenance.msg" maxlength="200" value="${esc(st.maintenance.msg)}" placeholder="Le jeu est en maintenance. Reviens dans quelques minutes !"></label>
+        <label class="gs-f wide"><span>Bandeau affich\xE9 \xE0 tous (vide = aucun)</span><input type="text" data-k="banner" maxlength="200" value="${esc(st.banner)}" placeholder="ex. Tournoi ce soir \xE0 21 h !"></label>
+      </fieldset>
+      <div class="row-btns"><button class="btn main" data-gs="save">Enregistrer</button><button class="btn ghost" data-gs="reset">Revenir aux valeurs par d\xE9faut</button></div>
+      <p class="msg gs-msg" role="status"></p>`;
+    };
+    const msg2 = (t, err = false) => {
+      el.querySelector(".gs-msg").textContent = t;
+      el.querySelector(".gs-msg").classList.toggle("err", err);
+    };
+    el.addEventListener("click", async (e) => {
+      const act = e.target.closest("[data-gs]")?.dataset.gs;
+      if (!act) return;
+      try {
+        let d;
+        if (act === "reset") {
+          if (!confirm("Remettre tous les param\xE8tres par d\xE9faut ?")) return;
+          d = {};
+        } else {
+          d = structuredClone(S.settings);
+          for (const i of el.querySelectorAll("[data-k]")) {
+            const v = i.type === "checkbox" ? i.checked : i.type === "number" ? Number(i.value) : i.value.trim();
+            if (i.type === "number" && (!Number.isFinite(v) || v < Number(i.min) || v > Number(i.max))) {
+              msg2(`Valeur invalide : ${i.closest("label").querySelector("span").textContent}`, true);
+              return;
+            }
+            set(d, i.dataset.k, v);
+          }
+          if (d.maintenance.on && !S.settings.maintenance.on && !confirm("Activer la maintenance ? Tous les joueurs seront bloqu\xE9s jusqu'\xE0 ce que tu la d\xE9sactives.")) return;
+        }
+        await saveSettings(diff(d, DEFAULT_SETTINGS));
+        render3();
+        msg2("Param\xE8tres enregistr\xE9s.");
+        window.dispatchEvent(new CustomEvent("nk:settings"));
+      } catch (err) {
+        msg2(err.message, true);
+      }
+    });
+    loadSettings().catch(() => {
+    }).then(render3);
+  }
+  function diff(d, def) {
+    const out = {};
+    for (const [k, v] of Object.entries(d)) {
+      if (v && typeof v === "object" && !Array.isArray(v)) {
+        const sub = diff(v, def[k] || {});
+        if (Object.keys(sub).length) out[k] = sub;
+      } else if (v !== def[k]) out[k] = v;
+    }
+    return out;
+  }
+
   // js/gm.js
   function initGM() {
     const el = document.getElementById("tab-gm");
@@ -28589,6 +28706,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     <div class="ach-head"><h2>Game Master</h2></div>
     <section class="panel gm-live"></section>
     <section class="panel gm-surprise"></section>
+    <section class="panel gm-settings"></section>
     <section class="panel gm-who">
       <label>Joueur <select class="gm-player" aria-label="Joueur"></select></label>
       <span class="gm-sum muted"></span>
@@ -28620,6 +28738,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     const q = (s) => el.querySelector(s);
     mountLive(q(".gm-live"));
     mountSurprise(q(".gm-surprise"));
+    mountSettings(q(".gm-settings"));
     let player2 = "";
     let coll = {};
     let loaded = false;
@@ -28963,9 +29082,22 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     });
   }
   tabs.forEach((t) => t.addEventListener("click", () => show(t.dataset.tab)));
+  function maintenanceScreen() {
+    const m = S.settings.maintenance;
+    document.querySelector("main").innerHTML = `<div class="panel maint"><h2>Petite pause</h2>
+    <p>${esc(m.msg || "Le jeu est en maintenance. Reviens dans quelques minutes !")}</p></div>`;
+  }
+  function banner() {
+    const t = S.settings.banner || (S.settings.maintenance.on && isOwner() ? "Maintenance activ\xE9e : les joueurs ne peuvent pas jouer." : "");
+    document.querySelector(".site-banner")?.remove();
+    if (t) document.querySelector("main").insertAdjacentHTML("beforebegin", `<p class="site-banner">${esc(t)}</p>`);
+  }
   async function start() {
+    await loadSettings().catch(() => {
+    });
     if (!await currentUser()) {
-      showAuth();
+      await showAuth();
+      if (S.settings.maintenance.on) document.querySelector(".auth form")?.insertAdjacentHTML("afterbegin", `<p class="msg err">${esc(S.settings.maintenance.msg || "Le jeu est en maintenance.")}</p>`);
       return;
     }
     try {
@@ -28974,6 +29106,13 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     }
     await load();
     await refreshStatus();
+    if (S.settings.maintenance.on && !isOwner()) {
+      document.documentElement.classList.remove("sp-boot");
+      maintenanceScreen();
+      return;
+    }
+    banner();
+    window.addEventListener("nk:settings", banner);
     const admin = isAdmin();
     document.querySelectorAll(".admin-only").forEach((t) => {
       t.hidden = !admin;
