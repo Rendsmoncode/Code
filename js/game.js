@@ -82,6 +82,21 @@ export function initPlay() {
   });
 }
 
+// Partie lancée par le Game Master : on rejoint directement la partie, sans passer par le salon.
+// m = { code, mode, role, deck, opp }. Renvoie false si on est déjà en partie.
+export const inGame = () => Boolean(G) || lobby.status !== 'idle';
+export function startForced(m) {
+  if (inGame()) return false;
+  const ok = S.decks.filter((d) => validateDeck(d).ok);
+  const deck = ok.find((d) => d.id === m.deck) || ok[0];
+  if (!deck) { lobby.error = 'Le Game Master a lancé une partie, mais tu n\'as pas de deck valide (onglet Decks).'; renderLobby(); return false; }
+  Object.assign(lobby, { deck: deck.id, mode: m.mode === 'local' ? 'local' : 'online', forced: { tries: 0 }, error: '' });
+  if (m.role === 'host') { lobby.code = m.code; connect(true, m.code); }
+  // L'invité laisse à l'hôte le temps d'ouvrir la partie (et réessaie s'il n'est pas encore prêt).
+  else { lobby.status = 'connecting'; renderLobby(); setTimeout(() => { lobby.status = 'idle'; connect(false, m.code); }, 2500); }
+  return true;
+}
+
 // ---------- salon ----------
 function renderLobby() {
   const decks = S.decks.map((d) => ({ d, v: validateDeck(d) }));
@@ -148,7 +163,7 @@ function renderLobby() {
   });
   r.querySelector('#lb-cancel')?.addEventListener('click', () => {
     link?.close(); link = null; closeGmDoor(); G = null;
-    Object.assign(lobby, { status: 'idle', code: '', error: '' });
+    Object.assign(lobby, { status: 'idle', code: '', error: '', forced: null });
     renderLobby();
   });
 }
@@ -163,7 +178,7 @@ function connect(isHost, code, resumed = null) {
   else {
     const deck = S.decks.find((d) => d.id === lobby.deck);
     if (!deck || !validateDeck(deck).ok) return;
-    G = newGame(isHost ? 'host' : 'guest', deck, localStorage.getItem('optcgm-name') || (isHost ? 'Joueur 1' : 'Joueur 2'));
+    G = newGame(isHost ? 'host' : 'guest', deck, localStorage.getItem('optcgm-name') || S.status?.username || (isHost ? 'Joueur 1' : 'Joueur 2'));
   }
   Object.assign(lobby, { status: resumed ? 'playing' : 'connecting', error: '' });
   if (!isHost) lobby.code = code.trim().toUpperCase();
@@ -183,6 +198,7 @@ function connect(isHost, code, resumed = null) {
       G.connected = true;
       G.disconnected = false;
       retries = 0;
+      lobby.forced = null;
       lobby.status = 'playing';
       openGmDoor();
       if (G.phase === 'hello') {
@@ -202,6 +218,9 @@ function connect(isHost, code, resumed = null) {
       if (!isHost && lobby.mode === 'online') setTimeout(retry, 3000);
     },
     onError: (t) => {
+      // Partie lancée par le Game Master : l'hôte n'est peut-être pas encore prêt.
+      if (!isHost && lobby.forced && !G?.connected && lobby.forced.tries++ < 15) { setTimeout(() => { link?.close(); open(); }, 2000); return; }
+      lobby.forced = null;
       // Hôte qui revient : son ancien code peut rester réservé quelques secondes.
       if (isHost && resumed && /déjà utilisé/.test(t) && retries++ < 20) { setTimeout(() => { link?.close(); open(); }, 3000); return; }
       if (!isHost && G?.connected) { setTimeout(retry, 3000); return; }

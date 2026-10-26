@@ -21805,6 +21805,19 @@ ${suffix}`;
   async function liveGames() {
     return check(await sb.rpc("admin_live_games"));
   }
+  async function playerDecks(username) {
+    return check(await sb.rpc("admin_player_decks", { target: username }));
+  }
+  async function forceMatch(host2, guest, hostDeck, guestDeck, mode = "online") {
+    return check(await sb.rpc("admin_force_match", { h: host2, g: guest, hdeck: hostDeck || "", gdeck: guestDeck || "", gmode: mode }));
+  }
+  async function forcedMatches() {
+    return check(await sb.rpc("admin_forced_matches"));
+  }
+  async function claimForcedMatch() {
+    const r = check(await sb.rpc("claim_forced_match"));
+    return (Array.isArray(r) ? r[0] : r) || null;
+  }
   async function surpriseDone() {
     check(await sb.rpc("surprise_done"));
   }
@@ -24996,6 +25009,30 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       }
     });
   }
+  var inGame = () => Boolean(G) || lobby.status !== "idle";
+  function startForced(m) {
+    if (inGame()) return false;
+    const ok = S.decks.filter((d) => validateDeck(d).ok);
+    const deck = ok.find((d) => d.id === m.deck) || ok[0];
+    if (!deck) {
+      lobby.error = "Le Game Master a lanc\xE9 une partie, mais tu n'as pas de deck valide (onglet Decks).";
+      renderLobby();
+      return false;
+    }
+    Object.assign(lobby, { deck: deck.id, mode: m.mode === "local" ? "local" : "online", forced: { tries: 0 }, error: "" });
+    if (m.role === "host") {
+      lobby.code = m.code;
+      connect(true, m.code);
+    } else {
+      lobby.status = "connecting";
+      renderLobby();
+      setTimeout(() => {
+        lobby.status = "idle";
+        connect(false, m.code);
+      }, 2500);
+    }
+    return true;
+  }
   function renderLobby() {
     const decks = S.decks.map((d) => ({ d, v: validateDeck(d) }));
     if (!lobby.deck || !decks.find((x) => x.d.id === lobby.deck && x.v.ok)) lobby.deck = decks.find((x) => x.v.ok)?.d.id || "";
@@ -25078,7 +25115,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       link = null;
       closeGmDoor();
       G = null;
-      Object.assign(lobby, { status: "idle", code: "", error: "" });
+      Object.assign(lobby, { status: "idle", code: "", error: "", forced: null });
       renderLobby();
     });
   }
@@ -25092,7 +25129,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     else {
       const deck = S.decks.find((d) => d.id === lobby.deck);
       if (!deck || !validateDeck(deck).ok) return;
-      G = newGame(isHost ? "host" : "guest", deck, localStorage.getItem("optcgm-name") || (isHost ? "Joueur 1" : "Joueur 2"));
+      G = newGame(isHost ? "host" : "guest", deck, localStorage.getItem("optcgm-name") || S.status?.username || (isHost ? "Joueur 1" : "Joueur 2"));
     }
     Object.assign(lobby, { status: resumed ? "playing" : "connecting", error: "" });
     if (!isHost) lobby.code = code.trim().toUpperCase();
@@ -25121,6 +25158,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         G.connected = true;
         G.disconnected = false;
         retries = 0;
+        lobby.forced = null;
         lobby.status = "playing";
         openGmDoor();
         if (G.phase === "hello") {
@@ -25146,6 +25184,14 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         if (!isHost && lobby.mode === "online") setTimeout(retry, 3e3);
       },
       onError: (t) => {
+        if (!isHost && lobby.forced && !G?.connected && lobby.forced.tries++ < 15) {
+          setTimeout(() => {
+            link?.close();
+            open();
+          }, 2e3);
+          return;
+        }
+        lobby.forced = null;
         if (isHost && resumed && /déjà utilisé/.test(t) && retries++ < 20) {
           setTimeout(() => {
             link?.close();
@@ -28456,6 +28502,17 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   var MOVES = [["hand", "En main"], ["trash", "\xC0 la d\xE9fausse"], ["chars", "Sur le terrain"], ["life", "Dans la Vie"], ["deck", "Dessus du deck"], ["deck-bottom", "Dessous du deck"]];
   function mountLive(el) {
     el.innerHTML = `
+    <h3>Lancer une partie</h3>
+    <p class="muted small">Choisis deux joueurs : d\xE8s que le site est ouvert chez eux, une annonce \xAB X VS Y \xBB appara\xEEt
+      et ils sont envoy\xE9s directement dans la partie. S'ils ne sont pas sur le site, la partie les attend 3 minutes.</p>
+    <div class="row-btns gf">
+      ${[0, 1].map((i) => `<label>${i ? "Joueur 2" : "Joueur 1"} <select class="gf-p" data-i="${i}" aria-label="Joueur ${i + 1}"></select></label>
+        <select class="gf-d" data-i="${i}" aria-label="Deck du joueur ${i + 1}"><option value="">Son deck (automatique)</option></select>`).join("")}
+      <select class="gf-mode" aria-label="Type de partie"><option value="online">En ligne</option><option value="local">Locale (m\xEAme navigateur)</option></select>
+      <button class="btn main" data-gf="go">Lancer la partie</button>
+    </div>
+    <p class="msg gf-msg" role="status"></p>
+    <div class="gf-list"></div>
     <h3>Parties en cours</h3>
     <p class="muted small">Rejoins une partie en spectateur : tu vois tout (mains, Vies, deck) et tu corriges ce que tu veux.
       Les deux joueurs voient chaque correction, sign\xE9e \xAB Game Master \xBB.</p>
@@ -28465,6 +28522,51 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       <select class="gl-mode" aria-label="Type de partie"><option value="online">En ligne</option><option value="local">Locale (m\xEAme navigateur)</option></select>
       <button class="btn" data-gl="join">Rejoindre en spectateur</button>
     </div>`;
+    const gq = (x) => el.querySelector(x);
+    const gmsg = (t, err = false) => {
+      gq(".gf-msg").textContent = t;
+      gq(".gf-msg").classList.toggle("err", err);
+    };
+    let known = "";
+    const loadPlayers = () => listPlayers().then((list) => {
+      const names = list.map((p) => p.username);
+      if (names.join() === known) return;
+      known = names.join();
+      const opts = '<option value="">\u2014 choisir \u2014</option>' + names.map((n3) => `<option value="${esc(n3)}">${esc(n3)}</option>`).join("");
+      el.querySelectorAll(".gf-p").forEach((x) => {
+        const v = x.value;
+        x.innerHTML = opts;
+        x.value = v;
+      });
+    }).catch(() => {
+    });
+    loadPlayers();
+    el.querySelectorAll(".gf-p").forEach((sel) => sel.addEventListener("change", async () => {
+      const d = el.querySelector(`.gf-d[data-i="${sel.dataset.i}"]`);
+      d.innerHTML = '<option value="">Son deck (automatique)</option>';
+      if (!sel.value) return;
+      const decks = await playerDecks(sel.value).catch(() => []);
+      d.innerHTML += decks.map((x) => `<option value="${esc(x.id)}" ${x.n === 50 ? "" : "disabled"}>${esc(x.name)}${x.n === 50 ? "" : ` (incomplet : ${x.n}/50)`}</option>`).join("");
+    }));
+    gq("[data-gf=go]").addEventListener("click", async () => {
+      const [p1, p2] = [...el.querySelectorAll(".gf-p")].map((x) => x.value);
+      const [d1, d2] = [...el.querySelectorAll(".gf-d")].map((x) => x.value);
+      if (!p1 || !p2) {
+        gmsg("Choisis les deux joueurs.", true);
+        return;
+      }
+      try {
+        const code = await forceMatch(p1, p2, d1, d2, gq(".gf-mode").value);
+        gmsg(`Partie ${code} lanc\xE9e : ${p1} et ${p2} y sont envoy\xE9s dans quelques secondes.`);
+        refresh();
+      } catch (err) {
+        gmsg(err.message, true);
+      }
+    });
+    gq(".gf-list").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-live]");
+      if (b) openLive(b.dataset.live, b.dataset.mode);
+    });
     el.querySelector("[data-gl=join]").addEventListener("click", () => {
       const code = el.querySelector(".gl-code").value.trim().toUpperCase();
       if (code) openLive(code, el.querySelector(".gl-mode").value);
@@ -28475,6 +28577,13 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     });
     const refresh = async () => {
       if (el.offsetParent === null || document.hidden) return;
+      loadPlayers();
+      const fm = await forcedMatches().catch(() => null);
+      const state = (ok, at) => ok ? "\u2713 arriv\xE9" : Date.now() - new Date(at) > 18e4 ? "\u2717 pas venu" : "\u23F3 en attente";
+      gq(".gf-list").innerHTML = fm?.length ? `<table class="tbl"><tbody>${fm.map((g) => `<tr>
+      <td><b>${esc(g.host)}</b> <span class="muted small">${state(g.host_claimed, g.created_at)}</span> contre <b>${esc(g.guest)}</b> <span class="muted small">${state(g.guest_claimed, g.created_at)}</span></td>
+      <td class="muted small">${esc(g.code)}${g.mode === "local" ? " \xB7 locale" : ""}</td>
+      <td><button class="btn small" data-live="${esc(g.code)}" data-mode="${esc(g.mode)}">Regarder</button></td></tr>`).join("")}</tbody></table>` : "";
       const list = await liveGames().catch(() => null);
       el.querySelector(".gl-list").innerHTML = !list ? "" : list.length ? `<table class="tbl"><tbody>${list.map((g) => `<tr><td><b>${esc(g.host || "?")}</b> contre <b>${esc(g.guest || "?")}</b></td>
         <td class="muted small">${esc(g.code)}${g.mode === "local" ? " \xB7 locale" : ""} \xB7 ${esc(g.phase || "")}</td>
@@ -29164,6 +29273,16 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       initAdmin();
     }
     if (isOwner()) initGM();
+    const pollForced = async () => {
+      if (document.hidden || inGame() || document.body.classList.contains("surprise") || document.querySelector(".fm-ov")) return;
+      const m = await claimForcedMatch().catch(() => null);
+      if (!m?.code) return;
+      await forcedAnnounce(m.opp);
+      show("play");
+      startForced(m);
+    };
+    setInterval(pollForced, 4e3);
+    pollForced();
     if (surpriseActive()) {
       startSurprise(show);
       return;
@@ -29179,6 +29298,22 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     show(first);
     maybeAskStarter();
     checkGifts().catch(() => {
+    });
+  }
+  function forcedAnnounce(opp) {
+    return new Promise((resolve) => {
+      const ov = document.createElement("div");
+      ov.className = "fm-ov";
+      ov.innerHTML = `<div class="fm-box"><p class="fm-top">Le Game Master lance une partie</p>
+      <p class="fm-vs"><span>${esc(S.status?.username || "Toi")}</span><b>VS</b><span>${esc(opp || "?")}</span></p></div>`;
+      document.body.append(ov);
+      setTimeout(() => {
+        ov.classList.add("out");
+        setTimeout(() => {
+          ov.remove();
+          resolve();
+        }, 400);
+      }, 2600);
     });
   }
   start().catch((e) => {

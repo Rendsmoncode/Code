@@ -136,6 +136,19 @@ create table if not exists public.live_games (
   updated_at timestamptz not null default now()
 );
 
+-- Parties lancées par le Game Master : les deux joueurs la récupèrent et y sont envoyés directement.
+create table if not exists public.forced_matches (
+  code text primary key,
+  mode text not null default 'online',
+  host uuid not null references public.profiles on delete cascade,
+  guest uuid not null references public.profiles on delete cascade,
+  host_deck text,
+  guest_deck text,
+  host_claimed boolean not null default false,
+  guest_claimed boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
 -- ---------- Fonctions utilitaires ----------
 
 -- Met une carte offerte de côté pour l'ouverture façon booster (à appeler AVANT de l'ajouter à la collection).
@@ -653,6 +666,66 @@ begin
   return query select * from public.live_games where updated_at > now() - interval '3 minutes' order by updated_at desc;
 end $$;
 
+-- ---------- Parties lancées par le Game Master ----------
+-- Decks d'un joueur (pour choisir avec quel deck il jouera).
+create or replace function public.admin_player_decks(target text) returns table (id text, name text, n int)
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.is_owner() then raise exception 'Réservé au propriétaire.'; end if;
+  return query
+    select d.id, d.name, (select coalesce(sum(v::int), 0)::int from jsonb_each_text(d.cards) as e(k, v))
+      from public.decks d join public.profiles p on p.id = d.user_id
+      where p.username = lower(target) order by d.updated_at desc;
+end $$;
+
+-- Lance une partie entre deux joueurs : renvoie le code de la partie.
+create or replace function public.admin_force_match(h text, g text, hdeck text, gdeck text, gmode text) returns text
+language plpgsql security definer set search_path = public as $$
+declare
+  hu uuid := (select id from public.profiles where username = lower(h));
+  gu uuid := (select id from public.profiles where username = lower(g));
+  c text := '';
+  a text := 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+begin
+  if not public.is_owner() then raise exception 'Réservé au propriétaire.'; end if;
+  if hu is null or gu is null then raise exception 'Joueur introuvable.'; end if;
+  if hu = gu then raise exception 'Choisis deux joueurs différents.'; end if;
+  for i in 1..6 loop c := c || substr(a, 1 + floor(random() * length(a))::int, 1); end loop;
+  delete from public.forced_matches where host in (hu, gu) or guest in (hu, gu) or created_at < now() - interval '1 day';
+  insert into public.forced_matches (code, mode, host, guest, host_deck, guest_deck)
+    values (c, case when gmode = 'local' then 'local' else 'online' end, hu, gu, nullif(hdeck, ''), nullif(gdeck, ''));
+  return c;
+end $$;
+
+-- Le joueur récupère la partie qui l'attend (une seule fois, et seulement dans les 3 minutes).
+create or replace function public.claim_forced_match() returns table (code text, mode text, role text, deck text, opp text)
+language plpgsql security definer set search_path = public as $$
+declare m public.forced_matches;
+begin
+  select * into m from public.forced_matches f
+    where ((f.host = auth.uid() and not f.host_claimed) or (f.guest = auth.uid() and not f.guest_claimed))
+      and f.created_at > now() - interval '3 minutes'
+    order by f.created_at desc limit 1;
+  if m.code is null then return; end if;
+  if m.host = auth.uid() then
+    update public.forced_matches set host_claimed = true where forced_matches.code = m.code;
+    return query select m.code, m.mode, 'host'::text, m.host_deck, (select username from public.profiles where id = m.guest);
+  else
+    update public.forced_matches set guest_claimed = true where forced_matches.code = m.code;
+    return query select m.code, m.mode, 'guest'::text, m.guest_deck, (select username from public.profiles where id = m.host);
+  end if;
+end $$;
+
+-- Parties lancées récemment (et qui les a déjà rejointes).
+create or replace function public.admin_forced_matches() returns table (code text, mode text, host text, guest text, host_claimed boolean, guest_claimed boolean, created_at timestamptz)
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.is_owner() then raise exception 'Réservé au propriétaire.'; end if;
+  return query select f.code, f.mode, ph.username, pg.username, f.host_claimed, f.guest_claimed, f.created_at
+    from public.forced_matches f join public.profiles ph on ph.id = f.host join public.profiles pg on pg.id = f.guest
+    where f.created_at > now() - interval '15 minutes' order by f.created_at desc;
+end $$;
+
 -- ---------- Sécurité : RLS ----------
 
 alter table public.profiles enable row level security;
@@ -666,6 +739,7 @@ alter table public.achievements enable row level security;
 alter table public.collection_backups enable row level security;
 alter table public.pending_reveals enable row level security;
 alter table public.live_games enable row level security;
+alter table public.forced_matches enable row level security;
 alter table public.site_settings enable row level security;
 
 drop policy if exists "mes stats" on public.stats;
@@ -893,7 +967,9 @@ grant execute on function public.is_admin(), public.booster_status(), public.ope
   public.admin_create_surprise(text, text, int), public.admin_prepare_surprise(text, text, int), public.admin_surprise_go(text),
   public.admin_surprise_list(), public.surprise_done(), public.admin_reset_test(text, text, int),
   public.admin_set_packs(text, jsonb), public.open_surprise_pack(int),
-  public.game_ping(text, text, text, text), public.admin_live_games(), public.admin_set_settings(jsonb)
+  public.game_ping(text, text, text, text), public.admin_live_games(), public.admin_set_settings(jsonb),
+  public.admin_player_decks(text), public.admin_force_match(text, text, text, text, text), public.claim_forced_match(),
+  public.admin_forced_matches()
   to authenticated;
 grant usage on schema public to anon;
 grant execute on function public.invite_info(text), public.get_settings() to anon, authenticated;

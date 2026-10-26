@@ -1,6 +1,6 @@
 // Game Master → Parties : rejoindre une partie en spectateur (avec son code), voir l'état complet des deux joueurs
 // et corriger n'importe quoi. Chaque correction est appliquée chez le joueur concerné, puis transmise à son adversaire.
-import { S, liveGames } from './store.js';
+import { S, liveGames, listPlayers, playerDecks, forceMatch, forcedMatches } from './store.js';
 import { esc, cardHTML, RARITIES } from './cards.js';
 import * as net from './net.js';
 
@@ -10,6 +10,17 @@ const MOVES = [['hand', 'En main'], ['trash', 'À la défausse'], ['chars', 'Sur
 
 export function mountLive(el) {
   el.innerHTML = `
+    <h3>Lancer une partie</h3>
+    <p class="muted small">Choisis deux joueurs : dès que le site est ouvert chez eux, une annonce « X VS Y » apparaît
+      et ils sont envoyés directement dans la partie. S'ils ne sont pas sur le site, la partie les attend 3 minutes.</p>
+    <div class="row-btns gf">
+      ${[0, 1].map((i) => `<label>${i ? 'Joueur 2' : 'Joueur 1'} <select class="gf-p" data-i="${i}" aria-label="Joueur ${i + 1}"></select></label>
+        <select class="gf-d" data-i="${i}" aria-label="Deck du joueur ${i + 1}"><option value="">Son deck (automatique)</option></select>`).join('')}
+      <select class="gf-mode" aria-label="Type de partie"><option value="online">En ligne</option><option value="local">Locale (même navigateur)</option></select>
+      <button class="btn main" data-gf="go">Lancer la partie</button>
+    </div>
+    <p class="msg gf-msg" role="status"></p>
+    <div class="gf-list"></div>
     <h3>Parties en cours</h3>
     <p class="muted small">Rejoins une partie en spectateur : tu vois tout (mains, Vies, deck) et tu corriges ce que tu veux.
       Les deux joueurs voient chaque correction, signée « Game Master ».</p>
@@ -19,6 +30,41 @@ export function mountLive(el) {
       <select class="gl-mode" aria-label="Type de partie"><option value="online">En ligne</option><option value="local">Locale (même navigateur)</option></select>
       <button class="btn" data-gl="join">Rejoindre en spectateur</button>
     </div>`;
+  // ---- Lancer une partie ----
+  const gq = (x) => el.querySelector(x);
+  const gmsg = (t, err = false) => { gq('.gf-msg').textContent = t; gq('.gf-msg').classList.toggle('err', err); };
+  // Liste des joueurs (rechargée à chaque rafraîchissement, sans perdre le choix en cours).
+  let known = '';
+  const loadPlayers = () => listPlayers().then((list) => {
+    const names = list.map((p) => p.username);
+    if (names.join() === known) return;
+    known = names.join();
+    const opts = '<option value="">— choisir —</option>' + names.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+    el.querySelectorAll('.gf-p').forEach((x) => { const v = x.value; x.innerHTML = opts; x.value = v; });
+  }).catch(() => {});
+  loadPlayers();
+  el.querySelectorAll('.gf-p').forEach((sel) => sel.addEventListener('change', async () => {
+    const d = el.querySelector(`.gf-d[data-i="${sel.dataset.i}"]`);
+    d.innerHTML = '<option value="">Son deck (automatique)</option>';
+    if (!sel.value) return;
+    const decks = await playerDecks(sel.value).catch(() => []);
+    d.innerHTML += decks.map((x) => `<option value="${esc(x.id)}" ${x.n === 50 ? '' : 'disabled'}>${esc(x.name)}${x.n === 50 ? '' : ` (incomplet : ${x.n}/50)`}</option>`).join('');
+  }));
+  gq('[data-gf=go]').addEventListener('click', async () => {
+    const [p1, p2] = [...el.querySelectorAll('.gf-p')].map((x) => x.value);
+    const [d1, d2] = [...el.querySelectorAll('.gf-d')].map((x) => x.value);
+    if (!p1 || !p2) { gmsg('Choisis les deux joueurs.', true); return; }
+    try {
+      const code = await forceMatch(p1, p2, d1, d2, gq('.gf-mode').value);
+      gmsg(`Partie ${code} lancée : ${p1} et ${p2} y sont envoyés dans quelques secondes.`);
+      refresh();
+    } catch (err) { gmsg(err.message, true); }
+  });
+  gq('.gf-list').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-live]');
+    if (b) openLive(b.dataset.live, b.dataset.mode);
+  });
+
   el.querySelector('[data-gl=join]').addEventListener('click', () => {
     const code = el.querySelector('.gl-code').value.trim().toUpperCase();
     if (code) openLive(code, el.querySelector('.gl-mode').value);
@@ -30,6 +76,13 @@ export function mountLive(el) {
   // Liste des parties en cours, rafraîchie toutes les 10 secondes quand l'onglet est affiché.
   const refresh = async () => {
     if (el.offsetParent === null || document.hidden) return;
+    loadPlayers();
+    const fm = await forcedMatches().catch(() => null);
+    const state = (ok, at) => (ok ? '✓ arrivé' : Date.now() - new Date(at) > 180000 ? '✗ pas venu' : '⏳ en attente');
+    gq('.gf-list').innerHTML = fm?.length ? `<table class="tbl"><tbody>${fm.map((g) => `<tr>
+      <td><b>${esc(g.host)}</b> <span class="muted small">${state(g.host_claimed, g.created_at)}</span> contre <b>${esc(g.guest)}</b> <span class="muted small">${state(g.guest_claimed, g.created_at)}</span></td>
+      <td class="muted small">${esc(g.code)}${g.mode === 'local' ? ' · locale' : ''}</td>
+      <td><button class="btn small" data-live="${esc(g.code)}" data-mode="${esc(g.mode)}">Regarder</button></td></tr>`).join('')}</tbody></table>` : '';
     const list = await liveGames().catch(() => null);
     el.querySelector('.gl-list').innerHTML = !list ? '' : list.length
       ? `<table class="tbl"><tbody>${list.map((g) => `<tr><td><b>${esc(g.host || '?')}</b> contre <b>${esc(g.guest || '?')}</b></td>

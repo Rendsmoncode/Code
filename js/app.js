@@ -1,9 +1,9 @@
-import { S, load, refreshStatus, currentUser, isAdmin, isOwner, signOut, loadSettings } from './store.js';
+import { S, load, refreshStatus, currentUser, isAdmin, isOwner, signOut, loadSettings, claimForcedMatch } from './store.js';
 import { esc } from './cards.js';
 import { showAuth, maybeAskStarter } from './auth.js';
 import { initEditor } from './editor.js';
 import { createDeckBuilder } from './decks.js';
-import { initPlay } from './game.js';
+import { initPlay, inGame, startForced } from './game.js';
 import { initBoosters, initCollection, checkGifts } from './boosters.js';
 import { initAdmin } from './admin.js';
 import { openSettings } from './settings.js';
@@ -84,6 +84,18 @@ async function start() {
   if (admin) { initEditor(); initAdmin(); }
   if (isOwner()) initGM();
 
+  // Partie lancée par le Game Master : vérifiée toutes les 4 secondes tant qu'on n'est pas en partie.
+  const pollForced = async () => {
+    if (document.hidden || inGame() || document.body.classList.contains('surprise') || document.querySelector('.fm-ov')) return;
+    const m = await claimForcedMatch().catch(() => null);
+    if (!m?.code) return;
+    await forcedAnnounce(m.opp);
+    show('play');
+    startForced(m);
+  };
+  setInterval(pollForced, 4000);
+  pollForced();
+
   // Surprise : écran noir jusqu'au lancement, puis le booster géant (voir surprise.js).
   if (surpriseActive()) { startSurprise(show); return; }
   document.documentElement.classList.remove('sp-boot');
@@ -94,6 +106,18 @@ async function start() {
   show(first);
   maybeAskStarter();
   checkGifts().catch(() => {});
+}
+
+// Annonce plein écran avant d'être envoyé dans la partie.
+function forcedAnnounce(opp) {
+  return new Promise((resolve) => {
+    const ov = document.createElement('div');
+    ov.className = 'fm-ov';
+    ov.innerHTML = `<div class="fm-box"><p class="fm-top">Le Game Master lance une partie</p>
+      <p class="fm-vs"><span>${esc(S.status?.username || 'Toi')}</span><b>VS</b><span>${esc(opp || '?')}</span></p></div>`;
+    document.body.append(ov);
+    setTimeout(() => { ov.classList.add('out'); setTimeout(() => { ov.remove(); resolve(); }, 400); }, 2600);
+  });
 }
 
 start().catch((e) => {

@@ -439,6 +439,20 @@ export async function gamePing(code, role, mode, phase) {
 export async function liveGames() {
   return check(await sb.rpc('admin_live_games'));
 }
+// Parties lancées par le Game Master.
+export async function playerDecks(username) {
+  return check(await sb.rpc('admin_player_decks', { target: username }));
+}
+export async function forceMatch(host, guest, hostDeck, guestDeck, mode = 'online') {
+  return check(await sb.rpc('admin_force_match', { h: host, g: guest, hdeck: hostDeck || '', gdeck: guestDeck || '', gmode: mode }));
+}
+export async function forcedMatches() {
+  return check(await sb.rpc('admin_forced_matches'));
+}
+export async function claimForcedMatch() {
+  const r = check(await sb.rpc('claim_forced_match'));
+  return (Array.isArray(r) ? r[0] : r) || null;
+}
 export async function surpriseDone() {
   check(await sb.rpc('surprise_done'));
 }

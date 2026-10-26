@@ -92,6 +92,25 @@ export function makeMock() {
         const out = pk.cards.map((id) => { const isNew = !st.coll[uid]?.[id]; add(uid, id, 1); return { id, new: isNew }; }); pk.opened = true; return json(route, out); }
       if (fn === 'game_ping') { const g = ((st.live ||= {})[body.gcode] ||= { code: body.gcode }); Object.assign(g, { mode: body.gmode, phase: body.gphase, updated_at: new Date().toISOString(), [body.grole]: p.username }); return json(route, null); }
       if (fn === 'admin_live_games') return json(route, Object.values(st.live || {}));
+      const uidByName = (n) => Object.keys(st.profiles).find((k) => st.profiles[k].username === n);
+      if (['admin_player_decks', 'admin_force_match', 'admin_forced_matches'].includes(fn) && p?.role !== 'owner') return json(route, { message: 'Réservé au propriétaire.' }, 400);
+      if (fn === 'admin_player_decks') { const u = uidByName(body.target); return json(route, Object.values(st.decks).filter((d) => d.user_id === u).map((d) => ({ id: d.id, name: d.name, n: Object.values(d.cards).reduce((a, x) => a + x, 0) }))); }
+      if (fn === 'admin_force_match') {
+        const hu = uidByName(body.h); const gu = uidByName(body.g);
+        if (!hu || !gu) return json(route, { message: 'Joueur introuvable.' }, 400);
+        if (hu === gu) return json(route, { message: 'Choisis deux joueurs différents.' }, 400);
+        const code = Math.random().toString(36).slice(2, 8).toUpperCase().replace(/[^A-Z0-9]/g, 'X').padEnd(6, 'Z');
+        st.forced = Object.fromEntries(Object.entries(st.forced || {}).filter(([, f]) => ![hu, gu].some((u) => u === f.host || u === f.guest)));
+        st.forced[code] = { code, mode: body.gmode === 'local' ? 'local' : 'online', host: hu, guest: gu, host_deck: body.hdeck || null, guest_deck: body.gdeck || null, host_claimed: false, guest_claimed: false, created_at: new Date().toISOString() };
+        return json(route, code);
+      }
+      if (fn === 'claim_forced_match') {
+        const f = Object.values(st.forced || {}).find((x) => (x.host === uid && !x.host_claimed) || (x.guest === uid && !x.guest_claimed));
+        if (!f) return json(route, []);
+        const host = f.host === uid; f[host ? 'host_claimed' : 'guest_claimed'] = true;
+        return json(route, [{ code: f.code, mode: f.mode, role: host ? 'host' : 'guest', deck: host ? f.host_deck : f.guest_deck, opp: st.profiles[host ? f.guest : f.host].username }]);
+      }
+      if (fn === 'admin_forced_matches') return json(route, Object.values(st.forced || {}).map((f) => ({ ...f, host: st.profiles[f.host].username, guest: st.profiles[f.guest].username })));
       if (fn === 'surprise_done') { if (p.surprise === 'go') p.surprise = 'done'; return json(route, null); }
       if (fn === 'admin_reset_test') { const u = tu(); const t = st.profiles[u]; if (!t || !t.username.startsWith('test')) return json(route, { message: 'Réservé aux comptes de test.' }, 400);
         st.coll[u] = {}; (st.reveals ||= {})[u] = []; for (const k of Object.keys(st.decks)) if (st.decks[k].user_id === u) delete st.decks[k];
