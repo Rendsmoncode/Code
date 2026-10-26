@@ -28610,8 +28610,8 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   var num = (k, label, help, min = 0, max = 1e5, step = 1) => ({ k, label, help, min, max, step });
   var SECTIONS2 = [
     ["Boosters gratuits", [
-      num("free_minutes", "Un booster gratuit toutes les (minutes)", "10 au d\xE9part", 1, 1440),
-      num("free_max", "R\xE9serve maximale de boosters gratuits", "6 au d\xE9part", 0, 100)
+      num("free_minutes", "Un booster gratuit toutes les (minutes)", "10", 1, 1440),
+      num("free_max", "R\xE9serve maximale de boosters gratuits", "6", 0, 100)
     ]],
     ["Taux de raret\xE9 (derni\xE8re carte du booster : 1 sur N)", [
       num("rate_sr", "Super rare : 1 booster sur", "4", 1),

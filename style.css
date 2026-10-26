@@ -1197,7 +1197,7 @@ body.sp-intro main { animation: sp-main 1s 1.1s ease-out both; }
 /* Game Master : paramètres du site */
 .gs-set { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin: 0 0 10px; display: grid; gap: 8px; }
 .gs-set legend { font-weight: 800; padding: 0 6px; }
-.gs-f { display: grid; grid-template-columns: 1fr 110px auto; gap: 8px; align-items: center; }
+.gs-f { display: grid; grid-template-columns: 1fr 110px 90px; gap: 8px; align-items: center; }
 .gs-f.wide { grid-template-columns: 1fr; }
 .gs-f small { min-width: 70px; }
 .site-banner { margin: 0; padding: 8px 16px; text-align: center; background: var(--straw); color: #17140b; font-weight: 800; }
