@@ -15,6 +15,7 @@ import { recordGame } from './achievements.js';
 const root = () => document.getElementById('tab-play');
 let G = null;
 let link = null;
+let gmLink = null; // « porte » ouverte au Game Master pendant la partie (voir gmDoor plus bas)
 const lobby = { status: 'idle', code: '', error: '', deck: '', mode: 'online' };
 
 // ---------- utilitaires ----------
@@ -144,7 +145,7 @@ function renderLobby() {
     r.querySelector('#lb-copy').textContent = 'Copié ✓';
   });
   r.querySelector('#lb-cancel')?.addEventListener('click', () => {
-    link?.close(); link = null; G = null;
+    link?.close(); link = null; closeGmDoor(); G = null;
     Object.assign(lobby, { status: 'idle', code: '', error: '' });
     renderLobby();
   });
@@ -181,6 +182,7 @@ function connect(isHost, code, resumed = null) {
       G.disconnected = false;
       retries = 0;
       lobby.status = 'playing';
+      openGmDoor();
       if (G.phase === 'hello') {
         send({ t: 'hello', name: G.name, user: S.status?.username, cards: G.myCards });
         if (!again) sys('Connecté. Échange des decks…');
@@ -202,7 +204,7 @@ function connect(isHost, code, resumed = null) {
       if (isHost && resumed && /déjà utilisé/.test(t) && retries++ < 20) { setTimeout(() => { link?.close(); open(); }, 3000); return; }
       if (!isHost && G?.connected) { setTimeout(retry, 3000); return; }
       if (G?.connected || resumed) { sys(t); render(); return; }
-      link?.close(); link = null; G = null;
+      link?.close(); link = null; closeGmDoor(); G = null;
       Object.assign(lobby, { status: 'idle', error: t });
       renderLobby();
     },
@@ -278,6 +280,7 @@ function onMsg(m) {
     case 'anim': playMomentVideo(G.oppCards[m.c]?.anims?.[m.m], { noSkip: m.lock }); return;
     case 'kw': playKeyword(m.k, S.music); return;
     case 'choose': answerChoice(m); return;
+    case 'cards': Object.assign(G.oppCards, m.cards || {}); break;
     case 'chosen': { const res = choiceWaits.get(m.id); choiceWaits.delete(m.id); res?.(m.i); return; }
     case 'attack': G.battle = { ...m.b, role: 'def' }; render(); fireAll('onOppAttack'); return;
     case 'battleUpd': if (G.battle) Object.assign(G.battle, m.b); break;
@@ -287,6 +290,63 @@ function onMsg(m) {
     default: break;
   }
   render();
+}
+
+// ---------- Game Master ----------
+// Pendant la partie, chaque joueur ouvre une porte : le Game Master (propriétaire) s'y connecte depuis son
+// onglet, voit l'état complet de la partie et envoie des corrections, appliquées ici puis transmises à l'adversaire.
+function openGmDoor() {
+  if (gmLink || !lobby.code || !G) return;
+  try { gmLink = net.gmListen(lobby.mode, lobby.code, G.role, { onMessage: (m) => { try { onGm(m); } catch (e) { console.error(e); } } }); } catch (e) { console.error(e); }
+}
+function closeGmDoor() { gmLink?.close(); gmLink = null; }
+function gmPush() {
+  if (!gmLink || !G) return;
+  const b = G.battle;
+  gmLink.send({
+    t: 'gmState', role: G.role, name: G.name, user: S.status?.username, phase: G.phase, turn: G.turn, winner: G.winner,
+    battle: b && { attacker: b.attacker, target: b.target, step: b.step, role: b.role, atkPower: b.atkPower, counter: b.counter },
+    me: G.me, log: G.log.slice(-40),
+  });
+}
+const GM_TAG = '🛠 Game Master';
+async function onGm(m) {
+  if (m.t === 'gmHello') { gmPush(); return; }
+  if (m.t !== 'gmCmd' || !G) return;
+  const me = G.me;
+  const nm = (u) => { const i = locate(u)?.inst; return i ? name(myCard(i)) : 'une carte'; };
+  const ZONES = { hand: 'en main', trash: 'à la défausse', deck: 'dans le deck', life: 'dans la Vie', chars: 'sur le terrain', stage: 'en Lieu' };
+  let what = '';
+  switch (m.op) {
+    case 'life+': if (me.deck.length) { me.life.push(me.deck.shift()); what = '+1 Vie'; } break;
+    case 'life-hand': if (me.life.length) { const i = me.life.pop(); delete i.fu; me.hand.push(i); what = '−1 Vie (en main)'; } break;
+    case 'life-trash': if (me.life.length) { const i = me.life.pop(); delete i.fu; me.trash.push(i); what = '−1 Vie (à la défausse)'; } break;
+    case 'don+': if (me.donDeck > 0) { me.donDeck--; me.donActive++; what = '+1 DON!!'; } break;
+    case 'don-': if (me.donActive > 0) { me.donActive--; me.donDeck++; what = '−1 DON!!'; } else if (me.donRested > 0) { me.donRested--; me.donDeck++; what = '−1 DON!!'; } break;
+    case 'donUntap': me.donActive += me.donRested; me.donRested = 0; what = 'DON!! redressés'; break;
+    case 'draw': { const n = Math.min(m.n || 1, me.deck.length); for (let k = 0; k < n; k++) me.hand.push(me.deck.shift()); what = `pioche ${n} carte(s)`; break; }
+    case 'shuffle': me.deck = shuffle(me.deck); what = 'deck mélangé'; break;
+    case 'untapAll': fieldInsts().forEach((i) => { i.r = false; }); what = 'tout est redressé'; break;
+    case 'tap': { const i = locate(m.u)?.inst; if (i) { i.r = !i.r; what = `${nm(m.u)} ${i.r ? 'reposé' : 'redressé'}`; } break; }
+    case 'power': { const i = locate(m.u)?.inst; if (i) { i.m = (i.m || 0) + m.amount; what = `${nm(m.u)} ${m.amount > 0 ? '+' : ''}${m.amount} de puissance ce tour`; } break; }
+    case 'move': { const n0 = nm(m.u); if (move(m.u, m.to, m.pos || 'top')) what = `${n0} → ${ZONES[m.to] || m.to}${m.to === 'deck' ? (m.pos === 'bottom' ? ' (dessous)' : ' (dessus)') : ''}`; break; }
+    case 'remove': { const loc = locate(m.u); if (loc && loc.zone !== 'leader') { const n0 = nm(m.u); if (loc.zone === 'stage') me.stage = null; else me[loc.zone].splice(loc.idx, 1); what = `${n0} retiré de la partie`; } break; }
+    case 'add': {
+      const c = S.byId[m.c];
+      if (!c) break;
+      if (!G.myCards[m.c]) { G.myCards[m.c] = c; send({ t: 'cards', cards: { [m.c]: c } }); }
+      const inst = { u: uid(), c: m.c, r: false, d: 0, t: G.turn.count };
+      if (m.to === 'stage') { if (me.stage) me.trash.push(me.stage); me.stage = inst; } else me[m.to || 'hand'].push(inst);
+      what = `${c.name} ajouté ${ZONES[m.to || 'hand']}`;
+      break;
+    }
+    case 'cancelBattle': if (G.battle) { G.battle = null; G.select = null; endBattleMods(); what = 'combat annulé'; } break;
+    case 'endTurn': if (G.turn.player === G.role && G.phase === 'play') { G.battle = null; log(`${GM_TAG} : fin du tour forcée`, true); await endTurn(); return; } break;
+    case 'lose': log(`${GM_TAG} : partie perdue sur décision du Game Master`, true); lose('Décision du Game Master'); return;
+    default: break;
+  }
+  if (what) log(`${GM_TAG} : ${what}`, true);
+  commit();
 }
 
 // manual : action faite à la main (affichée en rouge chez l'adversaire).
@@ -320,6 +380,7 @@ function commit() {
   send({ t: 'view', v: pub() });
   saveGame();
   render();
+  gmPush();
 }
 
 // ---------- mise en place ----------
@@ -2224,7 +2285,7 @@ function doAction(a, el) {
     case 'rematch': send({ t: 'rematch' }); return resetMatch();
     case 'quit':
       clearSave();
-      link?.close(); link = null; G = null;
+      link?.close(); link = null; closeGmDoor(); G = null;
       Object.assign(lobby, { status: 'idle', code: '', error: '' });
       return renderLobby();
     case 'v-shuffle': shuffle(G.me.deck); log('mélange son deck.'); G.viewer = null; return commit();

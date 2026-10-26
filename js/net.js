@@ -56,6 +56,70 @@ function peerJoin(code, h) {
   };
 }
 
+// ---------- Game Master ----------
+// Chaque joueur ouvre une « porte » sur sa partie (code + rôle) ; le Game Master s'y connecte pour voir
+// l'état complet des deux joueurs et leur envoyer des corrections.
+// Joueur : h = { onMessage(m) } ; renvoie { send(m), close() } (send va à tous les Game Masters connectés).
+export function gmListen(mode, code, role, h) {
+  const id = `${PREFIX}${code}-gm-${role}`;
+  if (mode === 'local') {
+    const ch = new BroadcastChannel(id);
+    ch.onmessage = ({ data }) => h.onMessage(data);
+    return { send: (m) => ch.postMessage(m), close: () => ch.close() };
+  }
+  let peer = null;
+  const conns = new Set();
+  const start = () => {
+    peer = new window.Peer(id);
+    peer.on('connection', (c) => {
+      conns.add(c);
+      c.on('data', (m) => h.onMessage(m));
+      c.on('close', () => conns.delete(c));
+    });
+    // Identifiant encore réservé (page rechargée) : on réessaie un peu plus tard.
+    peer.on('error', (e) => { if (e?.type === 'unavailable-id') setTimeout(() => { peer.destroy(); start(); }, 4000); });
+  };
+  start();
+  return { send: (m) => conns.forEach((c) => c.open && c.send(m)), close: () => peer?.destroy() };
+}
+
+// Game Master : se connecte aux deux joueurs d'une partie. h = { onMessage(role, m), onStatus(role, ok) }.
+export function gmConnect(mode, code, h) {
+  code = code.trim().toUpperCase();
+  const roles = ['host', 'guest'];
+  if (mode === 'local') {
+    const chs = Object.fromEntries(roles.map((r) => {
+      const ch = new BroadcastChannel(`${PREFIX}${code}-gm-${r}`);
+      ch.onmessage = ({ data }) => { h.onStatus(r, true); h.onMessage(r, data); };
+      return [r, ch];
+    }));
+    roles.forEach((r) => chs[r].postMessage({ t: 'gmHello' }));
+    return { send: (r, m) => chs[r].postMessage(m), close: () => roles.forEach((r) => chs[r].close()) };
+  }
+  const peer = new window.Peer();
+  const conns = {};
+  let closed = false;
+  const dial = (r) => {
+    if (closed) return;
+    const c = peer.connect(`${PREFIX}${code}-gm-${r}`, { reliable: true });
+    conns[r] = c;
+    c.on('open', () => { h.onStatus(r, true); c.send({ t: 'gmHello' }); });
+    c.on('data', (m) => h.onMessage(r, m));
+    c.on('close', () => { h.onStatus(r, false); setTimeout(() => dial(r), 3000); });
+  };
+  peer.on('open', () => roles.forEach(dial));
+  // Joueur pas (encore) joignable : on réessaie.
+  peer.on('error', (e) => {
+    if (e?.type !== 'peer-unavailable') return;
+    const r = roles.find((x) => String(e.message || '').endsWith(`-gm-${x}`));
+    if (r) { h.onStatus(r, false); setTimeout(() => dial(r), 3000); }
+  });
+  return {
+    send: (r, m) => conns[r]?.open && conns[r].send(m),
+    close: () => { closed = true; peer.destroy(); },
+  };
+}
+
 function peerError(e) {
   if (e?.type === 'peer-unavailable') return 'Partie introuvable : vérifiez le code (ou l\'hôte a fermé sa page).';
   if (e?.type === 'unavailable-id') return 'Code déjà utilisé, réessayez.';

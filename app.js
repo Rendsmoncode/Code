@@ -24203,6 +24203,81 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       close: () => peer.destroy()
     };
   }
+  function gmListen(mode, code, role, h) {
+    const id = `${PREFIX}${code}-gm-${role}`;
+    if (mode === "local") {
+      const ch = new BroadcastChannel(id);
+      ch.onmessage = ({ data }) => h.onMessage(data);
+      return { send: (m) => ch.postMessage(m), close: () => ch.close() };
+    }
+    let peer = null;
+    const conns = /* @__PURE__ */ new Set();
+    const start2 = () => {
+      peer = new window.Peer(id);
+      peer.on("connection", (c) => {
+        conns.add(c);
+        c.on("data", (m) => h.onMessage(m));
+        c.on("close", () => conns.delete(c));
+      });
+      peer.on("error", (e) => {
+        if (e?.type === "unavailable-id") setTimeout(() => {
+          peer.destroy();
+          start2();
+        }, 4e3);
+      });
+    };
+    start2();
+    return { send: (m) => conns.forEach((c) => c.open && c.send(m)), close: () => peer?.destroy() };
+  }
+  function gmConnect(mode, code, h) {
+    code = code.trim().toUpperCase();
+    const roles = ["host", "guest"];
+    if (mode === "local") {
+      const chs = Object.fromEntries(roles.map((r) => {
+        const ch = new BroadcastChannel(`${PREFIX}${code}-gm-${r}`);
+        ch.onmessage = ({ data }) => {
+          h.onStatus(r, true);
+          h.onMessage(r, data);
+        };
+        return [r, ch];
+      }));
+      roles.forEach((r) => chs[r].postMessage({ t: "gmHello" }));
+      return { send: (r, m) => chs[r].postMessage(m), close: () => roles.forEach((r) => chs[r].close()) };
+    }
+    const peer = new window.Peer();
+    const conns = {};
+    let closed = false;
+    const dial = (r) => {
+      if (closed) return;
+      const c = peer.connect(`${PREFIX}${code}-gm-${r}`, { reliable: true });
+      conns[r] = c;
+      c.on("open", () => {
+        h.onStatus(r, true);
+        c.send({ t: "gmHello" });
+      });
+      c.on("data", (m) => h.onMessage(r, m));
+      c.on("close", () => {
+        h.onStatus(r, false);
+        setTimeout(() => dial(r), 3e3);
+      });
+    };
+    peer.on("open", () => roles.forEach(dial));
+    peer.on("error", (e) => {
+      if (e?.type !== "peer-unavailable") return;
+      const r = roles.find((x) => String(e.message || "").endsWith(`-gm-${x}`));
+      if (r) {
+        h.onStatus(r, false);
+        setTimeout(() => dial(r), 3e3);
+      }
+    });
+    return {
+      send: (r, m) => conns[r]?.open && conns[r].send(m),
+      close: () => {
+        closed = true;
+        peer.destroy();
+      }
+    };
+  }
   function peerError(e) {
     if (e?.type === "peer-unavailable") return "Partie introuvable : v\xE9rifiez le code (ou l'h\xF4te a ferm\xE9 sa page).";
     if (e?.type === "unavailable-id") return "Code d\xE9j\xE0 utilis\xE9, r\xE9essayez.";
@@ -24805,6 +24880,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   var root2 = () => document.getElementById("tab-play");
   var G = null;
   var link = null;
+  var gmLink = null;
   var lobby = { status: "idle", code: "", error: "", deck: "", mode: "online" };
   var other = (r) => r === "host" ? "guest" : "host";
   var shuffle = (a) => {
@@ -24964,6 +25040,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     r.querySelector("#lb-cancel")?.addEventListener("click", () => {
       link?.close();
       link = null;
+      closeGmDoor();
       G = null;
       Object.assign(lobby, { status: "idle", code: "", error: "" });
       renderLobby();
@@ -25009,6 +25086,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         G.disconnected = false;
         retries = 0;
         lobby.status = "playing";
+        openGmDoor();
         if (G.phase === "hello") {
           send({ t: "hello", name: G.name, user: S.status?.username, cards: G.myCards });
           if (!again) sys("Connect\xE9. \xC9change des decks\u2026");
@@ -25050,6 +25128,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         }
         link?.close();
         link = null;
+        closeGmDoor();
         G = null;
         Object.assign(lobby, { status: "idle", error: t });
         renderLobby();
@@ -25180,6 +25259,9 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       case "choose":
         answerChoice(m);
         return;
+      case "cards":
+        Object.assign(G.oppCards, m.cards || {});
+        break;
       case "chosen": {
         const res = choiceWaits.get(m.id);
         choiceWaits.delete(m.id);
@@ -25213,6 +25295,188 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         break;
     }
     render2();
+  }
+  function openGmDoor() {
+    if (gmLink || !lobby.code || !G) return;
+    try {
+      gmLink = gmListen(lobby.mode, lobby.code, G.role, { onMessage: (m) => {
+        try {
+          onGm(m);
+        } catch (e) {
+          console.error(e);
+        }
+      } });
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  function closeGmDoor() {
+    gmLink?.close();
+    gmLink = null;
+  }
+  function gmPush() {
+    if (!gmLink || !G) return;
+    const b = G.battle;
+    gmLink.send({
+      t: "gmState",
+      role: G.role,
+      name: G.name,
+      user: S.status?.username,
+      phase: G.phase,
+      turn: G.turn,
+      winner: G.winner,
+      battle: b && { attacker: b.attacker, target: b.target, step: b.step, role: b.role, atkPower: b.atkPower, counter: b.counter },
+      me: G.me,
+      log: G.log.slice(-40)
+    });
+  }
+  var GM_TAG = "\u{1F6E0} Game Master";
+  async function onGm(m) {
+    if (m.t === "gmHello") {
+      gmPush();
+      return;
+    }
+    if (m.t !== "gmCmd" || !G) return;
+    const me = G.me;
+    const nm = (u) => {
+      const i = locate(u)?.inst;
+      return i ? name(myCard(i)) : "une carte";
+    };
+    const ZONES3 = { hand: "en main", trash: "\xE0 la d\xE9fausse", deck: "dans le deck", life: "dans la Vie", chars: "sur le terrain", stage: "en Lieu" };
+    let what = "";
+    switch (m.op) {
+      case "life+":
+        if (me.deck.length) {
+          me.life.push(me.deck.shift());
+          what = "+1 Vie";
+        }
+        break;
+      case "life-hand":
+        if (me.life.length) {
+          const i = me.life.pop();
+          delete i.fu;
+          me.hand.push(i);
+          what = "\u22121 Vie (en main)";
+        }
+        break;
+      case "life-trash":
+        if (me.life.length) {
+          const i = me.life.pop();
+          delete i.fu;
+          me.trash.push(i);
+          what = "\u22121 Vie (\xE0 la d\xE9fausse)";
+        }
+        break;
+      case "don+":
+        if (me.donDeck > 0) {
+          me.donDeck--;
+          me.donActive++;
+          what = "+1 DON!!";
+        }
+        break;
+      case "don-":
+        if (me.donActive > 0) {
+          me.donActive--;
+          me.donDeck++;
+          what = "\u22121 DON!!";
+        } else if (me.donRested > 0) {
+          me.donRested--;
+          me.donDeck++;
+          what = "\u22121 DON!!";
+        }
+        break;
+      case "donUntap":
+        me.donActive += me.donRested;
+        me.donRested = 0;
+        what = "DON!! redress\xE9s";
+        break;
+      case "draw": {
+        const n3 = Math.min(m.n || 1, me.deck.length);
+        for (let k = 0; k < n3; k++) me.hand.push(me.deck.shift());
+        what = `pioche ${n3} carte(s)`;
+        break;
+      }
+      case "shuffle":
+        me.deck = shuffle(me.deck);
+        what = "deck m\xE9lang\xE9";
+        break;
+      case "untapAll":
+        fieldInsts().forEach((i) => {
+          i.r = false;
+        });
+        what = "tout est redress\xE9";
+        break;
+      case "tap": {
+        const i = locate(m.u)?.inst;
+        if (i) {
+          i.r = !i.r;
+          what = `${nm(m.u)} ${i.r ? "repos\xE9" : "redress\xE9"}`;
+        }
+        break;
+      }
+      case "power": {
+        const i = locate(m.u)?.inst;
+        if (i) {
+          i.m = (i.m || 0) + m.amount;
+          what = `${nm(m.u)} ${m.amount > 0 ? "+" : ""}${m.amount} de puissance ce tour`;
+        }
+        break;
+      }
+      case "move": {
+        const n0 = nm(m.u);
+        if (move(m.u, m.to, m.pos || "top")) what = `${n0} \u2192 ${ZONES3[m.to] || m.to}${m.to === "deck" ? m.pos === "bottom" ? " (dessous)" : " (dessus)" : ""}`;
+        break;
+      }
+      case "remove": {
+        const loc = locate(m.u);
+        if (loc && loc.zone !== "leader") {
+          const n0 = nm(m.u);
+          if (loc.zone === "stage") me.stage = null;
+          else me[loc.zone].splice(loc.idx, 1);
+          what = `${n0} retir\xE9 de la partie`;
+        }
+        break;
+      }
+      case "add": {
+        const c = S.byId[m.c];
+        if (!c) break;
+        if (!G.myCards[m.c]) {
+          G.myCards[m.c] = c;
+          send({ t: "cards", cards: { [m.c]: c } });
+        }
+        const inst = { u: uid(), c: m.c, r: false, d: 0, t: G.turn.count };
+        if (m.to === "stage") {
+          if (me.stage) me.trash.push(me.stage);
+          me.stage = inst;
+        } else me[m.to || "hand"].push(inst);
+        what = `${c.name} ajout\xE9 ${ZONES3[m.to || "hand"]}`;
+        break;
+      }
+      case "cancelBattle":
+        if (G.battle) {
+          G.battle = null;
+          G.select = null;
+          endBattleMods();
+          what = "combat annul\xE9";
+        }
+        break;
+      case "endTurn":
+        if (G.turn.player === G.role && G.phase === "play") {
+          G.battle = null;
+          log(`${GM_TAG} : fin du tour forc\xE9e`, true);
+          await endTurn();
+          return;
+        }
+        break;
+      case "lose":
+        log(`${GM_TAG} : partie perdue sur d\xE9cision du Game Master`, true);
+        lose("D\xE9cision du Game Master");
+        return;
+      default:
+        break;
+    }
+    if (what) log(`${GM_TAG} : ${what}`, true);
+    commit();
   }
   function log(text, manual = Boolean(G?.manual)) {
     G.log.push({ who: "me", text, manual });
@@ -25257,6 +25521,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     send({ t: "view", v: pub() });
     saveGame();
     render2();
+    gmPush();
   }
   function coinFlip() {
     const w = Math.random() < 0.5 ? "host" : "guest";
@@ -27482,6 +27747,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         clearSave();
         link?.close();
         link = null;
+        closeGmDoor();
         G = null;
         Object.assign(lobby, { status: "idle", code: "", error: "" });
         return renderLobby();
@@ -28121,12 +28387,176 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     refresh();
   }
 
+  // js/gm-live.js
+  var ROLES = ["host", "guest"];
+  var ZONES2 = [["chars", "Personnages"], ["stage", "Lieu"], ["hand", "Main"], ["life", "Vie"], ["trash", "D\xE9fausse"]];
+  var MOVES = [["hand", "En main"], ["trash", "\xC0 la d\xE9fausse"], ["chars", "Sur le terrain"], ["life", "Dans la Vie"], ["deck", "Dessus du deck"], ["deck-bottom", "Dessous du deck"]];
+  function mountLive(el) {
+    el.innerHTML = `
+    <h3>Parties en cours</h3>
+    <p class="muted small">Demande le code de la partie (affich\xE9 en haut de leur plateau) : tu la rejoins en spectateur, tu vois tout
+      (mains, Vies, deck) et tu corriges ce que tu veux. Les deux joueurs voient chaque correction, sign\xE9e \xAB Game Master \xBB.</p>
+    <div class="row-btns">
+      <input class="gl-code" placeholder="Code de la partie" maxlength="8" aria-label="Code de la partie" style="text-transform:uppercase">
+      <select class="gl-mode" aria-label="Type de partie"><option value="online">En ligne</option><option value="local">Locale (m\xEAme navigateur)</option></select>
+      <button class="btn" data-gl="join">Rejoindre en spectateur</button>
+    </div>`;
+    el.querySelector("[data-gl=join]").addEventListener("click", () => {
+      const code = el.querySelector(".gl-code").value.trim().toUpperCase();
+      if (code) openLive(code, el.querySelector(".gl-mode").value);
+    });
+  }
+  function openLive(code, mode) {
+    const st = { host: null, guest: null };
+    const ok = { host: false, guest: false };
+    let menu2 = null;
+    const ov = document.createElement("div");
+    ov.className = "gml";
+    document.body.append(ov);
+    const link2 = gmConnect(mode, code, {
+      onStatus: (r, v) => {
+        ok[r] = v;
+        render3();
+      },
+      onMessage: (r, m) => {
+        if (m?.t === "gmState") {
+          st[r] = m;
+          render3();
+        }
+      }
+    });
+    const send2 = (role, op, extra2 = {}) => link2.send(role, { t: "gmCmd", op, ...extra2 });
+    const byLabel = /* @__PURE__ */ new Map();
+    for (const c of S.cards) {
+      if (c.type === "leader") continue;
+      const label = `${c.name}${c.alt ? " (Alt)" : ""} \xB7 ${RARITIES[c.rarity]?.short || c.rarity}`;
+      if (!byLabel.has(label)) byLabel.set(label, c.id);
+    }
+    function cardBtn(role, i, extra2 = "") {
+      const c = S.byId[i.c];
+      return `<button class="gml-card ${i.r ? "rested" : ""} ${menu2?.u === i.u ? "on" : ""}" data-role="${role}" data-u="${esc(i.u)}" title="${esc(c?.name || i.c)}">
+      ${cardHTML(c, { cls: "mini" })}${i.m ? `<span class="gml-pw">${i.m > 0 ? "+" : ""}${i.m}</span>` : ""}${i.d ? `<span class="gml-don">+${i.d} DON</span>` : ""}${extra2}</button>`;
+    }
+    function side(role) {
+      const s = st[role];
+      if (!s) return `<section class="gml-side"><h3>${role === "host" ? "H\xF4te" : "Invit\xE9"}</h3><p class="muted">${ok[role] ? "Connexion\u2026" : "En attente de ce joueur (sa partie doit \xEAtre ouverte)\u2026"}</p></section>`;
+      const me = s.me;
+      const turn = s.turn?.player === role;
+      const zone = (k) => k === "stage" ? me.stage ? [me.stage] : [] : me[k] || [];
+      return `<section class="gml-side ${turn ? "turn" : ""}" data-side="${role}">
+      <h3>${esc(s.user || s.name)} ${turn ? '<span class="chip">\xE0 lui de jouer</span>' : ""} <small class="muted">${esc(s.phase)}${s.turn?.count ? ` \xB7 tour ${s.turn.count}` : ""}</small></h3>
+      <div class="gml-counters">
+        <div><b>Vies ${me.life.length}</b><button class="btn small" data-op="life+">+1</button><button class="btn small" data-op="life-hand">\u22121 en main</button><button class="btn small" data-op="life-trash">\u22121 d\xE9fausse</button></div>
+        <div><b>DON!!</b> ${me.donActive} actifs \xB7 ${me.donRested} repos\xE9s \xB7 ${me.donDeck} au deck
+          <button class="btn small" data-op="don+">+1</button><button class="btn small" data-op="don-">\u22121</button><button class="btn small" data-op="donUntap">Redresser</button></div>
+        <div><b>Main ${me.hand.length}</b> \xB7 <b>Deck ${me.deck.length}</b>
+          <button class="btn small" data-op="draw">Piocher 1</button><button class="btn small" data-op="shuffle">M\xE9langer</button></div>
+        <div><button class="btn small" data-op="untapAll">Tout redresser</button>
+          ${turn ? '<button class="btn small" data-op="endTurn">Forcer la fin de son tour</button>' : ""}
+          <button class="btn small danger" data-op="lose">Le d\xE9clarer perdant</button></div>
+        <div class="gml-add"><input list="gml-cards" placeholder="Ajouter une carte\u2026" aria-label="Carte \xE0 ajouter">
+          <select aria-label="O\xF9">${[["hand", "en main"], ["chars", "sur le terrain"], ["trash", "\xE0 la d\xE9fausse"], ["life", "dans la Vie"]].map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select>
+          <button class="btn small" data-op="add">Ajouter</button></div>
+      </div>
+      <div class="gml-zone"><span class="gml-zt">Leader</span><div class="gml-row">${me.leader ? cardBtn(role, me.leader) : ""}</div></div>
+      ${ZONES2.map(([k, l]) => `<div class="gml-zone" data-zone="${k}"><span class="gml-zt">${l} (${zone(k).length})</span><div class="gml-row">${zone(k).map((i) => cardBtn(role, i)).join("") || '<span class="muted small">vide</span>'}</div></div>`).join("")}
+      <details class="gml-zone"><summary class="gml-zt">Deck : les 10 du dessus</summary><div class="gml-row">${me.deck.slice(0, 10).map((i) => cardBtn(role, i)).join("")}</div></details>
+      <details class="gml-log"><summary>Journal</summary>${(s.log || []).slice(-25).map((x) => `<p class="${x.manual ? "man" : ""}">${x.who === "opp" ? "\u2194 " : ""}${esc(x.text)}</p>`).join("")}</details>
+    </section>`;
+    }
+    function menuHTML() {
+      if (!menu2) return "";
+      const s = st[menu2.role];
+      const all = s && [s.me.leader, s.me.stage, ...["chars", "hand", "life", "trash", "deck"].flatMap((k) => s.me[k])].filter(Boolean);
+      const i = all?.find((x) => x.u === menu2.u);
+      if (!i) return "";
+      const leader = s.me.leader?.u === i.u;
+      return `<div class="gml-menu"><b>${esc(S.byId[i.c]?.name || "")}</b>
+      <button class="btn small" data-cop="tap">${i.r ? "Redresser" : "Reposer"}</button>
+      <button class="btn small" data-cop="p+">+1000 ce tour</button><button class="btn small" data-cop="p-">\u22121000 ce tour</button>
+      ${leader ? "" : `${MOVES.map(([k, l]) => `<button class="btn small" data-cop="mv:${k}">${l}</button>`).join("")}
+      <button class="btn small danger" data-cop="remove">Retirer de la partie</button>`}
+      <button class="btn small ghost" data-cop="close">Fermer</button></div>`;
+    }
+    function render3() {
+      const b = st.host?.battle || st.guest?.battle;
+      const kept = [...ov.querySelectorAll(".gml-add")].map((x) => [x.closest("[data-side]")?.dataset.side, x.querySelector("input").value, x.querySelector("select").value]);
+      const focused = document.activeElement?.closest?.(".gml-add")?.closest("[data-side]")?.dataset.side;
+      ov.innerHTML = `<div class="gml-head"><h2>Game Master \xB7 partie ${esc(code)}</h2>
+      <span class="gml-dot ${ok.host ? "on" : ""}">H\xF4te</span><span class="gml-dot ${ok.guest ? "on" : ""}">Invit\xE9</span>
+      ${b ? '<button class="btn small" data-op="cancelBattle">Annuler le combat en cours</button>' : ""}
+      <button class="btn small ghost" data-gl="close">Quitter</button></div>
+      ${menuHTML()}
+      <div class="gml-sides">${ROLES.map(side).join("")}</div>
+      <datalist id="gml-cards">${[...byLabel.keys()].map((l) => `<option value="${esc(l)}"></option>`).join("")}</datalist>`;
+      for (const [side2, v, w] of kept) {
+        const box = ov.querySelector(`[data-side="${side2}"] .gml-add`);
+        if (!box) continue;
+        box.querySelector("input").value = v;
+        box.querySelector("select").value = w;
+        if (side2 === focused) box.querySelector("input").focus();
+      }
+    }
+    ov.addEventListener("click", (e) => {
+      if (e.target.closest("[data-gl=close]")) {
+        link2.close();
+        ov.remove();
+        return;
+      }
+      const card = e.target.closest(".gml-card");
+      if (card) {
+        menu2 = menu2?.u === card.dataset.u ? null : { role: card.dataset.role, u: card.dataset.u };
+        render3();
+        return;
+      }
+      const cop = e.target.closest("[data-cop]")?.dataset.cop;
+      if (cop && menu2) {
+        const { role: role2, u } = menu2;
+        if (cop === "tap") send2(role2, "tap", { u });
+        else if (cop === "p+" || cop === "p-") send2(role2, "power", { u, amount: cop === "p+" ? 1e3 : -1e3 });
+        else if (cop === "remove") {
+          if (confirm("Retirer cette carte de la partie ?")) send2(role2, "remove", { u });
+        } else if (cop.startsWith("mv:")) {
+          const to = cop.slice(3);
+          send2(role2, "move", { u, to: to === "deck-bottom" ? "deck" : to, pos: to === "deck-bottom" ? "bottom" : "top" });
+        }
+        menu2 = null;
+        render3();
+        return;
+      }
+      const opBtn = e.target.closest("[data-op]");
+      if (!opBtn) return;
+      const op = opBtn.dataset.op;
+      if (op === "cancelBattle") {
+        ROLES.forEach((r) => send2(r, "cancelBattle"));
+        return;
+      }
+      const role = opBtn.closest("[data-side]")?.dataset.side;
+      if (!role) return;
+      if (op === "lose" && !confirm("D\xE9clarer ce joueur perdant ?")) return;
+      if (op === "add") {
+        const box = opBtn.closest(".gml-add");
+        const id = byLabel.get(box.querySelector("input").value);
+        if (!id) {
+          alert("Choisis une carte dans la liste.");
+          return;
+        }
+        send2(role, "add", { c: id, to: box.querySelector("select").value });
+        box.querySelector("input").value = "";
+        return;
+      }
+      send2(role, op, op === "draw" ? { n: 1 } : {});
+    });
+    render3();
+  }
+
   // js/gm.js
   function initGM() {
     const el = document.getElementById("tab-gm");
     el.innerHTML = `
   <div class="gm">
     <div class="ach-head"><h2>Game Master</h2></div>
+    <section class="panel gm-live"></section>
     <section class="panel gm-surprise"></section>
     <section class="panel gm-who">
       <label>Joueur <select class="gm-player" aria-label="Joueur"></select></label>
@@ -28157,6 +28587,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     </section>
   </div>`;
     const q = (s) => el.querySelector(s);
+    mountLive(q(".gm-live"));
     mountSurprise(q(".gm-surprise"));
     let player2 = "";
     let coll = {};
