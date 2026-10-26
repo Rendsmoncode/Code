@@ -665,6 +665,7 @@ function startAttack(inst) {
   if (G.turn.count <= 2) return toast('Personne ne peut attaquer pendant son premier tour.');
   const c = myCard(inst);
   if ((inst.noAtk || 0) >= G.turn.count) return toast(`${c.name} ne peut pas attaquer ce tour-ci.`);
+  if (noAttackStatic(inst)) return toast(`${c.name} ne peut pas attaquer (effet de la carte).`);
   // [Initiative : Personnage] : le tour où il est joué, il peut attaquer les Personnages seulement.
   const onlyChars = c.type === 'character' && inst.t === G.turn.count && !hasKw(inst, 'rush');
   if (onlyChars && !hasKw(inst, 'rushChar')) {
@@ -1061,6 +1062,12 @@ function hasKw(inst, k) {
   if (inst.kw?.[k]) return true;
   return staticFlag(inst, 'grantKw', (a) => a.kw === k) || auraFlag(inst, 'grantKw', (a) => a.kw === k);
 }
+// « Cette carte ne peut pas attaquer » dans un effet permanent de la carte elle-même.
+function noAttackStatic(inst) {
+  if (inStatic || !G?.me?.leader) return false;
+  inStatic = true;
+  try { return staticEffects().some(({ src, e }) => src.u === inst.u && (e.actions || []).some((a) => a.k === 'selfNoAttack')); } finally { inStatic = false; }
+}
 function isProtected(inst, kind) {
   if (inst.prot?.[kind] || inst.prot?.both) return true;
   const test = (a) => a.by === kind || a.by === 'both';
@@ -1093,6 +1100,7 @@ function applyMod(inst, a, fromOpp = false, src = null) {
   else if (a.k === 'untap') inst.r = false;
   else if (a.k === 'freeze') inst.frozen = true;
   else if (a.k === 'cannotAttack') inst.noAtk = G.turn.count + 1;
+  else if (a.k === 'selfNoAttack') inst.noAtk = Math.max(inst.noAtk || 0, dur === 'perm' ? 1e9 : dur === 'next' ? G.turn.count + 1 : G.turn.count);
   else if (a.k === 'negate') inst.neg = true;
 }
 function clearDur(inst, dur) {
@@ -1506,6 +1514,9 @@ async function doFx(a, ctx) {
       break;
     }
     case 'noBlockers': if (G.battle?.role === 'atk') G.battle.noBlock = true; break;
+    case 'selfNoAttack':
+      if (src && (locate(src.u)?.zone === 'chars' || G.me.leader?.u === src.u)) { applyMod(src, a, false, src); log(`${srcName} ne peut pas attaquer${a.dur === 'perm' ? '' : a.dur === 'next' ? ' jusqu\'à la fin du prochain tour adverse' : ' ce tour-ci'}.`); }
+      break;
     default: break;
   }
   commit();

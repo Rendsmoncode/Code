@@ -137,7 +137,7 @@ export const ACTION_GROUPS = {
   'Puissance et mots-clés': ['grantKw', 'power', 'cost'],
   'DON!!': ['donAdd', 'donAttach', 'donUntap', 'donOppReturn', 'restOppDon'],
   Vie: ['lifeFromDeck', 'lifeFromHand', 'lifeToHand', 'toLife', 'oppLifeRemove', 'lifeLook'],
-  Combat: ['protect', 'cannotAttack', 'redirect', 'noBlockers', 'negate'],
+  Combat: ['protect', 'selfNoAttack', 'cannotAttack', 'redirect', 'noBlockers', 'negate'],
 };
 
 const ZONES = { hand: 'votre main', trash: 'votre défausse', deck: 'votre deck' };
@@ -214,6 +214,10 @@ export const ACTIONS = {
       { k: 'by', label: 'Par', type: 'sel', def: 'both', opts: { battle: 'en combat', effect: 'par effet', both: 'en combat ni par effet' } }, DUR],
     text: (p) => `${targetText(p.t)} ${verb(p.t, 'ne peut', 'ne peuvent')} pas être mis KO ${p.by === 'battle' ? 'en combat' : p.by === 'effect' ? 'par des effets' : 'en combat ni par des effets'}${durText(p.dur)}`,
   },
+  selfNoAttack: {
+    label: 'Cette carte ne peut pas attaquer', params: [{ ...DUR, opts: { turn: DUR.opts.turn, next: DUR.opts.next, perm: DUR.opts.perm } }],
+    text: (p) => `cette carte ne peut pas attaquer${durText(p.dur)}`,
+  },
   cannotAttack: { label: 'Ne peut pas attaquer', params: [TARGET({ side: 'opp', who: 'chars', n: 1 })], text: (p) => `${targetText(p.t)} ne peut pas attaquer jusqu'à la fin du prochain tour adverse` },
   redirect: { label: 'Changer la cible de l\'attaque', params: [], text: () => 'choisissez votre Leader ou un de vos Personnages : il devient la cible de l\'attaque' },
   noBlockers: { label: 'L\'adversaire ne peut pas bloquer', params: [], text: () => 'votre adversaire ne peut pas activer de [Bloqueur] pendant ce combat' },
@@ -221,7 +225,7 @@ export const ACTIONS = {
 };
 
 // Actions possibles dans un effet permanent (Votre tour / Tour adverse / Permanent).
-export const CONTINUOUS_ACTIONS = ['power', 'cost', 'grantKw', 'protect'];
+export const CONTINUOUS_ACTIONS = ['power', 'cost', 'grantKw', 'protect', 'selfNoAttack'];
 
 // ---------- Cibles ----------
 export const SIDES = { mine: 'à vous', opp: 'adverse' };

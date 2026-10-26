@@ -107,6 +107,7 @@ const p0 = await g(A, (u) => __optcg.power(u), mine);
 await act('power +2000 (moi)', [{ k: 'power', t: { side: 'mine', who: 'self' }, amount: 2000, dur: 'turn' }], async () => { const p = await g(A, (u) => __optcg.power(u), mine); return [p === p0 + 2000, `${p0}->${p}`]; }, { src: mine });
 await act('grantKw Bloqueur (moi)', [{ k: 'grantKw', t: { side: 'mine', who: 'self' }, kw: 'blocker', dur: 'turn' }], async () => [await g(A, (u) => __optcg.kw(u, 'blocker'), mine), ''], { src: mine });
 await act('protect (moi)', [{ k: 'protect', t: { side: 'mine', who: 'self' }, by: 'battle', dur: 'turn' }], async () => [await g(A, (u) => __optcg.prot(u, 'battle'), mine), ''], { src: mine });
+await act('selfNoAttack (moi, en permanence)', [{ k: 'selfNoAttack', dur: 'perm' }], async () => [(await g(A, (u) => __optcg.G().me.chars.find((x) => x.u === u).noAtk, mine)) >= 1e9, ''], { src: mine });
 await act('donAdd', [{ k: 'donAdd', n: 1, state: 'active' }], async () => [s1.donA === s0.donA + 1 && s1.donD === s0.donD - 1, '']);
 await act('donAttach', [{ k: 'donAttach', n: 1, t: { side: 'mine', who: 'leader', n: 1 } }], async () => [s1.ld === s0.ld + 1 && s1.donR === s0.donR - 1, `leader DON ${s0.ld}->${s1.ld}`]);
 await g(A, () => { const m = __optcg.G().me; m.donRested += 1; __optcg.commit(); });

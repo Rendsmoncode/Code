@@ -20910,7 +20910,7 @@ ${suffix}`;
     "Puissance et mots-cl\xE9s": ["grantKw", "power", "cost"],
     "DON!!": ["donAdd", "donAttach", "donUntap", "donOppReturn", "restOppDon"],
     Vie: ["lifeFromDeck", "lifeFromHand", "lifeToHand", "toLife", "oppLifeRemove", "lifeLook"],
-    Combat: ["protect", "cannotAttack", "redirect", "noBlockers", "negate"]
+    Combat: ["protect", "selfNoAttack", "cannotAttack", "redirect", "noBlockers", "negate"]
   };
   var ZONES = { hand: "votre main", trash: "votre d\xE9fausse", deck: "votre deck" };
   var ACTIONS = {
@@ -21015,12 +21015,17 @@ ${suffix}`;
       ],
       text: (p) => `${targetText(p.t)} ${verb(p.t, "ne peut", "ne peuvent")} pas \xEAtre mis KO ${p.by === "battle" ? "en combat" : p.by === "effect" ? "par des effets" : "en combat ni par des effets"}${durText(p.dur)}`
     },
+    selfNoAttack: {
+      label: "Cette carte ne peut pas attaquer",
+      params: [{ ...DUR, opts: { turn: DUR.opts.turn, next: DUR.opts.next, perm: DUR.opts.perm } }],
+      text: (p) => `cette carte ne peut pas attaquer${durText(p.dur)}`
+    },
     cannotAttack: { label: "Ne peut pas attaquer", params: [TARGET({ side: "opp", who: "chars", n: 1 })], text: (p) => `${targetText(p.t)} ne peut pas attaquer jusqu'\xE0 la fin du prochain tour adverse` },
     redirect: { label: "Changer la cible de l'attaque", params: [], text: () => "choisissez votre Leader ou un de vos Personnages : il devient la cible de l'attaque" },
     noBlockers: { label: "L'adversaire ne peut pas bloquer", params: [], text: () => "votre adversaire ne peut pas activer de [Bloqueur] pendant ce combat" },
     negate: { label: "Annuler les effets", params: [TARGET({ side: "opp", who: "chars", n: 1 })], text: (p) => `${targetText(p.t)} perd ses effets jusqu'\xE0 la fin du tour` }
   };
-  var CONTINUOUS_ACTIONS = ["power", "cost", "grantKw", "protect"];
+  var CONTINUOUS_ACTIONS = ["power", "cost", "grantKw", "protect", "selfNoAttack"];
   var SIDES = { mine: "\xE0 vous", opp: "adverse" };
   var WHO = {
     self: "cette carte",
@@ -25841,6 +25846,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     if (G.turn.count <= 2) return toast2("Personne ne peut attaquer pendant son premier tour.");
     const c = myCard(inst);
     if ((inst.noAtk || 0) >= G.turn.count) return toast2(`${c.name} ne peut pas attaquer ce tour-ci.`);
+    if (noAttackStatic(inst)) return toast2(`${c.name} ne peut pas attaquer (effet de la carte).`);
     const onlyChars = c.type === "character" && inst.t === G.turn.count && !hasKw(inst, "rush");
     if (onlyChars && !hasKw(inst, "rushChar")) {
       return toast2(`${c.name} a \xE9t\xE9 jou\xE9 ce tour : il lui faut [Initiative] pour attaquer.`);
@@ -26254,6 +26260,15 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     if (inst.kw?.[k]) return true;
     return staticFlag(inst, "grantKw", (a) => a.kw === k) || auraFlag(inst, "grantKw", (a) => a.kw === k);
   }
+  function noAttackStatic(inst) {
+    if (inStatic || !G?.me?.leader) return false;
+    inStatic = true;
+    try {
+      return staticEffects().some(({ src, e }) => src.u === inst.u && (e.actions || []).some((a) => a.k === "selfNoAttack"));
+    } finally {
+      inStatic = false;
+    }
+  }
   function isProtected(inst, kind) {
     if (inst.prot?.[kind] || inst.prot?.both) return true;
     const test = (a) => a.by === kind || a.by === "both";
@@ -26281,6 +26296,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     else if (a.k === "untap") inst.r = false;
     else if (a.k === "freeze") inst.frozen = true;
     else if (a.k === "cannotAttack") inst.noAtk = G.turn.count + 1;
+    else if (a.k === "selfNoAttack") inst.noAtk = Math.max(inst.noAtk || 0, dur === "perm" ? 1e9 : dur === "next" ? G.turn.count + 1 : G.turn.count);
     else if (a.k === "negate") inst.neg = true;
   }
   function clearDur(inst, dur) {
@@ -26780,6 +26796,12 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       }
       case "noBlockers":
         if (G.battle?.role === "atk") G.battle.noBlock = true;
+        break;
+      case "selfNoAttack":
+        if (src && (locate(src.u)?.zone === "chars" || G.me.leader?.u === src.u)) {
+          applyMod(src, a, false, src);
+          log(`${srcName} ne peut pas attaquer${a.dur === "perm" ? "" : a.dur === "next" ? " jusqu'\xE0 la fin du prochain tour adverse" : " ce tour-ci"}.`);
+        }
         break;
       default:
         break;
