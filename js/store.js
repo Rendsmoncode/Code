@@ -413,6 +413,13 @@ export async function setPacks(username, packs) {
 export async function openSurprisePack(i) {
   return check(await sb.rpc('open_surprise_pack', { i }));
 }
+// Parties en cours : chaque joueur signale la sienne ; le Game Master voit la liste.
+export async function gamePing(code, role, mode, phase) {
+  await sb.rpc('game_ping', { gcode: code, grole: role, gmode: mode, gphase: phase });
+}
+export async function liveGames() {
+  return check(await sb.rpc('admin_live_games'));
+}
 export async function surpriseDone() {
   check(await sb.rpc('surprise_done'));
 }

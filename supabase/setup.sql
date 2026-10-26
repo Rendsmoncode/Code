@@ -118,6 +118,16 @@ alter table public.profiles add column if not exists surprise text check (surpri
 alter table public.invites add column if not exists packs jsonb;
 alter table public.profiles add column if not exists surprise_packs jsonb;
 
+-- Parties en cours (pour le Game Master) : chaque joueur signale sa partie toutes les 30 secondes.
+create table if not exists public.live_games (
+  code text primary key,
+  mode text not null default 'online',
+  host text,
+  guest text,
+  phase text,
+  updated_at timestamptz not null default now()
+);
+
 -- ---------- Fonctions utilitaires ----------
 
 -- Met une carte offerte de côté pour l'ouverture façon booster (à appeler AVANT de l'ajouter à la collection).
@@ -575,6 +585,27 @@ begin
   if coalesce(starter, '') <> '' then perform public.grant_starter(p.id, starter); end if;
 end $$;
 
+-- ---------- Parties en cours ----------
+create or replace function public.game_ping(gcode text, grole text, gmode text, gphase text) returns void
+language plpgsql security definer set search_path = public as $$
+declare u text := (select username from public.profiles where id = auth.uid());
+begin
+  if u is null or coalesce(gcode, '') !~ '^[A-Z0-9]{4,8}$' then return; end if;
+  insert into public.live_games (code, mode, host, guest, phase, updated_at)
+    values (gcode, coalesce(gmode, 'online'), case when grole = 'host' then u end, case when grole = 'guest' then u end, gphase, now())
+    on conflict (code) do update set mode = excluded.mode, phase = excluded.phase, updated_at = now(),
+      host = coalesce(case when grole = 'host' then u end, public.live_games.host),
+      guest = coalesce(case when grole = 'guest' then u end, public.live_games.guest);
+  delete from public.live_games where updated_at < now() - interval '1 day';
+end $$;
+
+create or replace function public.admin_live_games() returns setof public.live_games
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.is_admin() then raise exception 'Réservé aux admins.'; end if;
+  return query select * from public.live_games where updated_at > now() - interval '3 minutes' order by updated_at desc;
+end $$;
+
 -- ---------- Sécurité : RLS ----------
 
 alter table public.profiles enable row level security;
@@ -587,6 +618,7 @@ alter table public.stats enable row level security;
 alter table public.achievements enable row level security;
 alter table public.collection_backups enable row level security;
 alter table public.pending_reveals enable row level security;
+alter table public.live_games enable row level security;
 
 drop policy if exists "mes stats" on public.stats;
 create policy "mes stats" on public.stats for select to authenticated using (user_id = auth.uid());
@@ -812,7 +844,8 @@ grant execute on function public.is_admin(), public.booster_status(), public.ope
   public.gm_restore_backup(bigint), public.gm_backups(), public.take_reveals(),
   public.admin_create_surprise(text, text, int), public.admin_prepare_surprise(text, text, int), public.admin_surprise_go(text),
   public.admin_surprise_list(), public.surprise_done(), public.admin_reset_test(text, text, int),
-  public.admin_set_packs(text, jsonb), public.open_surprise_pack(int)
+  public.admin_set_packs(text, jsonb), public.open_surprise_pack(int),
+  public.game_ping(text, text, text, text), public.admin_live_games()
   to authenticated;
 grant usage on schema public to anon;
 grant execute on function public.invite_info(text) to anon, authenticated;

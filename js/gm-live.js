@@ -1,6 +1,6 @@
 // Game Master → Parties : rejoindre une partie en spectateur (avec son code), voir l'état complet des deux joueurs
 // et corriger n'importe quoi. Chaque correction est appliquée chez le joueur concerné, puis transmise à son adversaire.
-import { S } from './store.js';
+import { S, liveGames } from './store.js';
 import { esc, cardHTML, RARITIES } from './cards.js';
 import * as net from './net.js';
 
@@ -11,8 +11,9 @@ const MOVES = [['hand', 'En main'], ['trash', 'À la défausse'], ['chars', 'Sur
 export function mountLive(el) {
   el.innerHTML = `
     <h3>Parties en cours</h3>
-    <p class="muted small">Demande le code de la partie (affiché en haut de leur plateau) : tu la rejoins en spectateur, tu vois tout
-      (mains, Vies, deck) et tu corriges ce que tu veux. Les deux joueurs voient chaque correction, signée « Game Master ».</p>
+    <p class="muted small">Rejoins une partie en spectateur : tu vois tout (mains, Vies, deck) et tu corriges ce que tu veux.
+      Les deux joueurs voient chaque correction, signée « Game Master ».</p>
+    <div class="gl-list"></div>
     <div class="row-btns">
       <input class="gl-code" placeholder="Code de la partie" maxlength="8" aria-label="Code de la partie" style="text-transform:uppercase">
       <select class="gl-mode" aria-label="Type de partie"><option value="online">En ligne</option><option value="local">Locale (même navigateur)</option></select>
@@ -22,6 +23,23 @@ export function mountLive(el) {
     const code = el.querySelector('.gl-code').value.trim().toUpperCase();
     if (code) openLive(code, el.querySelector('.gl-mode').value);
   });
+  el.querySelector('.gl-list').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-live]');
+    if (b) openLive(b.dataset.live, b.dataset.mode);
+  });
+  // Liste des parties en cours, rafraîchie toutes les 10 secondes quand l'onglet est affiché.
+  const refresh = async () => {
+    if (el.offsetParent === null || document.hidden) return;
+    const list = await liveGames().catch(() => null);
+    el.querySelector('.gl-list').innerHTML = !list ? '' : list.length
+      ? `<table class="tbl"><tbody>${list.map((g) => `<tr><td><b>${esc(g.host || '?')}</b> contre <b>${esc(g.guest || '?')}</b></td>
+        <td class="muted small">${esc(g.code)}${g.mode === 'local' ? ' · locale' : ''} · ${esc(g.phase || '')}</td>
+        <td><button class="btn small" data-live="${esc(g.code)}" data-mode="${esc(g.mode)}">Rejoindre</button></td></tr>`).join('')}</tbody></table>`
+      : '<p class="muted small">Aucune partie en cours.</p>';
+  };
+  refresh();
+  setInterval(refresh, 10000);
+  document.querySelector('[data-tab=gm]')?.addEventListener('click', () => setTimeout(refresh, 50));
 }
 
 function openLive(code, mode) {

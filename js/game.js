@@ -1,7 +1,7 @@
 // Onglet « Jouer » : salon de connexion + plateau de jeu 1v1.
 // Chaque joueur gère ses propres cartes (comme sur une vraie table) ; l'adversaire reçoit
 // une vue publique (main, deck et vie cachés) après chaque action.
-import { S, validateDeck, onChange } from './store.js';
+import { S, validateDeck, onChange, gamePing } from './store.js';
 import {
   cardHTML, esc, uid, fmtEffect, TYPES, isBlocker, hasRush, hasDoubleAttack, hasBanish, isUnblockable, attributesOf,
 } from './cards.js';
@@ -298,8 +298,13 @@ function onMsg(m) {
 function openGmDoor() {
   if (gmLink || !lobby.code || !G) return;
   try { gmLink = net.gmListen(lobby.mode, lobby.code, G.role, { onMessage: (m) => { try { onGm(m); } catch (e) { console.error(e); } } }); } catch (e) { console.error(e); }
+  // La partie se signale au serveur : elle apparaît dans la liste du Game Master.
+  const ping = () => { if (G && lobby.code) gamePing(lobby.code, G.role, lobby.mode, G.phase).catch(() => {}); };
+  ping();
+  gmPingTimer = setInterval(ping, 30000);
 }
-function closeGmDoor() { gmLink?.close(); gmLink = null; }
+let gmPingTimer = null;
+function closeGmDoor() { gmLink?.close(); gmLink = null; clearInterval(gmPingTimer); gmPingTimer = null; }
 function gmPush() {
   if (!gmLink || !G) return;
   const b = G.battle;
@@ -2063,7 +2068,8 @@ function centerHTML() {
       <button class="btn small danger" data-do="contest">Contester</button></div>`;
   }
   return `<div class="center">${G.disconnected ? '<p class="msg err">Adversaire déconnecté.</p>' : ''}${inner}${manual}
-    ${G.phase === 'play' ? '<button class="btn ghost small concede" data-do="concede">Abandonner</button>' : ''}</div>`;
+    ${G.phase === 'play' ? '<button class="btn ghost small concede" data-do="concede">Abandonner</button>' : ''}
+    ${lobby.code ? `<p class="game-code muted small">Partie ${esc(lobby.code)}</p>` : ''}</div>`;
 }
 
 function findOpp(u) {

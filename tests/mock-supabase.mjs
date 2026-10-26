@@ -88,6 +88,8 @@ export function makeMock() {
       if (fn === 'admin_set_packs') { const u = tu(); if (u) st.profiles[u].packs = body.packs; else { const i = Object.values(st.invites).find((x) => x.username === body.target && !x.used_by); if (!i) return json(route, { message: 'introuvable' }, 400); i.packs = body.packs; } return json(route, null); }
       if (fn === 'open_surprise_pack') { const pk = (p.packs || [])[body.i]; if (!pk || pk.opened) return json(route, { message: 'Booster déjà ouvert.' }, 400);
         const out = pk.cards.map((id) => { const isNew = !st.coll[uid]?.[id]; add(uid, id, 1); return { id, new: isNew }; }); pk.opened = true; return json(route, out); }
+      if (fn === 'game_ping') { const g = ((st.live ||= {})[body.gcode] ||= { code: body.gcode }); Object.assign(g, { mode: body.gmode, phase: body.gphase, updated_at: new Date().toISOString(), [body.grole]: p.username }); return json(route, null); }
+      if (fn === 'admin_live_games') return json(route, Object.values(st.live || {}));
       if (fn === 'surprise_done') { if (p.surprise === 'go') p.surprise = 'done'; return json(route, null); }
       if (fn === 'admin_reset_test') { const u = tu(); const t = st.profiles[u]; if (!t || !t.username.startsWith('test')) return json(route, { message: 'Réservé aux comptes de test.' }, 400);
         st.coll[u] = {}; (st.reveals ||= {})[u] = []; for (const k of Object.keys(st.decks)) if (st.decks[k].user_id === u) delete st.decks[k];

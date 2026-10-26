@@ -21770,6 +21770,12 @@ ${suffix}`;
   async function openSurprisePack(i) {
     return check(await sb.rpc("open_surprise_pack", { i }));
   }
+  async function gamePing(code, role, mode, phase) {
+    await sb.rpc("game_ping", { gcode: code, grole: role, gmode: mode, gphase: phase });
+  }
+  async function liveGames() {
+    return check(await sb.rpc("admin_live_games"));
+  }
   async function surpriseDone() {
     check(await sb.rpc("surprise_done"));
   }
@@ -25309,10 +25315,19 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     } catch (e) {
       console.error(e);
     }
+    const ping = () => {
+      if (G && lobby.code) gamePing(lobby.code, G.role, lobby.mode, G.phase).catch(() => {
+      });
+    };
+    ping();
+    gmPingTimer = setInterval(ping, 3e4);
   }
+  var gmPingTimer = null;
   function closeGmDoor() {
     gmLink?.close();
     gmLink = null;
+    clearInterval(gmPingTimer);
+    gmPingTimer = null;
   }
   function gmPush() {
     if (!gmLink || !G) return;
@@ -27501,7 +27516,8 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       <button class="btn small danger" data-do="contest">Contester</button></div>`;
     }
     return `<div class="center">${G.disconnected ? '<p class="msg err">Adversaire d\xE9connect\xE9.</p>' : ""}${inner}${manual}
-    ${G.phase === "play" ? '<button class="btn ghost small concede" data-do="concede">Abandonner</button>' : ""}</div>`;
+    ${G.phase === "play" ? '<button class="btn ghost small concede" data-do="concede">Abandonner</button>' : ""}
+    ${lobby.code ? `<p class="game-code muted small">Partie ${esc(lobby.code)}</p>` : ""}</div>`;
   }
   function findOpp(u) {
     const o = G.opp;
@@ -28394,8 +28410,9 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
   function mountLive(el) {
     el.innerHTML = `
     <h3>Parties en cours</h3>
-    <p class="muted small">Demande le code de la partie (affich\xE9 en haut de leur plateau) : tu la rejoins en spectateur, tu vois tout
-      (mains, Vies, deck) et tu corriges ce que tu veux. Les deux joueurs voient chaque correction, sign\xE9e \xAB Game Master \xBB.</p>
+    <p class="muted small">Rejoins une partie en spectateur : tu vois tout (mains, Vies, deck) et tu corriges ce que tu veux.
+      Les deux joueurs voient chaque correction, sign\xE9e \xAB Game Master \xBB.</p>
+    <div class="gl-list"></div>
     <div class="row-btns">
       <input class="gl-code" placeholder="Code de la partie" maxlength="8" aria-label="Code de la partie" style="text-transform:uppercase">
       <select class="gl-mode" aria-label="Type de partie"><option value="online">En ligne</option><option value="local">Locale (m\xEAme navigateur)</option></select>
@@ -28405,6 +28422,20 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
       const code = el.querySelector(".gl-code").value.trim().toUpperCase();
       if (code) openLive(code, el.querySelector(".gl-mode").value);
     });
+    el.querySelector(".gl-list").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-live]");
+      if (b) openLive(b.dataset.live, b.dataset.mode);
+    });
+    const refresh = async () => {
+      if (el.offsetParent === null || document.hidden) return;
+      const list = await liveGames().catch(() => null);
+      el.querySelector(".gl-list").innerHTML = !list ? "" : list.length ? `<table class="tbl"><tbody>${list.map((g) => `<tr><td><b>${esc(g.host || "?")}</b> contre <b>${esc(g.guest || "?")}</b></td>
+        <td class="muted small">${esc(g.code)}${g.mode === "local" ? " \xB7 locale" : ""} \xB7 ${esc(g.phase || "")}</td>
+        <td><button class="btn small" data-live="${esc(g.code)}" data-mode="${esc(g.mode)}">Rejoindre</button></td></tr>`).join("")}</tbody></table>` : '<p class="muted small">Aucune partie en cours.</p>';
+    };
+    refresh();
+    setInterval(refresh, 1e4);
+    document.querySelector("[data-tab=gm]")?.addEventListener("click", () => setTimeout(refresh, 50));
   }
   function openLive(code, mode) {
     const st = { host: null, guest: null };
