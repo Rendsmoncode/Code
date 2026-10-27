@@ -1,0 +1,133 @@
+<!doctype html><html><head><meta charset="utf-8">
+<style>@font-face{font-family:AB;src:url(ab.woff2)}html,body{margin:0;background:#000;overflow:hidden}</style>
+<script type="importmap">{"imports":{"three":"./node_modules/three/build/three.module.js","three/addons/":"./node_modules/three/examples/jsm/"}}</script>
+</head><body><script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OutlineEffect } from 'three/addons/effects/OutlineEffect.js';
+await document.fonts.load('100px AB');
+const W = 1600, H = 900;
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1); renderer.setSize(W, H);
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+
+// Fond : dégradé radial sombre, chaud au centre.
+{ const c = document.createElement('canvas'); c.width = 1600; c.height = 900; const g = c.getContext('2d');
+  const r = g.createRadialGradient(800, 470, 50, 800, 470, 900); r.addColorStop(0, '#3a1f2b'); r.addColorStop(.55, '#1a0f1a'); r.addColorStop(1, '#07050a');
+  g.fillStyle = r; g.fillRect(0, 0, 1600, 900);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; scene.background = t; }
+
+// Rampe de cel-shading : 3 teintes nettes.
+const ramp = new THREE.DataTexture(new Uint8Array([70, 70, 70, 255, 160, 160, 160, 255, 255, 255, 255, 255]), 3, 1);
+ramp.minFilter = ramp.magFilter = THREE.NearestFilter; ramp.needsUpdate = true;
+const toon = (o) => new THREE.MeshToonMaterial({ gradientMap: ramp, ...o });
+
+// ---------- Logo Ruban Rouge (dessiné puis extrudé) ----------
+function bowShape() {
+  const s = new THREE.Shape();
+  // Nœud papillon : deux ailes qui se rejoignent au centre (coordonnées en unités monde).
+  s.moveTo(-0.45, 0.55);
+  s.bezierCurveTo(-1.2, 1.35, -2.6, 1.9, -3.05, 1.2);
+  s.bezierCurveTo(-3.4, 0.5, -3.3, -0.6, -2.95, -1.25);
+  s.bezierCurveTo(-2.5, -1.95, -1.2, -1.35, -0.45, -0.55);
+  s.lineTo(0.45, -0.55);
+  s.bezierCurveTo(1.2, -1.35, 2.5, -1.95, 2.95, -1.25);
+  s.bezierCurveTo(3.3, -0.6, 3.4, 0.5, 3.05, 1.2);
+  s.bezierCurveTo(2.6, 1.9, 1.2, 1.35, 0.45, 0.55);
+  s.closePath();
+  return s;
+}
+const logo = new THREE.Group(); scene.add(logo);
+const ext = { depth: 0.18, bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.04, bevelSegments: 2, curveSegments: 40 };
+const red = toon({ color: 0xd62828 });
+const black = toon({ color: 0x111111 });
+// Contour noir épais : la même forme agrandie, un peu plus basse.
+const rim = new THREE.Mesh(new THREE.ExtrudeGeometry(bowShape(), { ...ext, depth: 0.14 }), black);
+rim.scale.set(1.08, 1.12, 1); rim.position.z = -0.02;
+const bow = new THREE.Mesh(new THREE.ExtrudeGeometry(bowShape(), ext), red); bow.position.z = 0.04;
+// Nœud central.
+const knotS = new THREE.Shape(); knotS.absarc(0, 0, 0.62, 0, Math.PI * 2, false);
+const knotRim = new THREE.Mesh(new THREE.ExtrudeGeometry(knotS, { ...ext, depth: 0.26 }), black); knotRim.scale.set(1.18, 1.18, 1);
+const knot = new THREE.Mesh(new THREE.ExtrudeGeometry(knotS, { ...ext, depth: 0.3 }), toon({ color: 0xb51d1d }));
+// Plis du ruban (traits noirs sur les ailes).
+const folds = [];
+for (const sx of [-1, 1]) for (const [y0, y1] of [[0.25, 0.9], [-0.25, -0.9]]) {
+  const c = new THREE.QuadraticBezierCurve3(new THREE.Vector3(sx * 0.8, y0 * 0.6, 0.3), new THREE.Vector3(sx * 1.6, y0 * 1.2, 0.3), new THREE.Vector3(sx * 2.2, y1 * 1.1, 0.3));
+  folds.push(new THREE.Mesh(new THREE.TubeGeometry(c, 20, 0.035, 6), black));
+}
+const bowG = new THREE.Group(); bowG.add(rim, bow, knotRim, knot, ...folds);
+// Lettres R et C blanches extrudées depuis un canvas -> contours via Shape : plus simple avec des plans texturés en relief.
+function letterTex(ch) {
+  const c = document.createElement('canvas'); c.width = c.height = 512; const g = c.getContext('2d');
+  g.font = '400 400px AB'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.lineJoin = 'round'; g.lineWidth = 46; g.strokeStyle = '#111'; g.strokeText(ch, 256, 280);
+  g.fillStyle = '#fff'; g.fillText(ch, 256, 280);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
+}
+for (const [ch, x] of [['R', -2.25], ['C', 2.25]]) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.6), new THREE.MeshToonMaterial({ map: letterTex(ch), transparent: true, gradientMap: ramp, alphaTest: 0.5 }));
+  m.position.set(x, 0, 0.33); m.userData.outlineParameters = { visible: false }; bowG.add(m);
+}
+bowG.rotation.x = -Math.PI / 2; logo.add(bowG);
+// Bandeau « RENDSMONCODE » sous le nœud.
+{ const c = document.createElement('canvas'); c.width = 2048; c.height = 256; const g = c.getContext('2d');
+  g.font = '400 150px AB'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.lineJoin = 'round'; g.lineWidth = 34; g.strokeStyle = '#111'; g.strokeText('RENDSMONCODE', 1024, 135);
+  g.fillStyle = '#fff'; g.fillText('RENDSMONCODE', 1024, 135);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(6.4, 0.8), new THREE.MeshToonMaterial({ map: t, transparent: true, alphaTest: 0.5, gradientMap: ramp }));
+  m.rotation.x = -Math.PI / 2; m.position.set(0, 0.02, 2.75); m.userData.outlineParameters = { visible: false }; logo.add(m); }
+logo.traverse(o => { if (o.isMesh) o.receiveShadow = true; });
+logo.scale.setScalar(1.25);
+
+// Sol : grande dalle sombre qui reçoit l'ombre.
+const ground = new THREE.Mesh(new THREE.CircleGeometry(30, 64), toon({ color: 0x3a2030 }));
+ground.rotation.x = -Math.PI / 2; ground.position.y = -0.03; ground.receiveShadow = true; ground.userData.outlineParameters = { visible: false };
+scene.add(ground);
+
+// ---------- Lumières ----------
+scene.add(new THREE.HemisphereLight(0xffe2c4, 0x2a1830, 0.25));
+const spot = new THREE.SpotLight(0xffe6c8, 260, 40, 0.4, 0.0, 1.2); spot.position.set(-2.5, 16, 4); spot.target.position.set(0, 0, 0.6); scene.add(spot, spot.target);
+const key = new THREE.DirectionalLight(0xfff0dc, 2.4); key.position.set(-6, 12, 7); key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048); Object.assign(key.shadow.camera, { left: -8, right: 8, top: 8, bottom: -8, near: 1, far: 40 }); key.shadow.bias = -0.0008;
+scene.add(key);
+const rimL = new THREE.DirectionalLight(0xff5a6a, 2.2); rimL.position.set(7, 5, -8); scene.add(rimL);
+const fill = new THREE.DirectionalLight(0x7aa8ff, 0.8); fill.position.set(8, 6, 6); scene.add(fill);
+
+// ---------- Personnages ----------
+const loader = new GLTFLoader();
+const keep = new Set(['PrototypePete_body.022']);
+async function fighter(file, clipName, t, x, rotY, tint) {
+  const g = await loader.loadAsync('models/' + file);
+  const root = g.scene;
+  root.traverse(o => {
+    if (!o.isMesh) return;
+    // On retire les armes et accessoires : combat à mains nues.
+    const n = o.name.toLowerCase();
+    if (/(sword|axe|shield|mug|crossbow|dagger|staff|wand|book|arrow|quiver|knife)/.test(n)) { o.visible = false; return; }
+    const old = o.material;
+    o.material = toon({ map: old.map, color: old.color });
+    o.castShadow = true; o.receiveShadow = true;
+  });
+  const mixer = new THREE.AnimationMixer(root);
+  const clip = g.animations.find(a => a.name === clipName);
+  const act = mixer.clipAction(clip); act.play(); mixer.setTime(t);
+  root.position.set(x, 0.26 * 1.25 + 0.05, 0); root.rotation.y = rotY; root.scale.setScalar(1.25);
+  scene.add(root); return { root, g };
+}
+const a = await fighter('Barbarian.glb', 'Unarmed_Melee_Attack_Punch_A', +new URLSearchParams(location.search).get('a') || 0.32, -1.2, Math.PI / 2);
+const b = await fighter('Knight.glb', new URLSearchParams(location.search).get('bc') || 'Unarmed_Melee_Attack_Kick', +new URLSearchParams(location.search).get('b') || 0.4, 1.2, -Math.PI / 2);
+// Liste des meshes pour vérifier les armes restantes.
+window.meshNames = [a, b].map(f => { const r = []; f.root.traverse(o => o.isMesh && r.push(o.name + (o.visible ? '' : ' (caché)'))); return r; });
+
+// ---------- Caméra : vue de dessus, légèrement inclinée ----------
+const cam = new THREE.PerspectiveCamera(30, W / H, 0.1, 100);
+cam.position.set(0, 11.5, 11.5); cam.lookAt(0, 0.9, 0.3);
+
+const fx = new OutlineEffect(renderer, { defaultThickness: 0.008, defaultColor: [0.04, 0.03, 0.04] });
+fx.render(scene, cam);
+window.done = true;
+</script></body></html>
