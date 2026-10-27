@@ -55,7 +55,8 @@ export async function startSurprise(show) {
 }
 
 // ---------- 0. la vidéo d'intro (Admin → Musiques), plein écran sur le noir ----------
-function playIntro(ov) {
+// skip : bouton « Passer » ; label : texte du bouton quand le navigateur bloque le son.
+export function playIntro(ov, { skip = false, label = '▶' } = {}) {
   const url = S.music?.intro?.url;
   if (!url) return Promise.resolve();
   return new Promise((resolve) => {
@@ -69,10 +70,18 @@ function playIntro(ov) {
       if (done) return;
       done = true;
       ov.querySelector('.sp-play')?.remove();
+      ov.querySelector('.sp-skip')?.remove();
       v.classList.add('out');
       setTimeout(() => { v.remove(); resolve(); }, 500);
     };
     v.addEventListener('ended', end);
+    if (skip) {
+      const sk = document.createElement('button');
+      sk.className = 'sp-skip';
+      sk.textContent = 'Passer';
+      sk.addEventListener('click', () => { v.pause(); end(); });
+      ov.append(sk);
+    }
     v.addEventListener('error', end);
     setTimeout(end, 40000); // sécurité
     // Son bloqué par le navigateur (page rechargée, aucun clic) : un bouton ▶ discret lance la vidéo.
@@ -81,7 +90,8 @@ function playIntro(ov) {
       const b = document.createElement('button');
       b.className = 'sp-play';
       b.setAttribute('aria-label', 'Lancer');
-      b.textContent = '▶';
+      b.textContent = label;
+      if (label.length > 2) b.classList.add('wide');
       ov.append(b);
       b.addEventListener('click', () => { b.remove(); v.play().catch(end); }, { once: true });
     });

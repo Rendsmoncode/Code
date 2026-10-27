@@ -29103,7 +29103,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     checkGifts().catch(() => {
     });
   }
-  function playIntro(ov) {
+  function playIntro(ov, { skip = false, label = "\u25B6" } = {}) {
     const url = S.music?.intro?.url;
     if (!url) return Promise.resolve();
     return new Promise((resolve) => {
@@ -29117,6 +29117,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         if (done) return;
         done = true;
         ov.querySelector(".sp-play")?.remove();
+        ov.querySelector(".sp-skip")?.remove();
         v.classList.add("out");
         setTimeout(() => {
           v.remove();
@@ -29124,6 +29125,16 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         }, 500);
       };
       v.addEventListener("ended", end);
+      if (skip) {
+        const sk = document.createElement("button");
+        sk.className = "sp-skip";
+        sk.textContent = "Passer";
+        sk.addEventListener("click", () => {
+          v.pause();
+          end();
+        });
+        ov.append(sk);
+      }
       v.addEventListener("error", end);
       setTimeout(end, 4e4);
       v.play().catch(() => {
@@ -29131,7 +29142,8 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
         const b = document.createElement("button");
         b.className = "sp-play";
         b.setAttribute("aria-label", "Lancer");
-        b.textContent = "\u25B6";
+        b.textContent = label;
+        if (label.length > 2) b.classList.add("wide");
         ov.append(b);
         b.addEventListener("click", () => {
           b.remove();
@@ -29351,7 +29363,7 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     }
     if (isOwner()) initGM();
     const pollForced = async () => {
-      if (document.hidden || inGame() || document.body.classList.contains("surprise") || document.querySelector(".fm-ov")) return;
+      if (document.hidden || inGame() || document.body.classList.contains("surprise") || document.querySelector(".fm-ov, .intro-ov")) return;
       const m = await claimForcedMatch().catch(() => null);
       if (!m?.code) return;
       await forcedAnnounce(m.opp);
@@ -29363,6 +29375,13 @@ Attention : elle dispara\xEEtra aussi de la collection de TOUS les joueurs qui l
     if (surpriseActive()) {
       startSurprise(show);
       return;
+    }
+    if (S.music?.intro?.url && !new URLSearchParams(location.search).get("join")) {
+      const ov = document.createElement("div");
+      ov.className = "sp-ov intro-ov";
+      document.body.append(ov);
+      await playIntro(ov, { skip: true, label: "Toucher pour commencer" });
+      ov.remove();
     }
     document.documentElement.classList.remove("sp-boot");
     document.title = "Nakama TCG";

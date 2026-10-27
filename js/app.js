@@ -13,7 +13,7 @@ import { icon } from './icons.js';
 import { initHome } from './home.js';
 import { initAchievements } from './achievements.js';
 import { initGM } from './gm.js';
-import { surpriseActive, startSurprise } from './surprise.js';
+import { surpriseActive, startSurprise, playIntro } from './surprise.js';
 
 document.querySelector('.top .brand').innerHTML = logoSVG('', true);
 document.querySelectorAll('[data-ico]').forEach((b) => b.insertAdjacentHTML('afterbegin', icon(b.dataset.ico)));
@@ -86,7 +86,7 @@ async function start() {
 
   // Partie lancée par le Game Master : vérifiée toutes les 4 secondes tant qu'on n'est pas en partie.
   const pollForced = async () => {
-    if (document.hidden || inGame() || document.body.classList.contains('surprise') || document.querySelector('.fm-ov')) return;
+    if (document.hidden || inGame() || document.body.classList.contains('surprise') || document.querySelector('.fm-ov, .intro-ov')) return;
     const m = await claimForcedMatch().catch(() => null);
     if (!m?.code) return;
     await forcedAnnounce(m.opp);
@@ -98,6 +98,14 @@ async function start() {
 
   // Surprise : écran noir jusqu'au lancement, puis le booster géant (voir surprise.js).
   if (surpriseActive()) { startSurprise(show); return; }
+  // Intro du jeu (Admin → Musiques → Intro) à chaque ouverture, sauf quand on arrive par un lien de partie.
+  if (S.music?.intro?.url && !new URLSearchParams(location.search).get('join')) {
+    const ov = document.createElement('div');
+    ov.className = 'sp-ov intro-ov';
+    document.body.append(ov);
+    await playIntro(ov, { skip: true, label: 'Toucher pour commencer' });
+    ov.remove();
+  }
   document.documentElement.classList.remove('sp-boot');
   document.title = 'Nakama TCG';
   try { localStorage.removeItem('nk-surprise'); } catch { /* rien */ }
